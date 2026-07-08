@@ -821,6 +821,39 @@ run_flasht_ir_gate() {
 }
 run_flasht_ir_gate
 
+# ── Large photonic FIR and pure-source gates ─────────────────────────────────
+run_photonic_massive_gate() {
+    local name="64-op balanced-ternary photonic FIR"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+    if ! "$FLASHC" "$ROOT/examples/photonic_massive.flash" --target ppu32 >/dev/null 2>&1; then
+        fail "$name (compile)"
+        return 1
+    fi
+    local count
+    count="$(grep -c 'kind = "route".*lattice_op = [2357]' "$ROOT/examples/photonic_massive.fir" || true)"
+    if [[ "$count" != "64" ]]; then
+        fail "$name (expected 64 operations, got $count)"
+        return 1
+    fi
+    pass
+    echo
+}
+run_photonic_massive_gate
+
+run_pure_flash_tree_gate() {
+    local name="pure Flash/Zag supported source tree"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+    if ! "$ROOT/tests/pure_flash_tree.sh"; then
+        fail "$name"
+        return 1
+    fi
+    pass
+    echo
+}
+run_pure_flash_tree_gate
+
 echo "============================================"
 echo "RESULT: $TESTS_PASSED / $TESTS_RUN passed"
 if [[ "$FAILURES" -gt 0 ]]; then

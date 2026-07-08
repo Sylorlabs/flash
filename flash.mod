@@ -15,5 +15,5 @@ default = "x86_64-emul"
 [runtime]
 default = "sim"
 # sim  — photonic_rt.zag + chamber_sim (reference)
-# hw   — RayOS HAL (flash/rayos/flash_rt.h)
+# hw   — RayOS HAL contract (implemented by pure Flash/Zag runtime modules)
 # qemu — ppu32 emulator (bring-up)
