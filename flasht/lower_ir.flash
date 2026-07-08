@@ -1,0 +1,80 @@
+// flasht/lower_ir.flash — manifest text → Flash IR (.fir) lowering for flasht backends.
+//
+// Bridges coordinate manifests (surface codegen output) to hardware-ready FIR
+// section text consumed by PPU32 / FIMG emitters. Does not import flash_ir to
+// avoid duplicate manifest symbols when spliced into flashc1.
+
+fn fir_lower_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) { push[u8](out, s[i]); i = i + 1; }
+}
+
+fn fir_path_from_src(src_path: []u8) []u8 {
+    let stem: []u8 = flash_path_stem(src_path);
+    let dir: []u8 = flash_path_dir(src_path);
+    let base: []u8 = _zag_str_concat(stem, ".fir");
+    if (@strEq(dir, ".") == 1) { return base; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), base);
+}
+
+fn fir_wrap_ir(ir_section: []u8, target: []u8, name: []u8) []u8 {
+    let out: ArrayList[u8] = make[u8](ir_section.len + 256);
+    fir_lower_app(&out, "# flash ir v1\n");
+    fir_lower_app(&out, "target = \"");
+    fir_lower_app(&out, target);
+    fir_lower_app(&out, "\"\n");
+    fir_lower_app(&out, "name = \"");
+    fir_lower_app(&out, name);
+    fir_lower_app(&out, "\"\n");
+    fir_lower_app(&out, "format = \"fir-v1\"\n");
+    fir_lower_app(&out, ir_section);
+    if (ir_section.len > 0 && ir_section[ir_section.len - 1] != '\n') {
+        fir_lower_app(&out, "\n");
+    }
+    return out.data[0..out.len];
+}
+
+fn fir_line_starts_with(line: []u8, prefix: []u8) i32 {
+    if (line.len < prefix.len) { return 0; }
+    let i: i32 = 0;
+    while (i < prefix.len) {
+        if (line[i] != prefix[i]) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn fir_manifest_segment_to_ir(out: *ArrayList[u8], line: []u8) void {
+    if (fir_line_starts_with(line, "segment ") == 0) { return; }
+    let brace: i32 = flash_str_index_of(line, " { ");
+    if (brace < 0) { return; }
+    fir_lower_app(out, "node ");
+    fir_lower_app(out, line[8..brace]);
+    fir_lower_app(out, " { kind = \"route\", ");
+    fir_lower_app(out, line[brace + 3..]);
+    fir_lower_app(out, "\n");
+}
+
+// Lower manifest text ([paths] segments) into an [ir] section.
+fn fir_lower_manifest_text(manifest_text: []u8) []u8 {
+    let out: ArrayList[u8] = make[u8](manifest_text.len + 64);
+    fir_lower_app(&out, "[ir]\n");
+    let in_paths: i32 = 0;
+    let i: i32 = 0;
+    let line_start: i32 = 0;
+    while (i <= manifest_text.len) {
+        if (i == manifest_text.len || manifest_text[i] == '\n') {
+            let line: []u8 = manifest_text[line_start..i];
+            if (fir_line_starts_with(line, "[paths]") == 1) {
+                in_paths = 1;
+            } else if (in_paths == 1 && line.len > 0 && line[0] == '[') {
+                in_paths = 0;
+            } else if (in_paths == 1) {
+                fir_manifest_segment_to_ir(&out, line);
+            }
+            line_start = i + 1;
+        }
+        i = i + 1;
+    }
+    return out.data[0..out.len];
+}

@@ -1,0 +1,111 @@
+// flash/driver/engine.flash.zag — platform detection and compute routing.
+//
+// Flash targets ternary systems, which come in different shapes:
+//
+//   engine       — the unified unit: CPU, GPU-equivalent, and motherboard
+//                  are one part (with RAM-equivalent and storage-equivalent
+//                  mounting onto it). Compute routes to the unit itself —
+//                  there is no separate device to dispatch to.
+//   conventional — a legit discrete ternary system: separate CPU, RAM, and
+//                  GPU parts on a board. Compute routes to the discrete
+//                  GPU when one is present, else the CPU.
+//   emulation    — commodity dev hosts (Flash → Zag → znc x86). Compute
+//                  should route to the host PC's GPU when present: kernels
+//                  already compile via `znc --target gpu-vulkan`
+//                  (MLIR/SPIR-V); the execution backend is the pure-syscall
+//                  DRM driver planned for /dev/dri (no C stack), with the
+//                  CPU rasterizer as the always-available fallback.
+//
+// Detection order: FLASH_PLATFORM env ("engine" | "conventional" |
+// "emulation") set by boot firmware or the user; legacy FLASH_ENGINE_NATIVE
+// marks the engine; otherwise emulation is assumed. GPU presence comes from
+// the platform's own drivers on native systems and from DRM render nodes in
+// emulation.
+//
+// Kernel dispatch: engine_dispatch_kernel() branches on EngineDevice.route —
+// CPU paths call softgpu_dispatch directly; GPU paths log via
+// softgpu_dispatch_gpu and fall back to CPU until Vulkan lands.
+
+@import("softgpu.flash")
+
+fn platform_engine() i32       { return 0; }
+fn platform_conventional() i32 { return 1; }
+fn platform_emulation() i32    { return 2; }
+
+fn engine_route_cpu() i32          { return 0; }   // main processor
+fn engine_route_pc_gpu() i32       { return 1; }   // host PC GPU (emulation)
+fn engine_route_unified() i32      { return 2; }   // the engine unit itself
+fn engine_route_discrete_gpu() i32 { return 3; }   // conventional system GPU
+
+struct EngineDevice {
+    platform: i32,
+    gpu:      i32,
+    route:    i32,
+}
+
+fn engine_detect() EngineDevice {
+    let platform: i32 = platform_emulation();
+    let want: []u8 = _zag_getenv("FLASH_PLATFORM");
+    if (@strEq(want, "engine") == 1) { platform = platform_engine(); }
+    if (@strEq(want, "conventional") == 1) { platform = platform_conventional(); }
+    let legacy: []u8 = _zag_getenv("FLASH_ENGINE_NATIVE");
+    if (legacy.len > 0) { platform = platform_engine(); }
+
+    let gpu: i32 = 0;
+    if (platform == platform_emulation()) {
+        if (_zag_file_exists("/dev/dri/renderD128") == 1) { gpu = 1; }
+        if (_zag_file_exists("/dev/dri/renderD129") == 1) { gpu = 1; }
+    } else {
+        // Native platforms declare their GPU-equivalent via the boot env
+        // until native device enumeration exists.
+        let ngpu: []u8 = _zag_getenv("FLASH_GPU");
+        if (ngpu.len > 0) { gpu = 1; }
+        if (platform == platform_engine()) { gpu = 1; }   // the unit IS the GPU
+    }
+
+    let route: i32 = engine_route_cpu();
+    if (platform == platform_engine()) {
+        route = engine_route_unified();
+    } else if (platform == platform_conventional() && gpu == 1) {
+        route = engine_route_discrete_gpu();
+    } else if (platform == platform_emulation() && gpu == 1) {
+        route = engine_route_pc_gpu();
+    }
+    return EngineDevice{ .platform = platform, .gpu = gpu, .route = route };
+}
+
+fn engine_platform_name(d: EngineDevice) []u8 {
+    if (d.platform == platform_engine()) { return "engine"; }
+    if (d.platform == platform_conventional()) { return "conventional"; }
+    return "emulation";
+}
+
+fn engine_route_name(d: EngineDevice) []u8 {
+    if (d.route == engine_route_unified()) { return "unified-engine"; }
+    if (d.route == engine_route_discrete_gpu()) { return "discrete-gpu"; }
+    if (d.route == engine_route_pc_gpu()) { return "pc-gpu"; }
+    return "main-processor";
+}
+
+fn engine_report(d: EngineDevice) void {
+    _zag_print("engine: platform=");
+    _zag_print(engine_platform_name(d));
+    _zag_print(" gpu=");
+    _zag_print(_zag_i64_to_str(d.gpu as i64));
+    _zag_print(" compute-route=");
+    _zag_println(engine_route_name(d));
+}
+
+// Route a per-pixel compute kernel through the engine device layer.
+fn engine_dispatch_kernel(fb: *SoftFb, kernel: i32, dev: EngineDevice) void {
+    if (dev.route == engine_route_pc_gpu()) {
+        softgpu_dispatch_gpu(fb, kernel, engine_route_name(dev));
+        return;
+    }
+    if (dev.route == engine_route_discrete_gpu()) {
+        softgpu_dispatch_gpu(fb, kernel, engine_route_name(dev));
+        return;
+    }
+    // main-processor and unified-engine: CPU rasterizer
+    softgpu_dispatch(fb, kernel);
+}

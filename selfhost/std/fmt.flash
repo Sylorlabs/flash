@@ -1,0 +1,26 @@
+// selfhost/std/fmt.flash — Flash standard library: string formatting + println.
+//
+// Integer formatting and slice joining via _zag_* builtins only (no imports).
+// ArrayList[[]u8] for flash_fmt_join comes from the shim list.zag header when
+// this module is compiled standalone; callers may also splice std/list.flash.
+
+fn flash_fmt_int(v: i32) []u8 {
+    return _zag_i64_to_str(v as i64);
+}
+
+fn flash_fmt_join(parts: ArrayList[[]u8], sep: []u8) []u8 {
+    let n: i32 = len[[]u8](parts);
+    if (n < 1) { return ""; }
+    let out: []u8 = get[[]u8](parts, 0);
+    let i: i32 = 1;
+    while (i < n) {
+        out = _zag_str_concat(out, sep);
+        out = _zag_str_concat(out, get[[]u8](parts, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn flash_println_str(s: []u8) void {
+    _zag_println(s);
+}

@@ -1,0 +1,146 @@
+// flasht/emit_fimg.flash — manifest + HAL metadata → .fimg hardware image (v1).
+//
+// FIMG is the handoff artifact for RayOS/firmware manifest loaders.
+// Format is human-readable and mmap-friendly (line-oriented key/value).
+
+@import("../flasht/isa/ppu32.flash")
+@import("../flasht/emit_extern.flash")
+
+fn fimg_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) { push[u8](out, s[i]); i = i + 1; }
+}
+
+fn fimg_app_i32(out: *ArrayList[u8], v: i32) void {
+    fimg_app(out, _zag_i64_to_str(v as i64));
+}
+
+fn fimg_app_phase(out: *ArrayList[u8], v: f32) void {
+    fimg_app_i32(out, (v * 1000000.0) as i32);
+    fimg_app(out, "u");
+}
+
+fn fimg_path_from_src(src_path: []u8) []u8 {
+    let stem: []u8 = flash_path_stem(src_path);
+    let dir: []u8 = flash_path_dir(src_path);
+    let base: []u8 = _zag_str_concat(stem, ".fimg");
+    if (@strEq(dir, ".") == 1) { return base; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), base);
+}
+
+fn fimg_path_from_shim(shim_path: []u8) []u8 {
+    let stem: []u8 = flash_path_stem(shim_path);
+    let dir: []u8 = flash_path_dir(shim_path);
+    let base: []u8 = _zag_str_concat(stem, ".fimg");
+    if (@strEq(dir, ".") == 1) { return base; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), base);
+}
+
+fn fimg_emit_pcm_ops(m: *CoordinateManifest, out: *ArrayList[u8]) void {
+    fimg_app(out, "[pcm_ops]\n");
+    let i: i32 = 0;
+    let n: i32 = len[PathSegment](m.*.segments);
+    while (i < n) {
+        let s: PathSegment = get[PathSegment](m.*.segments, i);
+        if (s.lattice_op != 0) {
+            fimg_app(out, "op ");
+            fimg_app_i32(out, i);
+            fimg_app(out, " { class = ");
+            fimg_app_i32(out, ppu32_lattice_op_to_class(s.lattice_op));
+            fimg_app(out, ", tag = \"");
+            fimg_app(out, s.op_tag);
+            fimg_app(out, "\", pcm_row = ");
+            fimg_app_i32(out, s.pcm_row);
+            fimg_app(out, ", pcm_col = ");
+            fimg_app_i32(out, s.pcm_col);
+            fimg_app(out, ", lattice_op = ");
+            fimg_app_i32(out, s.lattice_op);
+            fimg_app(out, " }\n");
+        }
+        i = i + 1;
+    }
+}
+
+fn fimg_emit_ir(m: *CoordinateManifest, out: *ArrayList[u8]) void {
+    fimg_app(out, "[ir]\n");
+    let i: i32 = 0;
+    let n: i32 = len[PathSegment](m.*.segments);
+    while (i < n) {
+        let s: PathSegment = get[PathSegment](m.*.segments, i);
+        if (s.lattice_op != 0) {
+            fimg_app(out, "node ");
+            fimg_app_i32(out, i);
+            fimg_app(out, " { kind = PcmShift, row = ");
+            fimg_app_i32(out, s.pcm_row);
+            fimg_app(out, ", col = ");
+            fimg_app_i32(out, s.pcm_col);
+            fimg_app(out, ", phase_a = ");
+            fimg_app_phase(out, s.phase_a_rad);
+            fimg_app(out, ", phase_b = ");
+            fimg_app_phase(out, s.phase_b_rad);
+            fimg_app(out, ", phase_result = ");
+            fimg_app_phase(out, s.phase_result_rad);
+            fimg_app(out, ", lattice_op = ");
+            fimg_app_i32(out, s.lattice_op);
+            fimg_app(out, " }\n");
+        }
+        fimg_app(out, "node ");
+        fimg_app_i32(out, i);
+        fimg_app(out, " { kind = LatticeRoute, op = \"");
+        fimg_app(out, s.op_tag);
+        fimg_app(out, "\", pcm_row = ");
+        fimg_app_i32(out, s.pcm_row);
+        fimg_app(out, ", pcm_col = ");
+        fimg_app_i32(out, s.pcm_col);
+        fimg_app(out, ", lattice_op = ");
+        fimg_app_i32(out, s.lattice_op);
+        fimg_app(out, " }\n");
+        i = i + 1;
+    }
+}
+
+fn fimg_emit_header(out: *ArrayList[u8], target: []u8, name: []u8) void {
+    fimg_app(out, "# flash image v1\n");
+    fimg_app(out, "target = \"");
+    fimg_app(out, target);
+    fimg_app(out, "\"\n");
+    fimg_app(out, "name = \"");
+    fimg_app(out, name);
+    fimg_app(out, "\"\n");
+    fimg_app(out, "format = \"fimg-v1\"\n");
+}
+
+fn fimg_emit_manifest_section(out: *ArrayList[u8], manifest_text: []u8) void {
+    fimg_app(out, "# section .flash.manifest\n");
+    fimg_app(out, "[manifest]\n");
+    fimg_app(out, manifest_text);
+    if (manifest_text.len > 0 && manifest_text[manifest_text.len - 1] != '\n') {
+        fimg_app(out, "\n");
+    }
+}
+
+fn fimg_emit_full(
+    m: *CoordinateManifest,
+    manifest_text: []u8,
+    shim_text: []u8,
+    target: []u8,
+    name: []u8,
+) []u8 {
+    let out: ArrayList[u8] = make[u8](2048);
+    fimg_emit_header(&out, target, name);
+    fimg_emit_manifest_section(&out, manifest_text);
+    extern_emit_table(&out, manifest_text, shim_text);
+    fimg_emit_pcm_ops(m, &out);
+    fimg_emit_ir(m, &out);
+    return out.data[0..out.len];
+}
+
+fn fimg_wrap_manifest(manifest_text: []u8, target: []u8, name: []u8) []u8 {
+    let m: CoordinateManifest = manifest_new(name, "0.1.0");
+    return fimg_emit_full(&m, manifest_text, "", target, name);
+}
+
+fn fimg_from_manifest_struct(m: *CoordinateManifest, target: []u8, shim_text: []u8) []u8 {
+    let mani_text: []u8 = manifest_write(m);
+    return fimg_emit_full(m, mani_text, shim_text, target, m.*.name);
+}

@@ -1,0 +1,122 @@
+// tests/integration/pipeline_parity.zag — manifest segment ops match shim externs.
+//
+// For raw Flash programs, every raw_* manifest PathSegment must have a matching
+// _flash_raw_* extern call in the generated Zag shim.
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/compiler/parse.zag")
+@import("../../flash/compiler/codegen.zag")
+@import("../../flash/compiler/manifest.zag")
+
+fn pp_fail(msg: []u8) void {
+    _zag_print("pipeline_parity FAIL: ");
+    _zag_println(msg);
+    _zag_exit(1);
+}
+
+fn pp_contains(hay: []u8, needle: []u8) i32 {
+    if (needle.len < 1 || hay.len < needle.len) { return 0; }
+    let i: i32 = 0;
+    while (i <= hay.len - needle.len) {
+        let j: i32 = 0;
+        let ok: i32 = 1;
+        while (j < needle.len) {
+            if (hay[i + j] != needle[j]) { ok = 0; }
+            j = j + 1;
+        }
+        if (ok == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn pp_raw_call_name(kind: RawCallKind) []u8 {
+    if (kind == RawCallKind.FireShield)     { return "fire_shield"; }
+    if (kind == RawCallKind.InjectPhase)    { return "inject_phase"; }
+    if (kind == RawCallKind.SetLaserMw)     { return "set_laser_mw"; }
+    if (kind == RawCallKind.TargetVoxel)    { return "target_voxel"; }
+    return "manual_polarity";
+}
+
+fn pp_raw_extern_name(kind: RawCallKind) []u8 {
+    if (kind == RawCallKind.FireShield)     { return "_flash_raw_fire_shield"; }
+    if (kind == RawCallKind.InjectPhase)    { return "_flash_raw_inject_phase"; }
+    if (kind == RawCallKind.SetLaserMw)     { return "_flash_raw_set_laser_mw"; }
+    if (kind == RawCallKind.TargetVoxel)    { return "_flash_raw_target_voxel"; }
+    return "_flash_raw_set_polarity";
+}
+
+fn pp_manifest_has_op(manifest_text: []u8, op: []u8) i32 {
+    let quoted: []u8 = _zag_str_concat("op = \"", op);
+    quoted = _zag_str_concat(quoted, "\"");
+    return pp_contains(manifest_text, quoted);
+}
+
+fn pp_check_raw_call(manifest_text: []u8, shim: []u8, kind: RawCallKind) void {
+    let surface: []u8 = pp_raw_call_name(kind);
+    let manifest_op: []u8 = _zag_str_concat("raw_", surface);
+    let extern_name: []u8 = pp_raw_extern_name(kind);
+
+    if (pp_manifest_has_op(manifest_text, manifest_op) == 0) {
+        _zag_print("pipeline_parity FAIL missing manifest op ");
+        _zag_println(manifest_op);
+        _zag_exit(1);
+    }
+    if (pp_contains(shim, extern_name) == 0) {
+        _zag_print("pipeline_parity FAIL missing shim extern ");
+        _zag_println(extern_name);
+        _zag_exit(1);
+    }
+}
+
+fn pp_scan_raw_block(st: FlashStmt, manifest_text: []u8, shim: []u8) void {
+    if (st.kind != FlashStmtKind.RawBlock) { return; }
+    let ci: i32 = 0;
+    while (ci < len[RawCall](st.raw_calls)) {
+        let rc: RawCall = get[RawCall](st.raw_calls, ci);
+        pp_check_raw_call(manifest_text, shim, rc.kind);
+        ci = ci + 1;
+    }
+}
+
+fn main() i32 {
+    _zag_println("pipeline_parity: start");
+
+    let src_path: []u8 = "examples/raw_chamber.flash";
+    if (_zag_file_exists(src_path) == 0) {
+        src_path = "../examples/raw_chamber.flash";
+    }
+    if (_zag_file_exists(src_path) == 0) {
+        pp_fail("raw_chamber.flash not found");
+    }
+
+    let flash_src: []u8 = _zag_read_file(src_path);
+    if (flash_src.len < 0) {
+        pp_fail("cannot read raw_chamber source");
+    }
+
+    let parse_res: FlashParseResult = flash_parse(flash_src, src_path);
+    if (parse_res.err != 0) {
+        pp_fail("parse error in raw_chamber source");
+    }
+    let prog: FlashProgram = parse_res.prog;
+    let bundle: FlashCodegenBundle = flash_codegen_all(&prog, "examples");
+    let manifest_text: []u8 = manifest_write(&bundle.manifest);
+    let shim: []u8 = bundle.shim_buf.data[0..bundle.shim_buf.len];
+
+    if (pp_contains(shim, "_flash_raw_mode_enter") == 0) {
+        pp_fail("shim missing _flash_raw_mode_enter");
+    }
+    if (pp_contains(shim, "_flash_raw_mode_exit") == 0) {
+        pp_fail("shim missing _flash_raw_mode_exit");
+    }
+
+    let i: i32 = 0;
+    while (i < len[FlashStmt](prog.stmts)) {
+        pp_scan_raw_block(get[FlashStmt](prog.stmts, i), manifest_text, shim);
+        i = i + 1;
+    }
+
+    _zag_println("pipeline_parity: ok");
+    return 0;
+}

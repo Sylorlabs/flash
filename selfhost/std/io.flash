@@ -1,0 +1,18 @@
+// selfhost/std/io.flash — Flash standard library seed: formatted debug I/O.
+//
+// Integer and trit-value printing via _zag_* builtins only (no imports).
+// Replaces the Zag selfhost/std/fmt.zag subset used by flash/stdlib/io.zag.
+
+fn flash_print_int32(v: i32) void {
+    _zag_print(_zag_i64_to_str(v as i64));
+}
+
+fn flash_println_int32(v: i32) void {
+    _zag_println(_zag_i64_to_str(v as i64));
+}
+
+fn flash_print_trit(val: i32) void {
+    _zag_print("trit(");
+    flash_print_int32(val);
+    _zag_println(")");
+}

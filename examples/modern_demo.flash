@@ -1,0 +1,142 @@
+// examples/modern_demo.flash.zag — modern UI rendered by the vgpu layer.
+//
+// Competitive-tier 2D on the CPU rasterizer: gradient background, cards with
+// rounded corners and layered soft shadows, anti-aliased circles, a smooth
+// cubic-bezier chart with gradient area fill and stroked line, and a floating
+// action button. Compute routing goes through the engine device layer.
+
+@import("../flash/driver/vgpu.flash")
+
+fn card_shadow(fb: *SoftFb, x: f32, y: f32, w: f32, h: f32, rad: f32) void {
+    let i: i32 = 0;
+    while (i < 4) {
+        let grow: f32 = (i as f32) * 2.0;
+        let p: VPath = vg_path_new();
+        vg_rounded_rect(&p, x - grow, y + 2.0 - grow, w + grow * 2.0, h + grow * 2.0, rad + grow);
+        vg_fill(fb, &p, 0, 0, 0, 22);
+        i = i + 1;
+    }
+}
+
+fn main() i32 {
+    let dev: EngineDevice = engine_detect();
+    engine_report(dev);
+
+    // compute-route probe: exercises engine_dispatch_kernel without touching
+    // the main framebuffer (checksum-stable).
+    let probe: SoftFb = softgpu_new(4, 4);
+    engine_dispatch_kernel(&probe, softgpu_kernel_checker(), dev);
+
+    let fb: SoftFb = softgpu_new(480, 300);
+
+    // background: vertical gradient, deep navy → indigo
+    let bg: VPath = vg_path_new();
+    vg_move_to(&bg, 0.0, 0.0);
+    vg_line_to(&bg, 480.0, 0.0);
+    vg_line_to(&bg, 480.0, 300.0);
+    vg_line_to(&bg, 0.0, 300.0);
+    vg_close(&bg);
+    vg_fill_linear(&fb, &bg, 0.0, 0.0, 0.0, 300.0, 18, 20, 44, 255, 52, 34, 84, 255);
+
+    // header
+    softgpu_text(&fb, 24, 18, "FLASH ENGINE", 235, 235, 245);
+    softgpu_text(&fb, 24, 30, "TERNARY COMPUTE DASHBOARD", 150, 150, 175);
+
+    // main card
+    card_shadow(&fb, 24.0, 52.0, 288.0, 224.0, 14.0);
+    let card: VPath = vg_path_new();
+    vg_rounded_rect(&card, 24.0, 52.0, 288.0, 224.0, 14.0);
+    vg_fill(&fb, &card, 246, 246, 250, 244);
+
+    softgpu_text(&fb, 40, 66, "PHOTONIC THROUGHPUT", 60, 60, 80);
+
+    // chart: gradient area fill under a smooth cubic, then the stroked line
+    let area: VPath = vg_path_new();
+    vg_move_to(&area, 40.0, 200.0);
+    vg_cubic_to(&area, 90.0, 120.0, 130.0, 210.0, 176.0, 150.0);
+    vg_cubic_to(&area, 220.0, 95.0, 250.0, 170.0, 296.0, 110.0);
+    vg_line_to(&area, 296.0, 236.0);
+    vg_line_to(&area, 40.0, 236.0);
+    vg_close(&area);
+    vg_fill_linear(&fb, &area, 0.0, 100.0, 0.0, 236.0, 96, 80, 220, 150, 96, 80, 220, 10);
+
+    let curve: VPath = vg_path_new();
+    vg_move_to(&curve, 40.0, 200.0);
+    vg_cubic_to(&curve, 90.0, 120.0, 130.0, 210.0, 176.0, 150.0);
+    vg_cubic_to(&curve, 220.0, 95.0, 250.0, 170.0, 296.0, 110.0);
+    vg_stroke(&fb, &curve, 3.0, 96, 80, 220, 255);
+
+    // data point markers (AA circles, white ring over accent dot)
+    let mx: i32 = 0;
+    while (mx < 3) {
+        let cxs: f32 = 40.0 + (mx as f32) * 128.0;
+        let cys: f32 = 200.0;
+        if (mx == 1) { cys = 150.0; }
+        if (mx == 2) { cys = 110.0; }
+        let ring: VPath = vg_path_new();
+        vg_circle(&ring, cxs, cys, 7.0);
+        vg_fill(&fb, &ring, 246, 246, 250, 255);
+        let dot: VPath = vg_path_new();
+        vg_circle(&dot, cxs, cys, 4.5);
+        vg_fill(&fb, &dot, 96, 80, 220, 255);
+        mx = mx + 1;
+    }
+
+    softgpu_text(&fb, 40, 246, "1.25 GW PEAK - POL V", 110, 110, 130);
+
+    // side card: trit balance gauge
+    card_shadow(&fb, 332.0, 52.0, 124.0, 128.0, 14.0);
+    let side: VPath = vg_path_new();
+    vg_rounded_rect(&side, 332.0, 52.0, 124.0, 128.0, 14.0);
+    vg_fill(&fb, &side, 246, 246, 250, 244);
+    softgpu_text(&fb, 344, 66, "TRIT MIX", 60, 60, 80);
+
+    // three AA gauge dots with trit polarization hues
+    let gy: f32 = 96.0;
+    let gi: i32 = 0;
+    while (gi < 3) {
+        let radv: f32 = 9.0 + (gi as f32) * 3.0;
+        let hue_r: i32 = 32;
+        let hue_g: i32 = 200;
+        let hue_b: i32 = 255;
+        if (gi == 1) { hue_r = 70; hue_g = 70; hue_b = 90; }
+        if (gi == 2) { hue_r = 255; hue_g = 176; hue_b = 32; }
+        let dot: VPath = vg_path_new();
+        vg_circle(&dot, 364.0 + (gi as f32) * 30.0, gy + 18.0, radv);
+        vg_fill(&fb, &dot, hue_r, hue_g, hue_b, 235);
+        gi = gi + 1;
+    }
+    softgpu_text(&fb, 344, 146, "-1  0  +1", 110, 110, 130);
+    softgpu_text(&fb, 344, 158, "BALANCED", 110, 110, 130);
+
+    // pill button
+    card_shadow(&fb, 332.0, 196.0, 124.0, 36.0, 18.0);
+    let pill: VPath = vg_path_new();
+    vg_rounded_rect(&pill, 332.0, 196.0, 124.0, 36.0, 18.0);
+    vg_fill_linear(&fb, &pill, 332.0, 196.0, 456.0, 232.0, 96, 80, 220, 255, 150, 60, 200, 255);
+    softgpu_text(&fb, 360, 210, "IGNITE", 255, 255, 255);
+
+    // floating action button
+    card_shadow(&fb, 414.0, 244.0, 44.0, 44.0, 22.0);
+    let fab: VPath = vg_path_new();
+    vg_circle(&fab, 436.0, 266.0, 22.0);
+    vg_fill_linear(&fb, &fab, 414.0, 244.0, 458.0, 288.0, 255, 176, 32, 255, 255, 120, 40, 255);
+    let plus_h: VPath = vg_path_new();
+    vg_rounded_rect(&plus_h, 427.0, 264.0, 18.0, 4.0, 2.0);
+    vg_fill(&fb, &plus_h, 255, 255, 255, 255);
+    let plus_v: VPath = vg_path_new();
+    vg_rounded_rect(&plus_v, 434.0, 257.0, 4.0, 18.0, 2.0);
+    vg_fill(&fb, &plus_v, 255, 255, 255, 255);
+
+    let out: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/modern_demo.ppm" };
+    let rc: i32 = softgpu_present(out, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL modern present");
+        return 1;
+    }
+
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("modern_demo: ok");
+    return 0;
+}

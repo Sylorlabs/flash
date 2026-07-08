@@ -1,0 +1,180 @@
+// flash/compiler/flash_lex_test.zag — Flash lexer regression harness (20+ token checks).
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("flash_lex.zag")
+
+fn assert_tk(toks: ArrayList[Token], idx: i32, want: Tk, label: []u8) void {
+    let n: i32 = len[Token](toks);
+    if (idx < 0 || idx >= n) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_println(" (index out of range)");
+        _zag_exit(1);
+    }
+    let t: Token = get[Token](toks, idx);
+    if (t.kind != want) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" got ");
+        print_i32(tk_code(t.kind));
+        _zag_print(" want ");
+        print_i32(tk_code(want));
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn assert_ftk(toks: ArrayList[FToken], idx: i32, want: Fk, label: []u8) void {
+    let n: i32 = len[FToken](toks);
+    if (idx < 0 || idx >= n) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_println(" (index out of range)");
+        _zag_exit(1);
+    }
+    let t: FToken = get[FToken](toks, idx);
+    if (t.kind != want) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" got kind ");
+        print_i32(t.kind as i32);
+        _zag_print(" want ");
+        print_i32(want as i32);
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn assert_fval(toks: ArrayList[FToken], idx: i32, want: []u8, label: []u8) void {
+    let t: FToken = get[FToken](toks, idx);
+    if (@strEq(t.val, want) == 0) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" val got ");
+        _zag_print(t.val);
+        _zag_print(" want ");
+        _zag_println(want);
+        _zag_exit(1);
+    }
+}
+
+fn assert_val(toks: ArrayList[Token], idx: i32, want: []u8, label: []u8) void {
+    let t: Token = get[Token](toks, idx);
+    if (@strEq(t.val, want) == 0) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" val got ");
+        _zag_print(t.val);
+        _zag_print(" want ");
+        _zag_println(want);
+        _zag_exit(1);
+    }
+}
+
+fn main() i32 {
+    let src: []u8 = "@photonic fn route(c: chamber) wave @realtime @pure { let neg: trit = T; let zero: trit = 0; let one: trit = 1; let pw: p32 = 3.14; let s: sat_i16 = 42; let q: quire = 1; let fx: fixed_8_8 = 8; let ua: u_any = 0; let r: rns_3 = 1; let wide: i42 = 2; /* stripe */ raw { beam(lattice); } let msg: []u8 = \"flash\"; return neg >= zero; }";
+
+    let toks: ArrayList[Token] = lex(src);
+    let n: i32 = len[Token](toks);
+
+    // ── annotations ────────────────────────────────────────────────────────
+    assert_tk(toks, 0, Tk.Annot, "annot @photonic");
+    assert_val(toks, 0, "@photonic", "annot @photonic text");
+    assert_tk(toks, 9, Tk.Annot, "annot @realtime");
+    assert_val(toks, 9, "@realtime", "annot @realtime text");
+    assert_tk(toks, 10, Tk.Annot, "annot @pure");
+    assert_val(toks, 10, "@pure", "annot @pure text");
+
+    // ── Zag keywords + punctuation ───────────────────────────────────────────
+    assert_tk(toks, 1, Tk.KwFn, "kw fn");
+    assert_tk(toks, 3, Tk.Lp, "lparen");
+    assert_tk(toks, 5, Tk.Colon, "colon param");
+    assert_tk(toks, 7, Tk.Rp, "rparen");
+    assert_tk(toks, 11, Tk.Lbrace, "lbrace fn body");
+
+    // ── Flash photonic keywords ──────────────────────────────────────────────
+    assert_tk(toks, 6, Tk.KwChamber, "kw chamber");
+    assert_val(toks, 6, "chamber", "kw chamber text");
+    assert_tk(toks, 8, Tk.KwWave, "kw wave");
+    assert_tk(toks, 82, Tk.KwRaw, "kw raw");
+    assert_tk(toks, 84, Tk.KwBeam, "kw beam");
+    assert_tk(toks, 86, Tk.KwLattice, "kw lattice");
+
+    // ── ternary literals T, 0, 1 ───────────────────────────────────────────
+    assert_tk(toks, 15, Tk.KwTrit, "kw trit type");
+    assert_tk(toks, 17, Tk.TritLit, "trit lit T");
+    assert_val(toks, 17, "T", "trit lit T text");
+    assert_tk(toks, 24, Tk.TritLit, "trit lit 0");
+    assert_val(toks, 24, "0", "trit lit 0 text");
+    assert_tk(toks, 31, Tk.TritLit, "trit lit 1");
+    assert_val(toks, 31, "1", "trit lit 1 text");
+
+    // ── numeric type tokens ──────────────────────────────────────────────────
+    assert_tk(toks, 36, Tk.Type, "type p32");
+    assert_val(toks, 36, "p32", "type p32 text");
+    assert_tk(toks, 43, Tk.Type, "type sat_i16");
+    assert_val(toks, 43, "sat_i16", "type sat_i16 text");
+    assert_tk(toks, 50, Tk.Type, "type quire");
+    assert_tk(toks, 57, Tk.Type, "type fixed_8_8");
+    assert_tk(toks, 64, Tk.Type, "type u_any");
+    assert_tk(toks, 71, Tk.Type, "type rns_3");
+    assert_tk(toks, 78, Tk.Type, "type i42 arbitrary");
+    assert_val(toks, 78, "i42", "type i42 text");
+
+    // ── literals: float, int, string ─────────────────────────────────────────
+    assert_tk(toks, 38, Tk.Float, "float literal");
+    assert_val(toks, 38, "3.14", "float literal text");
+    assert_tk(toks, 45, Tk.Int, "int literal");
+    assert_val(toks, 45, "42", "int literal text");
+    assert_tk(toks, 97, Tk.Str, "string literal");
+    assert_val(toks, 97, "\"flash\"", "string literal text");
+
+    // ── slice type + operators ───────────────────────────────────────────────
+    assert_tk(toks, 93, Tk.Lbracket, "lbracket slice");
+    assert_tk(toks, 94, Tk.Rbracket, "rbracket slice");
+    assert_tk(toks, 95, Tk.Type, "type u8 in slice");
+    assert_tk(toks, 99, Tk.KwReturn, "kw return");
+    assert_tk(toks, 101, Tk.Op, "op >=");
+
+    // ── eof ──────────────────────────────────────────────────────────────────
+    assert_tk(toks, n - 1, Tk.Eof, "eof token");
+
+    // ── unknown characters → Tk.Err ──────────────────────────────────────────
+    let bad_src: []u8 = "fn bad() void { let x: i32 = $; }";
+    let bad_toks: ArrayList[Token] = lex(bad_src);
+    let bi: i32 = 0;
+    let found_err: i32 = 0;
+    while (bi < len[Token](bad_toks)) {
+        if (get[Token](bad_toks, bi).kind == Tk.Err) {
+            found_err = 1;
+            assert_val(bad_toks, bi, "$", "err token $");
+        }
+        bi = bi + 1;
+    }
+    if (found_err == 0) {
+        _zag_println("FAIL unknown char $ did not produce Tk.Err");
+        _zag_exit(1);
+    }
+
+    // ── surface DSL flash_lex(): invalid '$' → Fk.Err ────────────────────────
+    let surf: ArrayList[FToken] = flash_lex("program x\ntrit a = $1\n");
+    let surf_n: i32 = len[FToken](surf);
+    let err_idx: i32 = -1;
+    let si: i32 = 0;
+    while (si < surf_n) {
+        let st: FToken = get[FToken](surf, si);
+        if (st.kind == Fk.Err && @strEq(st.val, "$") == 1) {
+            err_idx = si;
+        }
+        si = si + 1;
+    }
+    if (err_idx < 0) {
+        _zag_println("FAIL surface flash_lex Fk.Err for '$'");
+        _zag_exit(1);
+    }
+    assert_ftk(surf, err_idx, Fk.Err, "surface err token");
+    assert_fval(surf, err_idx, "$", "surface err val");
+
+    _zag_println("flash_lex_test: ok (33 assertions)");
+    return 0;
+}

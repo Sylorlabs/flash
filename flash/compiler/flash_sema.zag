@@ -1,0 +1,446 @@
+// flash/compiler/flash_sema.zag — Flash type inference and effect checker.
+//
+// Rules enforced:
+//   • trit op trit → trit
+//   • wave/beam/phase same-family binary ops preserve carrier type
+//   • no mixed posit+integer without explicit cast (Zag parity)
+//   • raw { } enters RawMode effect set
+//   • @photonic / @realtime annotation propagation and constraint checking
+//   • generic monomorphization via template registry (Box[i32] → Box__i32)
+
+@import("flash_ast.zag")
+@import("flash_diag.zag")
+@import("../types/numeric/catalog.zag")
+@import("../toolchain/zag-poc/std/list.zag")
+@import("../toolchain/zag-poc/std/map.zag") as map
+
+// ── effect bitmask ───────────────────────────────────────────────────────────
+fn eff_alloc() i32    { return 1; }
+fn eff_io() i32       { return 4; }
+fn eff_photonic() i32 { return 32; }
+fn eff_raw() i32      { return 64; }
+
+fn eff_bor(a: i32, b: i32) i32 { return a + b - (a & b); }
+
+struct TypeInfo { ty: []u8, eff: i32 }
+
+struct SemaCtx {
+    local_names: ArrayList[[]u8],
+    local_types: ArrayList[[]u8],
+    fn_eff: map.StringMap[i32],
+    mono_mangled: ArrayList[[]u8],
+    mono_resolved: ArrayList[[]u8],
+    errors: i32,
+    raw_depth: i32,
+    file: []u8,
+}
+
+fn mono_register_template(ctx: *SemaCtx, mangled: []u8, resolved: []u8) void {
+    push[[]u8](&ctx.*.mono_mangled, mangled);
+    push[[]u8](&ctx.*.mono_resolved, resolved);
+}
+
+fn mono_lookup_template(ctx: *SemaCtx, mangled: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.mono_mangled)) {
+        if (@strEq(get[[]u8](ctx.*.mono_mangled, i), mangled) == 1) {
+            return get[[]u8](ctx.*.mono_resolved, i);
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn mono_init_registry(ctx: *SemaCtx) void {
+    mono_register_template(ctx, "Box__i32",  "Box_i32");
+    mono_register_template(ctx, "Box__Trit", "Box_Trit");
+    mono_register_template(ctx, "Box__p32",  "Box_p32");
+    mono_register_template(ctx, "Vec__i32",  "Vec_i32");
+    mono_register_template(ctx, "Vec__trit", "Vec_trit");
+}
+
+fn sema_ctx_new(file: []u8) SemaCtx {
+    let ctx: SemaCtx = SemaCtx{
+        .local_names = make[[]u8](16),
+        .local_types = make[[]u8](16),
+        .fn_eff = map.make[i32](16),
+        .mono_mangled = make[[]u8](8),
+        .mono_resolved = make[[]u8](8),
+        .errors = 0,
+        .raw_depth = 0,
+        .file = file,
+    };
+    mono_init_registry(&ctx);
+    return ctx;
+}
+
+fn sema_err(ctx: *SemaCtx, code: []u8, msg: []u8, line: i32) void {
+    ctx.*.errors = ctx.*.errors + 1;
+    diag_emit(code, msg, ctx.*.file, line, 1, 1,
+        "Flash semantic analysis",
+        "add an explicit cast or fix the operand types");
+}
+
+fn annot_declares(a: []u8) i32 {
+    if (@strEq(a, "@io"))        { return eff_io(); }
+    if (@strEq(a, "@photonic")) { return eff_photonic(); }
+    if (@strEq(a, "@alloc"))    { return eff_alloc(); }
+    return 0;
+}
+
+fn annot_forbids(a: []u8) i32 {
+    if (@strEq(a, "@realtime")) { return eff_bor(eff_alloc(), eff_io()); }
+    if (@strEq(a, "@photonic")) { return eff_raw(); }
+    return 0;
+}
+
+fn fn_declared_eff(annots: ArrayList[[]u8]) i32 {
+    let acc: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[[]u8](annots)) {
+        acc = eff_bor(acc, annot_declares(get[[]u8](annots, i)));
+        i = i + 1;
+    }
+    return acc;
+}
+
+// ── generic monomorphization (template registry) ────────────────────────────
+fn mono_mangle(base: []u8, targs: ArrayList[[]u8]) []u8 {
+    let s: []u8 = base;
+    let i: i32 = 0;
+    let n: i32 = len[[]u8](targs);
+    while (i < n) {
+        s = _zag_str_concat(s, "__");
+        s = _zag_str_concat(s, get[[]u8](targs, i));
+        i = i + 1;
+    }
+    return s;
+}
+
+fn mono_instantiate(base: []u8, targs: ArrayList[[]u8]) []u8 {
+    if (len[[]u8](targs) < 1) { return base; }
+    return mono_mangle(base, targs);
+}
+
+fn mono_resolve_template(ctx: *SemaCtx, mangled: []u8, targs: ArrayList[[]u8]) []u8 {
+    let hit: []u8 = mono_lookup_template(ctx, mangled);
+    if (hit.len > 0) {
+        return hit;
+    }
+    if (len[[]u8](targs) > 0) {
+        let msg: []u8 = _zag_str_concat("generic instantiation failure: unknown template ", mangled);
+        sema_err(ctx, "F0005", msg, 0);
+    }
+    return mangled;
+}
+
+fn type_of_literal(text: []u8) []u8 {
+    let has_dot: i32 = 0;
+    let i: i32 = 0;
+    while (i < text.len) {
+        if (text[i] == '.') { has_dot = 1; }
+        i = i + 1;
+    }
+    if (has_dot == 1) { return "f64"; }
+    return "i32";
+}
+
+fn lookup_local(ctx: *SemaCtx, name: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.local_names)) {
+        if (@strEq(get[[]u8](ctx.*.local_names, i), name)) {
+            return get[[]u8](ctx.*.local_types, i);
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn bind_local(ctx: *SemaCtx, name: []u8, ty: []u8) void {
+    push[[]u8](&ctx.*.local_names, name);
+    push[[]u8](&ctx.*.local_types, ty);
+}
+
+fn binop_result_ty(lty: []u8, rty: []u8, op: []u8) []u8 {
+    let fl: i32 = family_of(lty);
+    let fr: i32 = family_of(rty);
+
+    if (fl == family_trit() && fr == family_trit()) { return trit_bin_result(); }
+
+    let photo: []u8 = photonic_bin_result(lty, rty);
+    if (photo.len > 0) { return photo; }
+
+    if (same_family(lty, rty) == 1) {
+        if (fl == family_posit())   { return lty; }
+        if (fl == family_integer()) { return lty; }
+        if (fl == family_float())   { return lty; }
+    }
+
+    if (@strEq(op, "==") || @strEq(op, "!=")) { return "i32"; }
+    return "";
+}
+
+fn callee_name(n: *FlashNode) []u8 {
+    switch (n.*) {
+        .id => |d| { return d.name; }
+        else => { return ""; }
+    }
+    return "";
+}
+
+fn raw_mode_call(name: []u8) i32 {
+    if (@strEq(name, "fire_shield"))     { return 1; }
+    if (@strEq(name, "inject_phase"))    { return 1; }
+    if (@strEq(name, "set_laser_mw"))    { return 1; }
+    if (@strEq(name, "target_voxel"))    { return 1; }
+    if (@strEq(name, "manual_polarity")) { return 1; }
+    return 0;
+}
+
+fn flash_builtin_eff(name: []u8) i32 {
+    if (@strEq(name, "_zag_print"))        { return eff_io(); }
+    if (@strEq(name, "_zag_println"))      { return eff_io(); }
+    if (@strEq(name, "_zag_eprintln"))     { return eff_io(); }
+    if (@strEq(name, "_zag_write_file"))   { return eff_io(); }
+    if (@strEq(name, "_zag_malloc"))       { return eff_bor(eff_alloc(), 2); }
+    if (@strEq(name, "_zag_free"))         { return eff_alloc(); }
+    if (@strEq(name, "fire_shield"))       { return eff_bor(eff_io(), eff_photonic()); }
+    if (@strEq(name, "inject_phase"))      { return eff_bor(eff_io(), eff_photonic()); }
+    if (@strEq(name, "set_laser_mw"))      { return eff_bor(eff_io(), eff_photonic()); }
+    return 0;
+}
+
+fn check_expr(ctx: *SemaCtx, n: *FlashNode) TypeInfo {
+    switch (n.*) {
+        .trit_ => |_x| {
+            return TypeInfo{ .ty = "trit", .eff = 0 };
+        }
+        .ilit => |x| {
+            return TypeInfo{ .ty = type_of_literal(x.text), .eff = 0 };
+        }
+        .flit => |_x| {
+            return TypeInfo{ .ty = "f32", .eff = 0 };
+        }
+        .slit => |_x| {
+            return TypeInfo{ .ty = "[]u8", .eff = 0 };
+        }
+        .id => |x| {
+            let ty: []u8 = lookup_local(ctx, x.name);
+            if (ty.len == 0) {
+                sema_err(ctx, "F0001", "unknown identifier", 0);
+                return TypeInfo{ .ty = "", .eff = 0 };
+            }
+            return TypeInfo{ .ty = ty, .eff = 0 };
+        }
+        .bin => |b| {
+            let lt: TypeInfo = check_expr(ctx, b.l);
+            let rt: TypeInfo = check_expr(ctx, b.r);
+            let acc_eff: i32 = eff_bor(lt.eff, rt.eff);
+
+            if (is_mixed_posit_integer(lt.ty, rt.ty) == 1) {
+                sema_err(ctx, "F0002",
+                    "mixed posit and integer in binary op — add explicit cast", 0);
+                return TypeInfo{ .ty = "", .eff = acc_eff };
+            }
+
+            if (binop_compatible(lt.ty, rt.ty) == 0) {
+                sema_err(ctx, "F0001", "incompatible operand types in binary op", 0);
+                return TypeInfo{ .ty = "", .eff = acc_eff };
+            }
+
+            let res: []u8 = binop_result_ty(lt.ty, rt.ty, b.op);
+            if (res.len == 0) {
+                sema_err(ctx, "F0001", "cannot infer result type of binary op", 0);
+                return TypeInfo{ .ty = "", .eff = acc_eff };
+            }
+            return TypeInfo{ .ty = res, .eff = acc_eff };
+        }
+        .cast_ => |c| {
+            let sub: TypeInfo = check_expr(ctx, c.expr);
+            return TypeInfo{ .ty = c.target, .eff = sub.eff };
+        }
+        .call => |c| {
+            let acc_eff: i32 = 0;
+            let i: i32 = 0;
+            while (i < len[*FlashNode](c.args)) {
+                let a: TypeInfo = check_expr(ctx, get[*FlashNode](c.args, i));
+                acc_eff = eff_bor(acc_eff, a.eff);
+                i = i + 1;
+            }
+
+            let cn: []u8 = callee_name(c.callee);
+            let callee_eff: i32 = map.get[i32](ctx.*.fn_eff, cn) orelse flash_builtin_eff(cn);
+            acc_eff = eff_bor(acc_eff, callee_eff);
+
+            if (ctx.*.raw_depth > 0 && raw_mode_call(cn) == 1) {
+                acc_eff = eff_bor(acc_eff, eff_bor(eff_io(), eff_raw()));
+            }
+
+            if (len[[]u8](c.targs) > 0) {
+                let mangled: []u8 = mono_instantiate(cn, c.targs);
+                let resolved: []u8 = mono_resolve_template(ctx, mangled, c.targs);
+                return TypeInfo{ .ty = resolved, .eff = acc_eff };
+            }
+
+            // Surface DSL / stdlib photonic builtins (flashc lowering).
+            if (@strEq(cn, "trit") == 1) {
+                return TypeInfo{ .ty = "trit", .eff = acc_eff };
+            }
+            if (@strEq(cn, "trit_add") == 1 || @strEq(cn, "trit_mul") == 1) {
+                return TypeInfo{ .ty = "trit", .eff = acc_eff };
+            }
+            if (@strEq(cn, "trit_nand") == 1 || @strEq(cn, "trit_neg") == 1) {
+                return TypeInfo{ .ty = "trit", .eff = acc_eff };
+            }
+            if (@strEq(cn, "wave_default") == 1) {
+                return TypeInfo{ .ty = "Wave", .eff = acc_eff };
+            }
+            if (@strEq(cn, "mat3_identity") == 1 || @strEq(cn, "mat3_rotation_xy_90") == 1) {
+                return TypeInfo{ .ty = "Mat3", .eff = acc_eff };
+            }
+            if (@strEq(cn, "mat3_mul") == 1) {
+                return TypeInfo{ .ty = "Mat3", .eff = acc_eff };
+            }
+            if (@strEq(cn, "mat3_apply") == 1) {
+                return TypeInfo{ .ty = "TritTriple", .eff = acc_eff };
+            }
+
+            return TypeInfo{ .ty = "void", .eff = acc_eff };
+        }
+        .un => |u| {
+            let sub: TypeInfo = check_expr(ctx, u.e);
+            return TypeInfo{ .ty = sub.ty, .eff = sub.eff };
+        }
+        .wave_ => |_w| {
+            return TypeInfo{ .ty = "Wave", .eff = eff_photonic() };
+        }
+        .beam_ => |_b| {
+            return TypeInfo{ .ty = "Beam", .eff = eff_photonic() };
+        }
+        .phase_ => |_p| {
+            return TypeInfo{ .ty = "Phase", .eff = eff_photonic() };
+        }
+        else => {
+            return TypeInfo{ .ty = "", .eff = 0 };
+        }
+    }
+    return TypeInfo{ .ty = "", .eff = 0 };
+}
+
+fn check_stmts(ctx: *SemaCtx, body: ArrayList[*FlashNode]) i32 {
+    let acc_eff: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[*FlashNode](body)) {
+        acc_eff = eff_bor(acc_eff, check_stmt(ctx, get[*FlashNode](body, i)));
+        i = i + 1;
+    }
+    return acc_eff;
+}
+
+fn sema_ty_eq(declared: []u8, inferred: []u8) i32 {
+    if (@strEq(declared, inferred) == 1) { return 1; }
+    if ((@strEq(declared, "trit") == 1 || @strEq(declared, "Trit") == 1)
+        && (@strEq(inferred, "trit") == 1 || @strEq(inferred, "Trit") == 1)) {
+        return 1;
+    }
+    return 0;
+}
+
+fn check_stmt(ctx: *SemaCtx, n: *FlashNode) i32 {
+    switch (n.*) {
+        .let_ => |l| {
+            let ti: TypeInfo = check_expr(ctx, l.expr);
+            let ty: []u8 = l.dty;
+            if (l.has_dty == 0) { ty = ti.ty; }
+            if (l.has_dty == 1 && ty.len > 0 && ti.ty.len > 0 && sema_ty_eq(ty, ti.ty) == 0) {
+                sema_err(ctx, "F0001", "let binding type mismatch", 0);
+            }
+            bind_local(ctx, l.name, ty);
+            return ti.eff;
+        }
+        .ret => |r| {
+            if (r.has_expr == 1) {
+                let ti: TypeInfo = check_expr(ctx, r.expr);
+                return ti.eff;
+            }
+            return 0;
+        }
+        .raw_ => |rb| {
+            ctx.*.raw_depth = ctx.*.raw_depth + 1;
+            let inner: i32 = eff_bor(check_stmts(ctx, rb.body), eff_raw());
+            ctx.*.raw_depth = ctx.*.raw_depth - 1;
+            return inner;
+        }
+        .if_ => |x| {
+            let ce: TypeInfo = check_expr(ctx, x.cond);
+            let te: i32 = check_stmts(ctx, x.then_body);
+            let ee: i32 = 0;
+            if (x.has_els == 1) { ee = check_stmts(ctx, x.els_body); }
+            return eff_bor(eff_bor(ce.eff, te), ee);
+        }
+        .while_ => |w| {
+            let ce: TypeInfo = check_expr(ctx, w.cond);
+            let be: i32 = check_stmts(ctx, w.body);
+            return eff_bor(ce.eff, be);
+        }
+        .assign => |a| {
+            let te: TypeInfo = check_expr(ctx, a.target);
+            let ve: TypeInfo = check_expr(ctx, a.expr);
+            return eff_bor(te.eff, ve.eff);
+        }
+        .estmt => |e| {
+            let ti: TypeInfo = check_expr(ctx, e.expr);
+            return ti.eff;
+        }
+        else => { return 0; }
+    }
+    return 0;
+}
+
+fn check_fn_effects(ctx: *SemaCtx, f: FnDecl) void {
+    let body_eff: i32 = check_stmts(ctx, f.body);
+    let declared: i32 = fn_declared_eff(f.annots);
+    let total: i32 = eff_bor(body_eff, declared);
+    map.put[i32](&ctx.*.fn_eff, f.name, total);
+
+    let i: i32 = 0;
+    while (i < len[[]u8](f.annots)) {
+        let a: []u8 = get[[]u8](f.annots, i);
+        let forb: i32 = annot_forbids(a);
+        if (forb != 0 && (total & forb) != 0) {
+            sema_err(ctx, "F0003", "capability constraint violated in function", f.line);
+        }
+        i = i + 1;
+    }
+}
+
+fn check_fn(ctx: *SemaCtx, f: FnDecl) void {
+    let pi: i32 = 0;
+    while (pi < len[Param](f.params)) {
+        let p: Param = get[Param](f.params, pi);
+        bind_local(ctx, p.name, p.pty);
+        pi = pi + 1;
+    }
+    check_fn_effects(ctx, f);
+}
+
+fn check_decl(ctx: *SemaCtx, d: *FlashNode) void {
+    switch (d.*) {
+        .fn_decl => |f| { check_fn(ctx, f); }
+        else => { }
+    }
+}
+
+fn sema_check_program(decls: ArrayList[*FlashNode], file: []u8) i32 {
+    let ctx: SemaCtx = sema_ctx_new(file);
+    let i: i32 = 0;
+    while (i < len[*FlashNode](decls)) {
+        check_decl(&ctx, get[*FlashNode](decls, i));
+        i = i + 1;
+    }
+    return ctx.errors;
+}
+
+fn sema_check_expr(ctx: *SemaCtx, n: *FlashNode) TypeInfo {
+    return check_expr(ctx, n);
+}

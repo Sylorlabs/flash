@@ -1,0 +1,61 @@
+// flash/types/mat3.zag — shared 3×3 row-major f32 matrix (optical/compiler/shim).
+
+struct Mat3 {
+    m00: f32,
+    m01: f32,
+    m02: f32,
+    m10: f32,
+    m11: f32,
+    m12: f32,
+    m20: f32,
+    m21: f32,
+    m22: f32,
+}
+
+fn mat3_abs_f32(v: f32) f32 {
+    if (v < 0.0) { return 0.0 - v; }
+    return v;
+}
+
+fn mat3_identity() Mat3 {
+    return Mat3{
+        .m00 = 1.0, .m01 = 0.0, .m02 = 0.0,
+        .m10 = 0.0, .m11 = 1.0, .m12 = 0.0,
+        .m20 = 0.0, .m21 = 0.0, .m22 = 1.0,
+    };
+}
+
+fn mat3_rotation_xy_90() Mat3 {
+    return Mat3{
+        .m00 = 0.0, .m01 = 0.0 - 1.0, .m02 = 0.0,
+        .m10 = 1.0, .m11 = 0.0, .m12 = 0.0,
+        .m20 = 0.0, .m21 = 0.0, .m22 = 1.0,
+    };
+}
+
+fn mat3_mul(a: Mat3, b: Mat3) Mat3 {
+    return Mat3{
+        .m00 = a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20,
+        .m01 = a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21,
+        .m02 = a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22,
+        .m10 = a.m10 * b.m00 + a.m11 * b.m10 + a.m12 * b.m20,
+        .m11 = a.m10 * b.m01 + a.m11 * b.m11 + a.m12 * b.m21,
+        .m12 = a.m10 * b.m02 + a.m11 * b.m12 + a.m12 * b.m22,
+        .m20 = a.m20 * b.m00 + a.m21 * b.m10 + a.m22 * b.m20,
+        .m21 = a.m20 * b.m01 + a.m21 * b.m11 + a.m22 * b.m21,
+        .m22 = a.m20 * b.m02 + a.m21 * b.m12 + a.m22 * b.m22,
+    };
+}
+
+fn mat3_near(a: Mat3, b: Mat3, eps: f32) i32 {
+    if (mat3_abs_f32(a.m00 - b.m00) > eps) { return 0; }
+    if (mat3_abs_f32(a.m01 - b.m01) > eps) { return 0; }
+    if (mat3_abs_f32(a.m02 - b.m02) > eps) { return 0; }
+    if (mat3_abs_f32(a.m10 - b.m10) > eps) { return 0; }
+    if (mat3_abs_f32(a.m11 - b.m11) > eps) { return 0; }
+    if (mat3_abs_f32(a.m12 - b.m12) > eps) { return 0; }
+    if (mat3_abs_f32(a.m20 - b.m20) > eps) { return 0; }
+    if (mat3_abs_f32(a.m21 - b.m21) > eps) { return 0; }
+    if (mat3_abs_f32(a.m22 - b.m22) > eps) { return 0; }
+    return 1;
+}

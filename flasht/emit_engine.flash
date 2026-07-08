@@ -1,0 +1,62 @@
+// flasht/emit_engine.flash — engine boot image: FIMG + PPU32 + RayOS metadata (v1).
+//
+// Wraps emit_fimg output with an [engine] boot section and FLASH_PLATFORM=engine
+// metadata for RayOS firmware and flash_engine_load().
+
+@import("../flasht/emit_fimg.flash")
+
+fn engine_emit_boot_header(out: *ArrayList[u8], name: []u8) void {
+    fimg_app(out, "# flash engine image v1\n");
+    fimg_app(out, "FLASH_PLATFORM=engine\n");
+    fimg_app(out, "target = \"engine\"\n");
+    fimg_app(out, "name = \"");
+    fimg_app(out, name);
+    fimg_app(out, "\"\n");
+    fimg_app(out, "format = \"engine-v1\"\n");
+}
+
+fn engine_emit_section(out: *ArrayList[u8], gpu: i32, route: i32) void {
+    fimg_app(out, "[engine]\n");
+    fimg_app(out, "platform = \"engine\"\n");
+    fimg_app(out, "FLASH_PLATFORM = \"engine\"\n");
+    fimg_app(out, "gpu = ");
+    fimg_app_i32(out, gpu);
+    fimg_app(out, "\n");
+    fimg_app(out, "compute_route = ");
+    fimg_app_i32(out, route);
+    fimg_app(out, "\n");
+    fimg_app(out, "boot_abi = \"flash_rt-v1\"\n");
+}
+
+fn engine_path_from_shim(shim_path: []u8) []u8 {
+    let stem: []u8 = flash_path_stem(shim_path);
+    let dir: []u8 = flash_path_dir(shim_path);
+    let base: []u8 = _zag_str_concat(stem, ".engine.fimg");
+    if (@strEq(dir, ".") == 1) { return base; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), base);
+}
+
+// Build engine image from manifest struct: FIMG body + PPU32 pcm_ops + [engine] boot.
+fn engine_from_manifest(m: *CoordinateManifest, gpu: i32, route: i32) []u8 {
+    let fimg_body: []u8 = fimg_from_manifest_struct(m, "engine", "");
+    let out: ArrayList[u8] = make[u8](fimg_body.len + 512);
+    engine_emit_boot_header(&out, m.*.name);
+    engine_emit_section(&out, gpu, route);
+    fimg_app(&out, "[fimg]\n");
+    let i: i32 = 0;
+    while (i < fimg_body.len) { push[u8](&out, fimg_body[i]); i = i + 1; }
+    return out.data[0..out.len];
+}
+
+// Wrap existing FIMG text (from manifest emit) into engine boot image.
+fn engine_wrap_fimg(fimg_text: []u8, name: []u8, gpu: i32, route: i32) []u8 {
+    let out: ArrayList[u8] = make[u8](fimg_text.len + 512);
+    engine_emit_boot_header(&out, name);
+    engine_emit_section(&out, gpu, route);
+    fimg_app(&out, "[fimg]\n");
+    fimg_app(&out, fimg_text);
+    if (fimg_text.len > 0 && fimg_text[fimg_text.len - 1] != '\n') {
+        fimg_app(&out, "\n");
+    }
+    return out.data[0..out.len];
+}

@@ -1,0 +1,35 @@
+# flash image v1
+target = "ppu32"
+name = "ternary_l"
+format = "fimg-v1"
+[manifest]
+# flash coordinate manifest
+name = "ternary_logic"
+version = "0.1.0"
+peak_power_mw = 1500m
+dominant_pol = 0
+[paths]
+segment 0 { op = "trit_lit", from = (0m, 0m, 0m), to = (0m, 0m, 0m), power_mw = 1250m, pol = 1, pcm_row = 0, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 1 { op = "trit_lit", from = (0m, 0m, 0m), to = (0m, 0m, 0m), power_mw = 1250m, pol = -1, pcm_row = 2, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 2 { op = "trit_lit", from = (30000m, 21000m, 0m), to = (30000m, 21000m, 0m), power_mw = 1000m, pol = 0, pcm_row = 4, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 3 { op = "trit_var", from = (30000m, 21000m, 0m), to = (30000m, 21000m, 0m), power_mw = 1250m, pol = 1, pcm_row = 6, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 4 { op = "trit_var", from = (60000m, 0m, 0m), to = (60000m, 0m, 0m), power_mw = 1250m, pol = -1, pcm_row = 8, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 5 { op = "trit_add", from = (60000m, 0m, 0m), to = (60000m, 0m, 0m), power_mw = 1500m, pol = 0, pcm_row = 10, pcm_col = 0, phase_a_rad = 1047197u, phase_b_rad = -1047197u, phase_result_rad = 0u, lattice_op = 3 }
+segment 6 { op = "trit_var", from = (90000m, 21000m, 0m), to = (90000m, 21000m, 0m), power_mw = 1250m, pol = 1, pcm_row = 12, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 7 { op = "trit_var", from = (90000m, 21000m, 0m), to = (90000m, 21000m, 0m), power_mw = 1000m, pol = 0, pcm_row = 14, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 8 { op = "trit_mul", from = (0m, 30000m, 0m), to = (0m, 30000m, 0m), power_mw = 1250m, pol = 0, pcm_row = 16, pcm_col = 0, phase_a_rad = 1047197u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 5 }
+segment 9 { op = "trit_var", from = (0m, 30000m, 0m), to = (0m, 30000m, 0m), power_mw = 1000m, pol = 0, pcm_row = 18, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 10 { op = "trit_var", from = (30000m, 51000m, 0m), to = (30000m, 51000m, 0m), power_mw = 1000m, pol = 0, pcm_row = 20, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 11 { op = "trit_nand", from = (30000m, 51000m, 0m), to = (30000m, 51000m, 0m), power_mw = 1000m, pol = 0, pcm_row = 22, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 7 }
+segment 12 { op = "trit_var", from = (60000m, 30000m, 0m), to = (60000m, 30000m, 0m), power_mw = 1000m, pol = 0, pcm_row = 24, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 0 }
+segment 13 { op = "trit_neg", from = (60000m, 30000m, 0m), to = (60000m, 30000m, 0m), power_mw = 1000m, pol = 0, pcm_row = 26, pcm_col = 0, phase_a_rad = 0u, phase_b_rad = 0u, phase_result_rad = 0u, lattice_op = 2 }
+[extern]
+_flash_raw_mode_enter
+_flash_raw_mode_exit
+_flash_raw_fire_shield
+_flash_raw_inject_phase
+_flash_raw_set_laser_mw
+_flash_raw_target_voxel
+_flash_raw_set_polarity
+_flash_stream_up
+_flash_read_voxel

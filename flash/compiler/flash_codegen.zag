@@ -1,0 +1,1272 @@
+// flash/compiler/flash_codegen.zag — lower typed Flash AST to coordinate manifest.
+//
+// Pipeline:
+//   TypedNode / FnDecl  →  PathSegments (flash_to_zag) + HardwareManager seating
+//                        →  Zag source fragments (runtime raw {} externs)
+//                        →  CoordinateManifest artifact
+//
+// Spatial libraries (stage-0 vs Flash ports):
+//   Stage-0 flashc is built by znc and must @import Zag modules here
+//   (flash_to_zag.zag, manifest.zag, zag-spatial/hardware_manager.zag).
+//   znc cannot compile .flash sources. Equivalent Flash ports live under
+//   selfhost/lib/*.flash (hardware_manager, manifest, flash_to_zag, grid,
+//   rotation, stripe_pool) with byte-identical parity (tests/portparity).
+//   Stage-1 scodegen.flash links lib/flash_to_zag.flash instead; generated
+//   shims use flash/stdlib/flash_slim.zag so port symbols are not shadowed.
+//
+// Numeric encodings:
+//   i/u/sat_*  → balanced-trit lane PathSegments (one per nonzero digit)
+//   f32/f64    → laser amplitude (power_mw)
+//   p8..p64    → regime bits in polarization field
+//   trit       → polarization + X displacement via lower_trit_op
+//   wave/beam/phase → laser routing (lower_wave / lower_beam / lower_phase)
+
+@import("flash_ast.zag")
+@import("flash_to_zag.zag")          // Flash port: selfhost/lib/flash_to_zag.flash
+@import("manifest.zag")             // Flash port: selfhost/lib/manifest.flash
+@import("../stdlib/trit.zag")
+@import("../stdlib/photon.zag")
+@import("../types/mat3.zag")
+@import("../types/numeric/catalog.zag")
+@import("../../zag-spatial/hardware_manager.zag") // Flash port: selfhost/lib/hardware_manager.flash
+@import("../toolchain/zag-poc/std/list.zag")
+@import("../toolchain/zag-poc/std/rt.zag")
+
+// ── typed AST wrapper (post-SEMA) ─────────────────────────────────────────────
+
+struct TypedNode {
+    node: *FlashNode,
+    ty:   []u8,
+}
+
+struct CodegenResult {
+    manifest:   CoordinateManifest,
+    zag_src:    ArrayList[u8],
+    hw_entries: ArrayList[CoordinateManifestEntry],
+}
+
+struct CgTritTriple {
+    x: Trit,
+    y: Trit,
+    z: Trit,
+}
+
+struct CgMatRouteCtx {
+    pos: Coord,
+    depth: i32,
+    base_power_mw: f32,
+    out: *CoordinateManifest,
+}
+
+struct CodegenCtx {
+    route:        RouteCtx,
+    hw:           *HardwareManager,
+    manifest:     *CoordinateManifest,
+    zag_out:      *ArrayList[u8],
+    hw_out:       *ArrayList[CoordinateManifestEntry],
+    chamber_slot: i32,
+    last_trit:    Trit,
+    prog_name:    []u8,
+    bind_names:   ArrayList[[]u8],
+    bind_trits:   ArrayList[Trit],
+    triple_names: ArrayList[[]u8],
+    num_names:    ArrayList[[]u8],
+    num_types:    ArrayList[[]u8],
+    mat_names:    ArrayList[[]u8],
+    mat3_seg_count: i32,
+    mat_data:     ArrayList[f32],
+    raw_counter:  i32,
+    skip_zag:     i32,
+    probe_x:      i32,
+    probe_y:      i32,
+    probe_z:      i32,
+    has_probe:    i32,
+    mat3_host:    i32,
+}
+
+// ── context lifecycle ─────────────────────────────────────────────────────────
+
+fn codegen_ctx_new(
+    hw: *HardwareManager,
+    manifest: *CoordinateManifest,
+    zag_out: *ArrayList[u8],
+    hw_out: *ArrayList[CoordinateManifestEntry],
+    skip_zag: i32,
+    mat3_host: i32,
+    prog_name: []u8,
+) CodegenCtx {
+    return CodegenCtx{
+        .route        = route_ctx_new(),
+        .hw           = hw,
+        .manifest     = manifest,
+        .zag_out      = zag_out,
+        .hw_out       = hw_out,
+        .chamber_slot = 0,
+        .last_trit    = trit(0),
+        .prog_name    = prog_name,
+        .bind_names   = make[[]u8](16),
+        .bind_trits   = make[Trit](16),
+        .triple_names = make[[]u8](4),
+        .num_names    = make[[]u8](8),
+        .num_types    = make[[]u8](8),
+        .mat_names    = make[[]u8](8),
+        .mat3_seg_count = 0,
+        .mat_data     = make[f32](72),
+        .raw_counter  = 0,
+        .skip_zag     = skip_zag,
+        .probe_x      = 0,
+        .probe_y      = 0,
+        .probe_z      = 0,
+        .has_probe    = 0,
+        .mat3_host    = mat3_host,
+    };
+}
+
+fn cg_append(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) {
+        push[u8](out, s[i]);
+        i = i + 1;
+    }
+}
+
+fn cg_emit_zag(ctx: *CodegenCtx, line: []u8) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    cg_append(ctx.*.zag_out, line);
+    cg_append(ctx.*.zag_out, "\n");
+}
+
+fn cg_push_seg(ctx: *CodegenCtx, seg: PathSegment) void {
+    manifest_push_seg(ctx.*.manifest, seg);
+    codegen_sync_hw(ctx);
+}
+
+fn codegen_sync_hw(ctx: *CodegenCtx) void {
+    let w: i32 = ctx.*.hw.*.lattice.dims.width;
+    let h: i32 = ctx.*.hw.*.lattice.dims.height;
+    if (w < 1) { w = 1; }
+    if (h < 1) { h = 1; }
+    let slot: i32 = ctx.*.chamber_slot;
+    let cx: i32 = slot % w;
+    let cy: i32 = (slot / w) % h;
+    let c: ChamberCoord = chamber_coord(cx, cy, 0);
+    let rot: RotationState = RotationState.R0;
+    if ((slot % 2) == 1) { rot = RotationState.R90; }
+    seat_nano_block(ctx.*.hw, c, rot);
+    ctx.*.chamber_slot = ctx.*.chamber_slot + 1;
+}
+
+// ── literal parsing / node helpers ────────────────────────────────────────────
+
+fn cg_parse_i32(text: []u8) i32 {
+    return _zag_str_to_i64(text) as i32;
+}
+
+fn cg_parse_trit_text(text: []u8) i32 {
+    if (@strEq(text, "T")) { return -1; }
+    if (@strEq(text, "+1")) { return 1; }
+    if (@strEq(text, "0")) { return 0; }
+    if (@strEq(text, "-1")) { return -1; }
+    if (@strEq(text, "1")) { return 1; }
+    return cg_parse_i32(text);
+}
+
+fn cg_dot_index(s: []u8) i32 {
+    let i: i32 = 0;
+    while (i < s.len) {
+        if (s[i] == '.') { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn cg_parse_f32(text: []u8) f32 {
+    let dot: i32 = cg_dot_index(text);
+    if (dot < 0) { return _zag_str_to_i64(text) as f32; }
+    let whole: f32 = _zag_str_to_i64(text[0..dot]) as f32;
+    let frac_s: []u8 = text[dot + 1..];
+    let frac: f32 = _zag_str_to_i64(frac_s) as f32;
+    let denom: f32 = 1.0;
+    let fi: i32 = 0;
+    while (fi < frac_s.len) {
+        denom = denom * 10.0;
+        fi = fi + 1;
+    }
+    return whole + frac / denom;
+}
+
+fn cg_expr_inner(n: *FlashNode) *FlashNode {
+    let code: i32 = flash_node_code(n);
+    if (code == 19) {
+        let c: Cast = cg_node_as_cast(n);
+        return cg_expr_inner(c.expr);
+    }
+    return n;
+}
+
+fn cg_callee_name(n: *FlashNode) []u8 {
+    switch (n.*) {
+        .id => |d| { return d.name; }
+    }
+    return "";
+}
+
+fn cg_node_ident_text(n: *FlashNode) []u8 {
+    switch (n.*) {
+        .id => |d| { return d.name; }
+    }
+    return "";
+}
+
+fn cg_bind_trit(ctx: *CodegenCtx, name: []u8, t: Trit) void {
+    push[[]u8](&ctx.*.bind_names, name);
+    push[Trit](&ctx.*.bind_trits, t);
+}
+
+fn cg_lookup_trit(ctx: *CodegenCtx, name: []u8) Trit {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.bind_names)) {
+        if (@strEq(get[[]u8](ctx.*.bind_names, i), name)) {
+            return get[Trit](ctx.*.bind_trits, i);
+        }
+        i = i + 1;
+    }
+    return trit(0);
+}
+
+fn cg_mat_push_flat(ctx: *CodegenCtx, m: Mat3) void {
+    push[f32](&ctx.*.mat_data, m.m00);
+    push[f32](&ctx.*.mat_data, m.m01);
+    push[f32](&ctx.*.mat_data, m.m02);
+    push[f32](&ctx.*.mat_data, m.m10);
+    push[f32](&ctx.*.mat_data, m.m11);
+    push[f32](&ctx.*.mat_data, m.m12);
+    push[f32](&ctx.*.mat_data, m.m20);
+    push[f32](&ctx.*.mat_data, m.m21);
+    push[f32](&ctx.*.mat_data, m.m22);
+}
+
+fn cg_mat_flat_at(ctx: *CodegenCtx, idx: i32) Mat3 {
+    let base: i32 = idx * 9;
+    return Mat3{
+        .m00 = get[f32](ctx.*.mat_data, base + 0),
+        .m01 = get[f32](ctx.*.mat_data, base + 1),
+        .m02 = get[f32](ctx.*.mat_data, base + 2),
+        .m10 = get[f32](ctx.*.mat_data, base + 3),
+        .m11 = get[f32](ctx.*.mat_data, base + 4),
+        .m12 = get[f32](ctx.*.mat_data, base + 5),
+        .m20 = get[f32](ctx.*.mat_data, base + 6),
+        .m21 = get[f32](ctx.*.mat_data, base + 7),
+        .m22 = get[f32](ctx.*.mat_data, base + 8),
+    };
+}
+
+fn cg_bind_mat(ctx: *CodegenCtx, name: []u8, m: Mat3) void {
+    push[[]u8](&ctx.*.mat_names, name);
+    cg_mat_push_flat(ctx, m);
+}
+
+fn cg_lookup_mat(ctx: *CodegenCtx, name: []u8) Mat3 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.mat_names)) {
+        if (@strEq(get[[]u8](ctx.*.mat_names, i), name)) {
+            return cg_mat_flat_at(ctx, i);
+        }
+        i = i + 1;
+    }
+    return mat3_identity();
+}
+
+fn cg_mat_abs_f32(v: f32) f32 {
+    if (v < 0.0) { return 0.0 - v; }
+    return v;
+}
+
+fn cg_mat_to_i8(t: Trit) i8 {
+    if (t.val == 1) { return 1; }
+    if (t.val == 0 - 1) { return 0 - 1; }
+    return 0;
+}
+
+fn cg_mat_route_ctx_new(out: *CoordinateManifest) CgMatRouteCtx {
+    return CgMatRouteCtx{
+        .pos = coord(0.0, 0.0, 0.0),
+        .depth = 0,
+        .base_power_mw = 1.0,
+        .out = out,
+    };
+}
+
+fn cg_mat3_route_term(
+    ctx: *CgMatRouteCtx,
+    row: i32,
+    col: i32,
+    weight: f32,
+    tr: Trit,
+    op_tag: []u8,
+) void {
+    let from: Coord = ctx.*.pos;
+    let dx: f32 = col as f32;
+    let dy: f32 = row as f32;
+    let dz: f32 = ctx.*.depth as f32;
+    let to_coord: Coord = coord(from.x + dx, from.y + dy, from.z + dz);
+    ctx.*.pos = to_coord;
+    ctx.*.depth = ctx.*.depth + 1;
+    let pol: i32 = cg_mat_to_i8(tr) as i32;
+    let power: f32 = cg_mat_abs_f32(ctx.*.base_power_mw * weight);
+    let seg: PathSegment = path_segment_new(from, to_coord, power, pol, op_tag);
+    manifest_push_seg(ctx.*.out, seg);
+}
+
+// Mirrors matrix_rt.zag mat3_route() — nine PathSegments per apply.
+fn cg_mat3_route(ctx: *CgMatRouteCtx, m: Mat3, input: CgTritTriple) void {
+    cg_mat3_route_term(ctx, 0, 0, m.m00, input.x, "mat3_r0c0");
+    cg_mat3_route_term(ctx, 0, 1, m.m01, input.y, "mat3_r0c1");
+    cg_mat3_route_term(ctx, 0, 2, m.m02, input.z, "mat3_r0c2");
+    cg_mat3_route_term(ctx, 1, 0, m.m10, input.x, "mat3_r1c0");
+    cg_mat3_route_term(ctx, 1, 1, m.m11, input.y, "mat3_r1c1");
+    cg_mat3_route_term(ctx, 1, 2, m.m12, input.z, "mat3_r1c2");
+    cg_mat3_route_term(ctx, 2, 0, m.m20, input.x, "mat3_r2c0");
+    cg_mat3_route_term(ctx, 2, 1, m.m21, input.y, "mat3_r2c1");
+    cg_mat3_route_term(ctx, 2, 2, m.m22, input.z, "mat3_r2c2");
+}
+
+fn cg_call_arg_ident(c: Call, idx: i32) []u8 {
+    if (idx < 0 || idx >= len[*FlashNode](c.args)) { return ""; }
+    return cg_node_ident_text(get[*FlashNode](c.args, idx));
+}
+
+fn cg_node_int_text(n: *FlashNode) []u8 {
+    switch (n.*) {
+        .ilit => |x| { return x.text; }
+        .trit_ => |t| { return t.text; }
+    }
+    return "0";
+}
+
+fn cg_node_float_text(n: *FlashNode) []u8 {
+    switch (n.*) {
+        .flit => |x| { return x.text; }
+    }
+    return "0";
+}
+
+fn cg_node_as_call(n: *FlashNode) Call {
+    switch (n.*) {
+        .call => |c| { return c; }
+    }
+    return Call{ .callee = n, .args = make[*FlashNode](1), .targs = make[[]u8](1) };
+}
+
+fn cg_node_as_bin(n: *FlashNode) Bin {
+    switch (n.*) {
+        .bin => |b| { return b; }
+    }
+    return Bin{ .op = "+", .l = n, .r = n };
+}
+
+fn cg_node_as_return(n: *FlashNode) Return {
+    switch (n.*) {
+        .ret => |r| { return r; }
+    }
+    return Return{ .has_expr = 0, .expr = n };
+}
+
+fn cg_node_as_let(n: *FlashNode) Let {
+    switch (n.*) {
+        .let_ => |l| { return l; }
+    }
+    return Let{ .name = "", .dty = "", .has_dty = 0, .has_init = 0, .expr = n };
+}
+
+fn cg_node_as_raw(n: *FlashNode) RawBlock {
+    switch (n.*) {
+        .raw_ => |r| { return r; }
+    }
+    return RawBlock{ .body = make[*FlashNode](1) };
+}
+
+fn cg_node_as_estmt(n: *FlashNode) ExprStmt {
+    switch (n.*) {
+        .estmt => |e| { return e; }
+    }
+    return ExprStmt{ .expr = n };
+}
+
+fn cg_node_as_wave(n: *FlashNode) WaveExpr {
+    switch (n.*) {
+        .wave_ => |w| { return w; }
+    }
+    return WaveExpr{ .args = make[*FlashNode](1) };
+}
+
+fn cg_node_as_beam(n: *FlashNode) BeamExpr {
+    switch (n.*) {
+        .beam_ => |b| { return b; }
+    }
+    return BeamExpr{ .args = make[*FlashNode](1) };
+}
+
+fn cg_node_as_phase(n: *FlashNode) PhaseExpr {
+    switch (n.*) {
+        .phase_ => |p| { return p; }
+    }
+    return PhaseExpr{ .args = make[*FlashNode](1) };
+}
+
+fn cg_node_as_cast(n: *FlashNode) Cast {
+    switch (n.*) {
+        .cast_ => |c| { return c; }
+    }
+    return Cast{ .expr = n, .target = "" };
+}
+
+// ── Zag shim source emission ────────────────────────────────────────────────────
+
+fn cg_zag_type_name(dty: []u8) []u8 {
+    if (@strEq(dty, "trit") || @strEq(dty, "Trit")) { return "Trit"; }
+    if (@strEq(dty, "Wave")) { return "Wave"; }
+    if (@strEq(dty, "p32")) { return "p32"; }
+    if (@strEq(dty, "sat_i16")) { return "sat_i16"; }
+    if (@strEq(dty, "TritTriple")) { return "TritTriple"; }
+    if (@strEq(dty, "Mat3")) { return "Mat3"; }
+    return dty;
+}
+
+fn cg_format_trit_lit_zag(text: []u8, mat3_host: i32) []u8 {
+    if (@strEq(text, "T")) { return "trit(-1)"; }
+    if (@strEq(text, "+1")) { return "trit(1)"; }
+    if (@strEq(text, "0")) { return "trit(0)"; }
+    if (@strEq(text, "-1")) { return "trit(-1)"; }
+    if (@strEq(text, "1")) { return "trit(1)"; }
+    return _zag_str_concat(_zag_str_concat("trit(", text), ")");
+}
+
+fn cg_format_expr_zag(ctx: *CodegenCtx, n: *FlashNode) []u8 {
+    let code: i32 = flash_node_code(n);
+    if (code == 11) {
+        switch (n.*) {
+            .trit_ => |t| { return cg_format_trit_lit_zag(t.text, ctx.*.mat3_host); }
+            else => { return "trit(0)"; }
+        }
+    }
+    if (code == 12) {
+        return cg_node_int_text(n);
+    }
+    if (code == 13) {
+        return cg_node_float_text(n);
+    }
+    if (code == 14) {
+        switch (n.*) {
+            .slit => |s| { return s.text; }
+            else => { return "\"\""; }
+        }
+    }
+    if (code == 15) {
+        return cg_node_ident_text(n);
+    }
+    if (code == 18) {
+        let c: Call = cg_node_as_call(n);
+        let name: []u8 = cg_callee_name(c.callee);
+        if (@strEq(name, "wave_default")) { return "wave_default()"; }
+        if (@strEq(name, "mat3_identity")) { return "mat3_identity()"; }
+        if (@strEq(name, "mat3_rotation_xy_90")) { return "mat3_rotation_xy_90()"; }
+        let s: []u8 = _zag_str_concat(name, "(");
+        let ai: i32 = 0;
+        while (ai < len[*FlashNode](c.args)) {
+            if (ai > 0) { s = _zag_str_concat(s, ", "); }
+            s = _zag_str_concat(s, cg_format_expr_zag(ctx, get[*FlashNode](c.args, ai)));
+            ai = ai + 1;
+        }
+        return _zag_str_concat(s, ")");
+    }
+    if (code == 19) {
+        let c: Cast = cg_node_as_cast(n);
+        let inner: []u8 = cg_format_expr_zag(ctx, c.expr);
+        if (@strEq(c.target, "p32") == 1) {
+            let s: []u8 = _zag_str_concat("@floatToPosit(", inner);
+            return _zag_str_concat(s, ")");
+        }
+        let s: []u8 = _zag_str_concat("(", inner);
+        s = _zag_str_concat(s, ") as ");
+        return _zag_str_concat(s, cg_zag_type_name(c.target));
+    }
+    return "0";
+}
+
+fn cg_format_raw_args_zag(ctx: *CodegenCtx, callee: []u8, c: Call) []u8 {
+    let n: i32 = len[*FlashNode](c.args);
+    let s: []u8 = "";
+    let i: i32 = 0;
+    while (i < n) {
+        if (i > 0) { s = _zag_str_concat(s, ", "); }
+        let arg: *FlashNode = get[*FlashNode](c.args, i);
+        if (@strEq(callee, "manual_polarity") == 1 && i == n - 1) {
+            s = _zag_str_concat(s, "(");
+            s = _zag_str_concat(s, cg_format_expr_zag(ctx, arg));
+            s = _zag_str_concat(s, ") as i32");
+        } else {
+            s = _zag_str_concat(s, cg_format_expr_zag(ctx, arg));
+        }
+        i = i + 1;
+    }
+    return s;
+}
+
+fn cg_emit_let_zag(ctx: *CodegenCtx, name: []u8, dty: []u8, expr: []u8) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    let line: []u8 = _zag_str_concat("    let ", name);
+    line = _zag_str_concat(line, ": ");
+    line = _zag_str_concat(line, cg_zag_type_name(dty));
+    line = _zag_str_concat(line, " = ");
+    line = _zag_str_concat(line, expr);
+    line = _zag_str_concat(line, ";");
+    cg_emit_zag(ctx, line);
+}
+
+fn cg_emit_mat3_apply_zag(ctx: *CodegenCtx, dst: []u8, c: Call) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    let m_name: []u8 = cg_call_arg_ident(c, 0);
+    let vx_name: []u8 = cg_call_arg_ident(c, 1);
+    let vy_name: []u8 = cg_call_arg_ident(c, 2);
+    let vz_name: []u8 = cg_call_arg_ident(c, 3);
+    let expr: []u8 = _zag_str_concat("mat3_apply_trit(", m_name);
+    expr = _zag_str_concat(expr, ", TritTriple{ .x = ");
+    expr = _zag_str_concat(expr, vx_name);
+    expr = _zag_str_concat(expr, ", .y = ");
+    expr = _zag_str_concat(expr, vy_name);
+    expr = _zag_str_concat(expr, ", .z = ");
+    expr = _zag_str_concat(expr, vz_name);
+    expr = _zag_str_concat(expr, " })");
+    cg_emit_let_zag(ctx, dst, "TritTriple", expr);
+}
+
+// ── trit lowering (balanced arithmetic via stdlib/trit.zag → trit_math.zag) ──
+
+fn cg_lower_trit_const(ctx: *CodegenCtx, tag: []u8, t: Trit) Trit {
+    let z: Trit = trit(0);
+    let seg: PathSegment = lower_trit_op(ctx.*.hw, &ctx.*.route, tag, t, z, t);
+    cg_push_seg(ctx, seg);
+    ctx.*.last_trit = t;
+    return t;
+}
+
+fn cg_eval_trit_call(ctx: *CodegenCtx, c: Call) Trit {
+    let name: []u8 = cg_callee_name(c.callee);
+    if (@strEq(name, "trit") && len[*FlashNode](c.args) == 1) {
+        let sub: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 0));
+        return cg_lower_trit_const(ctx, "trit_ctor", sub);
+    }
+    if (@strEq(name, "trit_add") && len[*FlashNode](c.args) == 2) {
+        let a: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 0));
+        let b: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 1));
+        let r: Trit = trit_add(a, b);
+        let seg: PathSegment = lower_trit_op(ctx.*.hw, &ctx.*.route, "trit_add", a, b, r);
+        cg_push_seg(ctx, seg);
+        ctx.*.last_trit = r;
+        return r;
+    }
+    if (@strEq(name, "trit_mul") && len[*FlashNode](c.args) == 2) {
+        let a: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 0));
+        let b: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 1));
+        let r: Trit = trit_mul(a, b);
+        let seg: PathSegment = lower_trit_op(ctx.*.hw, &ctx.*.route, "trit_mul", a, b, r);
+        cg_push_seg(ctx, seg);
+        ctx.*.last_trit = r;
+        return r;
+    }
+    if (@strEq(name, "trit_nand") && len[*FlashNode](c.args) == 2) {
+        let a: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 0));
+        let b: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 1));
+        let r: Trit = trit_nand(a, b);
+        let seg: PathSegment = lower_trit_op(ctx.*.hw, &ctx.*.route, "trit_nand", a, b, r);
+        cg_push_seg(ctx, seg);
+        ctx.*.last_trit = r;
+        return r;
+    }
+    if (@strEq(name, "trit_neg") && len[*FlashNode](c.args) >= 1) {
+        let a: Trit = cg_eval_trit_expr(ctx, get[*FlashNode](c.args, 0));
+        let r: Trit = trit_neg(a);
+        let z: Trit = trit(0);
+        let seg: PathSegment = lower_trit_op(ctx.*.hw, &ctx.*.route, "trit_neg", a, z, r);
+        cg_push_seg(ctx, seg);
+        ctx.*.last_trit = r;
+        return r;
+    }
+    return cg_lower_trit_const(ctx, "trit_call", trit(0));
+}
+
+fn cg_eval_trit_bin(ctx: *CodegenCtx, b: Bin) Trit {
+    let a: Trit = cg_eval_trit_expr(ctx, b.l);
+    let c: Trit = cg_eval_trit_expr(ctx, b.r);
+    let r: Trit = trit_add(a, c);
+    let tag: []u8 = "trit_bin";
+    if (@strEq(b.op, "*")) { r = trit_mul(a, c); tag = "trit_mul"; }
+    let seg: PathSegment = lower_trit_op(ctx.*.hw, &ctx.*.route, tag, a, c, r);
+    cg_push_seg(ctx, seg);
+    ctx.*.last_trit = r;
+    return r;
+}
+
+fn cg_eval_trit_expr(ctx: *CodegenCtx, n: *FlashNode) Trit {
+    let code: i32 = flash_node_code(n);
+    if (code == 11) {
+        return cg_lower_trit_const(ctx, "trit_lit",
+            trit(cg_parse_trit_text(cg_node_int_text(n))));
+    }
+    if (code == 12) {
+        return cg_lower_trit_const(ctx, "trit_lit", trit(cg_parse_i32(cg_node_int_text(n))));
+    }
+    if (code == 18) {
+        return cg_eval_trit_call(ctx, cg_node_as_call(n));
+    }
+    if (code == 16) {
+        return cg_eval_trit_bin(ctx, cg_node_as_bin(n));
+    }
+    if (code == 15) {
+        let nm: []u8 = cg_node_ident_text(n);
+        let t: Trit = cg_lookup_trit(ctx, nm);
+        return cg_lower_trit_const(ctx, "trit_var", t);
+    }
+    return cg_lower_trit_const(ctx, "trit_unknown", trit(0));
+}
+
+// ── optical matrix lowering (mat3_route → 9 PathSegments) ─────────────────────
+
+fn cg_lower_mat3_identity(ctx: *CodegenCtx, dst: []u8) void {
+    cg_bind_mat(ctx, dst, mat3_identity());
+    if (ctx.*.skip_zag == 0) {
+        cg_emit_let_zag(ctx, dst, "Mat3", "mat3_identity()");
+    }
+}
+
+fn cg_lower_mat3_rotation(ctx: *CodegenCtx, dst: []u8) void {
+    cg_bind_mat(ctx, dst, mat3_rotation_xy_90());
+    if (ctx.*.skip_zag == 0) {
+        cg_emit_let_zag(ctx, dst, "Mat3", "mat3_rotation_xy_90()");
+    }
+}
+
+fn cg_lower_mat3_mul(ctx: *CodegenCtx, dst: []u8, c: Call) void {
+    let a_name: []u8 = cg_call_arg_ident(c, 0);
+    let b_name: []u8 = cg_call_arg_ident(c, 1);
+    let a: Mat3 = cg_lookup_mat(ctx, a_name);
+    let b: Mat3 = cg_lookup_mat(ctx, b_name);
+    cg_bind_mat(ctx, dst, mat3_mul(a, b));
+    if (ctx.*.skip_zag == 0) {
+        let expr: []u8 = _zag_str_concat("mat3_mul(", a_name);
+        expr = _zag_str_concat(expr, ", ");
+        expr = _zag_str_concat(expr, b_name);
+        expr = _zag_str_concat(expr, ")");
+        cg_emit_let_zag(ctx, dst, "Mat3", expr);
+    }
+}
+
+fn cg_lower_mat3_apply(ctx: *CodegenCtx, dst: []u8, c: Call) void {
+    let m_name: []u8 = cg_call_arg_ident(c, 0);
+    let vx_name: []u8 = cg_call_arg_ident(c, 1);
+    let vy_name: []u8 = cg_call_arg_ident(c, 2);
+    let vz_name: []u8 = cg_call_arg_ident(c, 3);
+    let m: Mat3 = cg_lookup_mat(ctx, m_name);
+    let input: CgTritTriple = CgTritTriple{
+        .x = cg_lookup_trit(ctx, vx_name),
+        .y = cg_lookup_trit(ctx, vy_name),
+        .z = cg_lookup_trit(ctx, vz_name),
+    };
+    let route_ctx: CgMatRouteCtx = cg_mat_route_ctx_new(ctx.*.manifest);
+    cg_mat3_route(&route_ctx, m, input);
+    ctx.*.mat3_seg_count = ctx.*.mat3_seg_count + 9;
+    cg_emit_mat3_apply_zag(ctx, dst, c);
+    push[[]u8](&ctx.*.triple_names, dst);
+    ctx.*.last_trit = input.x;
+}
+
+fn cg_try_lower_mat3_call(ctx: *CodegenCtx, dst: []u8, c: Call) i32 {
+    let name: []u8 = cg_callee_name(c.callee);
+    if (@strEq(name, "mat3_identity")) {
+        cg_lower_mat3_identity(ctx, dst);
+        return 1;
+    }
+    if (@strEq(name, "mat3_rotation_xy_90")) {
+        cg_lower_mat3_rotation(ctx, dst);
+        return 1;
+    }
+    if (@strEq(name, "mat3_mul")) {
+        cg_lower_mat3_mul(ctx, dst, c);
+        return 1;
+    }
+    if (@strEq(name, "mat3_apply")) {
+        cg_lower_mat3_apply(ctx, dst, c);
+        return 1;
+    }
+    return 0;
+}
+
+// ── photonic carrier lowering ─────────────────────────────────────────────────
+
+fn cg_lower_wave_val(ctx: *CodegenCtx, w: Wave) void {
+    cg_push_seg(ctx, lower_wave(ctx.*.hw, &ctx.*.route, w));
+}
+
+fn cg_lower_beam_val(ctx: *CodegenCtx, b: Beam) void {
+    cg_push_seg(ctx, lower_beam(ctx.*.hw, &ctx.*.route, b));
+}
+
+fn cg_lower_phase_val(ctx: *CodegenCtx, p: Phase) void {
+    cg_push_seg(ctx, lower_phase(ctx.*.hw, &ctx.*.route, p));
+}
+
+fn cg_lower_wave_expr(ctx: *CodegenCtx, w: WaveExpr) void {
+    cg_lower_wave_val(ctx, wave_default());
+}
+
+fn cg_lower_beam_expr(ctx: *CodegenCtx, b: BeamExpr) void {
+    cg_lower_beam_val(ctx, beam_default());
+}
+
+fn cg_lower_phase_expr(ctx: *CodegenCtx, p: PhaseExpr) void {
+    cg_lower_phase_val(ctx, phase_default());
+}
+
+// ── numeric encodings ─────────────────────────────────────────────────────────
+
+fn cg_segment_at_offset(ctx: *CodegenCtx, op: []u8, power: f32, pol: i32) PathSegment {
+    let from_off: i32 = ctx.*.route.byte_offset;
+    let to_off: i32 = from_off + 1;
+    let from_c: Coord = resolve_mm_coord(ctx.*.hw, from_off);
+    let to_c: Coord = resolve_mm_coord(ctx.*.hw, to_off);
+    ctx.*.route.byte_offset = to_off + 1;
+    return path_segment_new(from_c, to_c, power, pol, op);
+}
+
+fn cg_balanced_trit_digit(v: i32) i32 {
+    let r: i32 = v % 3;
+    if (r > 1) { return r - 3; }
+    if (r < -1) { return r + 3; }
+    return r;
+}
+
+fn cg_lower_integer_lanes(ctx: *CodegenCtx, ty: []u8, v: i32) void {
+    let rem: i32 = v;
+    let lane: i32 = 0;
+    let guard: i32 = 0;
+    while (rem != 0 && guard < 32) {
+        let digit: i32 = cg_balanced_trit_digit(rem);
+        rem = (rem - digit) / 3;
+        let a: Trit = trit(digit);
+        let b: Trit = trit(lane);
+        let r: Trit = trit(digit);
+        let seg: PathSegment = lower_trit_op(ctx.*.hw, &ctx.*.route, ty, a, b, r);
+        cg_push_seg(ctx, seg);
+        lane = lane + 1;
+        guard = guard + 1;
+    }
+    if (lane == 0) {
+        cg_lower_trit_const(ctx, ty, trit(0));
+    }
+}
+
+fn cg_lower_float_amplitude(ctx: *CodegenCtx, ty: []u8, v: f32) void {
+    let amp: f32 = v;
+    if (amp < 0.0) { amp = 0.0 - amp; }
+    let seg: PathSegment = cg_segment_at_offset(ctx, ty, amp, 0);
+    cg_push_seg(ctx, seg);
+}
+
+fn cg_lower_posit_regime(ctx: *CodegenCtx, ty: []u8, bits: i32) void {
+    let regime: i32 = bits % 4;
+    if (regime > 1) { regime = 1; }
+    if (regime < -1) { regime = -1; }
+    let seg: PathSegment = cg_segment_at_offset(ctx, ty, ctx.*.route.base_power_mw, regime);
+    cg_push_seg(ctx, seg);
+}
+
+// ── raw {} chamber register lowering ──────────────────────────────────────────
+
+fn cg_raw_extern_name(callee: []u8) []u8 {
+    if (@strEq(callee, "fire_shield"))     { return "_flash_raw_fire_shield"; }
+    if (@strEq(callee, "inject_phase"))    { return "_flash_raw_inject_phase"; }
+    if (@strEq(callee, "set_laser_mw"))    { return "_flash_raw_set_laser_mw"; }
+    if (@strEq(callee, "target_voxel"))    { return "_flash_raw_target_voxel"; }
+    if (@strEq(callee, "manual_polarity")) { return "_flash_raw_set_polarity"; }
+    return "_flash_raw_mode_enter";
+}
+
+fn cg_call_arg_as_i32(c: Call, idx: i32) i32 {
+    if (idx < 0 || idx >= len[*FlashNode](c.args)) { return 0; }
+    let arg: *FlashNode = get[*FlashNode](c.args, idx);
+    let code: i32 = flash_node_code(arg);
+    if (code == 12) {
+        return _zag_str_to_i64(cg_node_int_text(arg)) as i32;
+    }
+    if (code == 13) {
+        let text: []u8 = cg_node_float_text(arg);
+        let dot: i32 = _zag_str_index_of_byte(text, '.');
+        if (dot >= 0) { return _zag_str_to_i64(text[0..dot]) as i32; }
+        return _zag_str_to_i64(text) as i32;
+    }
+    return 0;
+}
+
+fn cg_track_probe_voxel(ctx: *CodegenCtx, callee: []u8, c: Call) void {
+    if (@strEq(callee, "target_voxel") == 1
+        || @strEq(callee, "fire_shield") == 1
+        || @strEq(callee, "inject_phase") == 1) {
+        ctx.*.probe_x = cg_call_arg_as_i32(c, 0);
+        ctx.*.probe_y = cg_call_arg_as_i32(c, 1);
+        ctx.*.probe_z = cg_call_arg_as_i32(c, 2);
+        ctx.*.has_probe = 1;
+    }
+}
+
+fn cg_emit_voxel_probe(ctx: *CodegenCtx) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    if (ctx.*.has_probe == 0) { return; }
+    let x: i32 = ctx.*.probe_x;
+    let y: i32 = ctx.*.probe_y;
+    let z: i32 = ctx.*.probe_z;
+    let open: []u8 = _zag_str_concat("    if (runtime_voxel_at(", _zag_i64_to_str(x as i64));
+    let line: []u8 = _zag_str_concat(open, ", ");
+    line = _zag_str_concat(line, _zag_i64_to_str(y as i64));
+    line = _zag_str_concat(line, ", ");
+    line = _zag_str_concat(line, _zag_i64_to_str(z as i64));
+    line = _zag_str_concat(line, ")) |cell| {");
+    cg_emit_zag(ctx, line);
+    cg_emit_zag(ctx, "        _zag_print(\"voxel pol=\");");
+    cg_emit_zag(ctx, "        _zag_print(_zag_i64_to_str(runtime_pol_wire(cell.pol) as i64));");
+    cg_emit_zag(ctx, "        _zag_print(\" phase_milli=\");");
+    cg_emit_zag(ctx, "        _zag_print(_zag_i64_to_str(((cell.phase * 1000.0) as i32) as i64));");
+    cg_emit_zag(ctx, "        _zag_print(\" amp_milli=\");");
+    cg_emit_zag(ctx, "        _zag_print(_zag_i64_to_str(((cell.amp * 1000.0) as i32) as i64));");
+    cg_emit_zag(ctx, "        _zag_println(\"\");");
+    cg_emit_zag(ctx, "    } else {");
+    cg_emit_zag(ctx, "        _zag_println(\"FAIL raw voxel missing\");");
+    cg_emit_zag(ctx, "        return 1;");
+    cg_emit_zag(ctx, "    }");
+}
+
+fn cg_lower_raw_call(ctx: *CodegenCtx, c: Call) void {
+    let callee: []u8 = cg_callee_name(c.callee);
+    let ext: []u8 = cg_raw_extern_name(callee);
+    let args: []u8 = cg_format_raw_args_zag(ctx, callee, c);
+    cg_track_probe_voxel(ctx, callee, c);
+    let slot: i32 = ctx.*.raw_counter;
+    ctx.*.raw_counter = ctx.*.raw_counter + 1;
+    let zag_line: []u8 = _zag_str_concat("    let _raw_", _zag_i64_to_str(slot as i64));
+    zag_line = _zag_str_concat(zag_line, ": i32 = ");
+    zag_line = _zag_str_concat(zag_line, ext);
+    zag_line = _zag_str_concat(zag_line, "(");
+    zag_line = _zag_str_concat(zag_line, args);
+    zag_line = _zag_str_concat(zag_line, ");");
+    cg_emit_zag(ctx, zag_line);
+
+    let tag: []u8 = _zag_str_concat("raw_", callee);
+    let seg: PathSegment = cg_segment_at_offset(ctx, tag, ctx.*.route.base_power_mw, 0);
+    cg_push_seg(ctx, seg);
+}
+
+fn cg_lower_raw_call_node(ctx: *CodegenCtx, n: *FlashNode) void {
+    if (flash_node_code(n) == 18) {
+        let c: Call = cg_node_as_call(n);
+        cg_lower_raw_call(ctx, c);
+    }
+}
+
+fn cg_lower_raw_stmt(ctx: *CodegenCtx, n: *FlashNode) void {
+    let code: i32 = flash_node_code(n);
+    if (code == 18) {
+        cg_lower_raw_call_node(ctx, n);
+        return;
+    }
+    if (code == 8) {
+        let e: ExprStmt = cg_node_as_estmt(n);
+        cg_lower_raw_call_node(ctx, e.expr);
+    }
+}
+
+fn cg_lower_raw_block(ctx: *CodegenCtx, body: ArrayList[*FlashNode]) void {
+    cg_emit_zag(ctx, "    let _flash_raw_enter: i32 = _flash_raw_mode_enter();");
+    let i: i32 = 0;
+    while (i < len[*FlashNode](body)) {
+        cg_lower_raw_stmt(ctx, get[*FlashNode](body, i));
+        i = i + 1;
+    }
+    cg_emit_zag(ctx, "    let _flash_raw_exit: i32 = _flash_raw_mode_exit();");
+    cg_emit_voxel_probe(ctx);
+}
+
+// ── typed expression / statement lowering ─────────────────────────────────────
+
+fn cg_lower_typed_expr(ctx: *CodegenCtx, tn: TypedNode) void {
+    let ty: []u8 = tn.ty;
+    let fam: i32 = family_of(ty);
+    let code: i32 = flash_node_code(tn.node);
+
+    if (code == 23) {
+        cg_lower_wave_expr(ctx, cg_node_as_wave(tn.node));
+        return;
+    }
+    if (code == 24) {
+        cg_lower_beam_expr(ctx, cg_node_as_beam(tn.node));
+        return;
+    }
+    if (code == 25) {
+        cg_lower_phase_expr(ctx, cg_node_as_phase(tn.node));
+        return;
+    }
+
+    if (fam == family_trit() || cat_is_trit(ty) == 1 || @strEq(ty, "trit")) {
+        let t: Trit = cg_eval_trit_expr(ctx, tn.node);
+        ctx.*.last_trit = t;
+        return;
+    }
+
+    if (fam == family_wave() || cat_is_wave(ty) == 1) {
+        cg_lower_wave_val(ctx, wave_default());
+        return;
+    }
+    if (fam == family_beam() || cat_is_beam(ty) == 1) {
+        cg_lower_beam_val(ctx, beam_default());
+        return;
+    }
+    if (fam == family_phase() || cat_is_phase(ty) == 1) {
+        cg_lower_phase_val(ctx, phase_default());
+        return;
+    }
+
+    if (fam == family_integer()) {
+        let v: i32 = cg_parse_i32(cg_node_int_text(tn.node));
+        cg_lower_integer_lanes(ctx, ty, v);
+        return;
+    }
+
+    if (fam == family_float()) {
+        let v: f32 = 0.0;
+        if (code == 13) {
+            v = cg_parse_f32(cg_node_float_text(tn.node));
+        }
+        if (code == 12) {
+            v = cg_parse_i32(cg_node_int_text(tn.node)) as f32;
+        }
+        cg_lower_float_amplitude(ctx, ty, v);
+        return;
+    }
+
+    if (fam == family_posit()) {
+        let inner: *FlashNode = cg_expr_inner(tn.node);
+        let inner_code: i32 = flash_node_code(inner);
+        let bits: i32 = 0;
+        if (inner_code == 12) {
+            bits = cg_parse_i32(cg_node_int_text(inner));
+        }
+        if (inner_code == 13) {
+            // Float literal → scaled mantissa bits for regime (cg_lower_posit_regime uses bits % 4).
+            // e.g. 1.5 → (1.5 * 1000) = 1500 → 1500 % 4 = 0.
+            let v: f32 = cg_parse_f32(cg_node_float_text(inner));
+            bits = (v * 1000.0) as i32;
+        }
+        cg_lower_posit_regime(ctx, ty, bits);
+        return;
+    }
+
+    if (code == 18) {
+        let c: Call = cg_node_as_call(tn.node);
+        let name: []u8 = cg_callee_name(c.callee);
+        if (@strEq(name, "wave_default")) {
+            cg_lower_wave_val(ctx, wave_default());
+        }
+        if (@strEq(name, "beam_default")) {
+            cg_lower_beam_val(ctx, beam_default());
+        }
+        if (@strEq(name, "phase_default")) {
+            cg_lower_phase_val(ctx, phase_default());
+        }
+    }
+}
+
+fn cg_lower_ret(ctx: *CodegenCtx, r: Return, ret_ty: []u8) void {
+    if (r.has_expr == 1) {
+        let tn: TypedNode = TypedNode{ .node = r.expr, .ty = ret_ty };
+        cg_lower_typed_expr(ctx, tn);
+        if (cat_is_trit(ret_ty) == 1 || @strEq(ret_ty, "trit")) {
+            manifest_set_pol(ctx.*.manifest, ctx.*.last_trit.val);
+        }
+        if (ctx.*.skip_zag == 0) {
+            let expr: []u8 = cg_format_expr_zag(ctx, r.expr);
+            let line: []u8 = _zag_str_concat("    return ", expr);
+            cg_emit_zag(ctx, _zag_str_concat(line, ";"));
+        }
+    } else if (ctx.*.skip_zag == 0) {
+        cg_emit_zag(ctx, "    return 0;");
+    }
+}
+
+fn cg_lower_let(ctx: *CodegenCtx, l: Let) void {
+    if (l.has_init == 1 && flash_node_code(l.expr) == 18) {
+        let c: Call = cg_node_as_call(l.expr);
+        if (cg_try_lower_mat3_call(ctx, l.name, c) == 1) { return; }
+    }
+    let ty: []u8 = l.dty;
+    if (l.has_dty == 0) { ty = "i32"; }
+    if (ctx.*.skip_zag == 0 && l.has_init == 1) {
+        let expr_zag: []u8 = cg_format_expr_zag(ctx, l.expr);
+        if (@strEq(ty, "p32") == 1) {
+            let inner: *FlashNode = cg_expr_inner(l.expr);
+            if (flash_node_code(inner) == 13) {
+                expr_zag = _zag_str_concat("@floatToPosit(", cg_node_float_text(inner));
+                expr_zag = _zag_str_concat(expr_zag, ")");
+            }
+        }
+        cg_emit_let_zag(ctx, l.name, ty, expr_zag);
+    }
+    let tn: TypedNode = TypedNode{ .node = l.expr, .ty = ty };
+    cg_lower_typed_expr(ctx, tn);
+    if (cat_is_trit(ty) == 1 || @strEq(ty, "trit") == 1 || @strEq(ty, "Trit") == 1) {
+        cg_bind_trit(ctx, l.name, ctx.*.last_trit);
+    }
+    let fam: i32 = family_of(ty);
+    if (fam == family_integer() || fam == family_posit()) {
+        push[[]u8](&ctx.*.num_names, l.name);
+        push[[]u8](&ctx.*.num_types, ty);
+    }
+}
+
+fn cg_lower_stmt(ctx: *CodegenCtx, n: *FlashNode, ret_ty: []u8) void {
+    let code: i32 = flash_node_code(n);
+    if (code == 3) {
+        cg_lower_ret(ctx, cg_node_as_return(n), ret_ty);
+        return;
+    }
+    if (code == 2) {
+        cg_lower_let(ctx, cg_node_as_let(n));
+        return;
+    }
+    if (code == 6) {
+        cg_lower_raw_block(ctx, cg_node_as_raw(n).body);
+        return;
+    }
+    if (code == 8) {
+        let e: ExprStmt = cg_node_as_estmt(n);
+        if (ctx.*.skip_zag == 0 && flash_node_code(e.expr) == 18) {
+            let c: Call = cg_node_as_call(e.expr);
+            let name: []u8 = cg_callee_name(c.callee);
+            if (@strEq(name, "_zag_println") == 1 && len[*FlashNode](c.args) >= 1) {
+                let msg: []u8 = cg_format_expr_zag(ctx, get[*FlashNode](c.args, 0));
+                let line: []u8 = _zag_str_concat("    _zag_println(", msg);
+                cg_emit_zag(ctx, _zag_str_concat(line, ");"));
+                return;
+            }
+        }
+        let tn: TypedNode = TypedNode{ .node = e.expr, .ty = "void" };
+        cg_lower_typed_expr(ctx, tn);
+    }
+}
+
+fn cg_emit_trit_summary(ctx: *CodegenCtx) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    if (len[[]u8](ctx.*.bind_names) < 1) { return; }
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.bind_names)) {
+        let name: []u8 = get[[]u8](ctx.*.bind_names, i);
+        cg_emit_zag(ctx, "    _zag_print(\"trit \");");
+        let nline: []u8 = _zag_str_concat("    _zag_print(\"", name);
+        nline = _zag_str_concat(nline, "\");");
+        cg_emit_zag(ctx, nline);
+        cg_emit_zag(ctx, "    _zag_print(\"=\");");
+        let vline: []u8 = _zag_str_concat("    _zag_print(_zag_i64_to_str(trit_val(", name);
+        vline = _zag_str_concat(vline, ") as i64));");
+        cg_emit_zag(ctx, vline);
+        cg_emit_zag(ctx, "    _zag_println(\"\");");
+        i = i + 1;
+    }
+}
+
+fn cg_emit_triple_summary(ctx: *CodegenCtx) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.triple_names)) {
+        let name: []u8 = get[[]u8](ctx.*.triple_names, i);
+        cg_emit_zag(ctx, "    _zag_print(\"trit \");");
+        let nline: []u8 = _zag_str_concat("    _zag_print(\"", name);
+        nline = _zag_str_concat(nline, "\");");
+        cg_emit_zag(ctx, nline);
+        cg_emit_zag(ctx, "    _zag_print(\"=\");");
+        let vline: []u8 = _zag_str_concat("    _zag_print(_zag_i64_to_str(trit_val(", name);
+        vline = _zag_str_concat(vline, ".x) as i64));");
+        cg_emit_zag(ctx, vline);
+        cg_emit_zag(ctx, "    _zag_println(\"\");");
+        i = i + 1;
+    }
+}
+
+fn cg_emit_numeric_summary(ctx: *CodegenCtx) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.num_names)) {
+        let name: []u8 = get[[]u8](ctx.*.num_names, i);
+        let ty: []u8 = get[[]u8](ctx.*.num_types, i);
+        cg_emit_zag(ctx, "    _zag_print(\"numeric \");");
+        let tline: []u8 = _zag_str_concat("    _zag_print(\"", ty);
+        tline = _zag_str_concat(tline, " ");
+        tline = _zag_str_concat(tline, name);
+        tline = _zag_str_concat(tline, "\");");
+        cg_emit_zag(ctx, tline);
+        cg_emit_zag(ctx, "    _zag_print(\"=\");");
+        let vline: []u8 = _zag_str_concat("    _zag_print(_zag_i64_to_str(", name);
+        vline = _zag_str_concat(vline, " as i64));");
+        cg_emit_zag(ctx, vline);
+        cg_emit_zag(ctx, "    _zag_println(\"\");");
+        i = i + 1;
+    }
+}
+
+fn cg_emit_mat3_summary(ctx: *CodegenCtx) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    if (ctx.*.mat3_seg_count < 1) { return; }
+    cg_emit_zag(ctx, "    _zag_print(\"mat3_segments=\");");
+    let line: []u8 = _zag_str_concat(
+        "    _zag_print(_zag_i64_to_str(",
+        _zag_i64_to_str(ctx.*.mat3_seg_count as i64));
+    line = _zag_str_concat(line, " as i64));");
+    cg_emit_zag(ctx, line);
+    cg_emit_zag(ctx, "    _zag_println(\"\");");
+}
+
+fn cg_emit_program_done(ctx: *CodegenCtx) void {
+    if (ctx.*.skip_zag == 1) { return; }
+    if (ctx.*.prog_name.len < 1) { return; }
+    let msg: []u8 = _zag_str_concat(ctx.*.prog_name, ": ok");
+    let line: []u8 = _zag_str_concat("    _zag_println(\"", msg);
+    cg_emit_zag(ctx, _zag_str_concat(line, "\");"));
+}
+
+fn cg_body_has_return(body: ArrayList[*FlashNode]) i32 {
+    let i: i32 = 0;
+    while (i < len[*FlashNode](body)) {
+        if (flash_node_code(get[*FlashNode](body, i)) == 3) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn cg_lower_fn(ctx: *CodegenCtx, tf: TypedFn) void {
+    let hdr: []u8 = _zag_str_concat("fn ", tf.decl.name);
+    hdr = _zag_str_concat(hdr, "() ");
+    hdr = _zag_str_concat(hdr, tf.ret_ty);
+    hdr = _zag_str_concat(hdr, " {");
+    cg_emit_zag(ctx, hdr);
+
+    let has_ret: i32 = cg_body_has_return(tf.decl.body);
+    let i: i32 = 0;
+    while (i < len[*FlashNode](tf.decl.body)) {
+        let n: *FlashNode = get[*FlashNode](tf.decl.body, i);
+        let code: i32 = flash_node_code(n);
+        if (has_ret == 0 || code != 3) {
+            cg_lower_stmt(ctx, n, tf.ret_ty);
+        }
+        i = i + 1;
+    }
+
+    cg_emit_trit_summary(ctx);
+    cg_emit_triple_summary(ctx);
+    cg_emit_numeric_summary(ctx);
+    cg_emit_mat3_summary(ctx);
+    cg_emit_program_done(ctx);
+
+    if (has_ret == 1) {
+        i = 0;
+        while (i < len[*FlashNode](tf.decl.body)) {
+            let n: *FlashNode = get[*FlashNode](tf.decl.body, i);
+            if (flash_node_code(n) == 3) {
+                cg_lower_stmt(ctx, n, tf.ret_ty);
+            }
+            i = i + 1;
+        }
+    } else {
+        cg_emit_zag(ctx, "    return 0;");
+    }
+    cg_emit_zag(ctx, "}");
+}
+
+fn cg_emit_hw_manifest(ctx: *CodegenCtx) void {
+    emit_coordinate_manifest(ctx.*.hw, ctx.*.hw_out);
+}
+
+// ── public API ────────────────────────────────────────────────────────────────
+
+// Default 4×4 HardwareManager lattice used by surface codegen drivers.
+fn codegen_hw_default() HardwareManager {
+    let mgr: HardwareManager = manager_new(4, 4, 1, 4);
+    let mp: *HardwareManager = &mgr;
+    seat_nano_block(mp, chamber_coord(0, 0, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(1, 0, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(0, 1, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(1, 1, 0), RotationState.R0);
+    return mgr;
+}
+
+fn codegen_flash_program(
+    prog_name: []u8,
+    fns: ArrayList[TypedFn],
+    skip_zag: i32,
+    mat3_host: i32,
+) CodegenResult {
+    let mgr: HardwareManager = codegen_hw_default();
+    let mp: *HardwareManager = &mgr;
+    let res: CodegenResult = codegen_program(mp, prog_name, fns, skip_zag, mat3_host);
+    manager_free(mp);
+    return res;
+}
+
+fn codegen_lower_fn(
+    hw: *HardwareManager,
+    name: []u8,
+    tf: TypedFn,
+) CodegenResult {
+    let manifest: CoordinateManifest = manifest_new(name, "0.1.0");
+    let zag_src: ArrayList[u8] = make[u8](512);
+    let hw_entries: ArrayList[CoordinateManifestEntry] = make[CoordinateManifestEntry](32);
+    let ctx: CodegenCtx = codegen_ctx_new(hw, &manifest, &zag_src, &hw_entries, 0, 0, name);
+
+    cg_emit_zag(&ctx, "// flash codegen: zag spatial fragment");
+    cg_lower_fn(&ctx, tf);
+    cg_emit_hw_manifest(&ctx);
+
+    return CodegenResult{
+        .manifest   = manifest,
+        .zag_src    = zag_src,
+        .hw_entries = hw_entries,
+    };
+}
+
+fn codegen_program(
+    hw: *HardwareManager,
+    name: []u8,
+    fns: ArrayList[TypedFn],
+    skip_zag: i32,
+    mat3_host: i32,
+) CodegenResult {
+    let manifest: CoordinateManifest = manifest_new(name, "0.1.0");
+    let zag_src: ArrayList[u8] = make[u8](1024);
+    let hw_entries: ArrayList[CoordinateManifestEntry] = make[CoordinateManifestEntry](64);
+    let ctx: CodegenCtx = codegen_ctx_new(hw, &manifest, &zag_src, &hw_entries, skip_zag, mat3_host, name);
+
+    let i: i32 = 0;
+    while (i < len[TypedFn](fns)) {
+        cg_lower_fn(&ctx, get[TypedFn](fns, i));
+        i = i + 1;
+    }
+
+    if (skip_zag == 0) {
+        cg_emit_hw_manifest(&ctx);
+    }
+    return CodegenResult{
+        .manifest   = manifest,
+        .zag_src    = zag_src,
+        .hw_entries = hw_entries,
+    };
+}
+
+fn codegen_segment_count(res: CodegenResult) i32 {
+    return len[PathSegment](res.manifest.segments);
+}

@@ -1,0 +1,8 @@
+// flash/compiler/testdata/wave_p32.flash.zag — wave carrier + p32 posit + sat_i16.
+program wave_p32
+
+wave beam = default
+
+p32 gain = 2.25
+
+sat_i16 lane = 1024

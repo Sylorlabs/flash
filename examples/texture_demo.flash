@@ -1,0 +1,155 @@
+// examples/texture_demo.flash.zag — vgpu v3 showcase: clipping and textures.
+//
+// Procedural RGBA textures, bilinear-sampled image draws under affine
+// transforms, image-paint path fills (rounded avatar crops), rect clipping,
+// AA path-shaped clipping, and a PPM save→load roundtrip.
+
+@import("../flash/driver/vgpu.flash")
+
+// 64×64 procedural "sunset": banded sky gradient with a sun disk.
+fn make_sunset() VgImage {
+    let img: VgImage = vg_image_new(64, 64);
+    let y: i32 = 0;
+    while (y < 64) {
+        let x: i32 = 0;
+        while (x < 64) {
+            let r: i32 = 40 + (y * 215) / 64;
+            let g: i32 = 30 + (y * 110) / 64;
+            let b: i32 = 90 + (y * 30) / 64;
+            if ((y % 9) < 2 && y > 24) { r = r + 26; g = g + 10; }
+            if (r > 255) { r = 255; }
+            if (g > 255) { g = 255; }
+            let dx: i32 = x - 40;
+            let dy: i32 = y - 22;
+            if (dx * dx + dy * dy < 81) { r = 255; g = 230; b = 170; }
+            vg_image_set(&img, x, y, r, g, b, 255);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    return img;
+}
+
+// 40×40 glow orb sprite with radial alpha falloff.
+fn make_orb() VgImage {
+    let img: VgImage = vg_image_new(40, 40);
+    let y: i32 = 0;
+    while (y < 40) {
+        let x: i32 = 0;
+        while (x < 40) {
+            let dx: i32 = x - 20;
+            let dy: i32 = y - 20;
+            let d2: i32 = dx * dx + dy * dy;
+            let a: i32 = 255 - (d2 * 255) / 400;
+            if (a < 0) { a = 0; }
+            vg_image_set(&img, x, y, 120, 220, 255, a);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    return img;
+}
+
+fn main() i32 {
+    let fb: SoftFb = softgpu_new(480, 300);
+
+    let bg: VPath = vg_path_new();
+    vg_move_to(&bg, 0.0, 0.0);
+    vg_line_to(&bg, 480.0, 0.0);
+    vg_line_to(&bg, 480.0, 300.0);
+    vg_line_to(&bg, 0.0, 300.0);
+    vg_close(&bg);
+    vg_fill_linear(&fb, &bg, 0.0, 0.0, 0.0, 300.0, 14, 16, 34, 255, 44, 30, 70, 255);
+
+    vg_text_dots(&fb, 24.0, 18.0, "TEXTURES + CLIPPING", 2.0, 240, 240, 250, 255);
+
+    let sunset: VgImage = make_sunset();
+    let orb: VgImage = make_orb();
+
+    // 1. bilinear upscale (64 → 128)
+    vg_draw_image(&fb, &sunset, 24.0, 52.0, 2.0);
+    softgpu_text(&fb, 24, 186, "BILINEAR 2X", 150, 150, 175);
+
+    // 2. rotated affine draw
+    let rot: VgXf = vg_xf_mul(
+        vg_xf_translate(230.0, 74.0),
+        vg_xf_mul(vg_xf_rotate(0.35), vg_xf_scale(1.4, 1.4)));
+    vg_draw_image_xf(&fb, &sunset, rot, 255);
+    softgpu_text(&fb, 196, 186, "ROTATED", 150, 150, 175);
+
+    // 3. rounded avatar crop: image paint inside a rounded-rect path
+    let av: VPath = vg_path_new();
+    vg_rounded_rect(&av, 356.0, 52.0, 96.0, 96.0, 26.0);
+    let place: VgXf = vg_xf_mul(vg_xf_translate(356.0, 52.0), vg_xf_scale(1.5, 1.5));
+    vg_fill_image(&fb, &av, &sunset, place, 255);
+    vg_stroke(&fb, &av, 3.0, 235, 220, 255, 255);
+    softgpu_text(&fb, 356, 158, "PATH CROP", 150, 150, 175);
+
+    // 4. rect clip: dense circles drawn wild, clipped to a frame
+    vg_set_clip(&fb, 24, 210, 130, 66);
+    let ci: i32 = 0;
+    while (ci < 7) {
+        let c: VPath = vg_path_new();
+        vg_circle(&c, 24.0 + (ci as f32) * 22.0, 243.0, 26.0);
+        vg_stroke(&fb, &c, 4.0, 255, 176, 32, 255);
+        ci = ci + 1;
+    }
+    vg_clear_clip(&fb);
+    let frame: VPath = vg_path_new();
+    vg_rounded_rect(&frame, 24.0, 210.0, 130.0, 66.0, 8.0);
+    vg_stroke(&fb, &frame, 2.0, 150, 150, 175, 255);
+    softgpu_text(&fb, 28, 282, "RECT CLIP", 150, 150, 175);
+
+    // 5. path clip: horizontal bars clipped to a donut (soft AA edge)
+    let ring: VPath = vg_path_new();
+    vg_donut(&ring, 240.0, 243.0, 32.0, 16.0, 0.0, 6.2831);
+    vg_clip_path(&fb, &ring);
+    let bi: i32 = 0;
+    while (bi < 9) {
+        let bar: VPath = vg_path_new();
+        vg_rounded_rect(&bar, 200.0, 208.0 + (bi as f32) * 8.0, 80.0, 5.0, 2.0);
+        vg_fill(&fb, &bar, 32, 200, 255, 255);
+        bi = bi + 1;
+    }
+    vg_clip_path_off(&fb);
+    softgpu_text(&fb, 206, 282, "PATH CLIP", 150, 150, 175);
+
+    // 6. alpha sprites over everything
+    vg_draw_image(&fb, &orb, 300.0, 216.0, 1.0);
+    vg_draw_image(&fb, &orb, 330.0, 236.0, 0.7);
+    vg_draw_image(&fb, &orb, 316.0, 200.0, 0.45);
+    softgpu_text(&fb, 300, 282, "SPRITES", 150, 150, 175);
+
+    // 7. PPM roundtrip: present, reload as texture, redraw small
+    let out: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/texture_demo.ppm" };
+    let rc: i32 = softgpu_present(out, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL texture present");
+        return 1;
+    }
+    let back: VgImage = vg_image_load_ppm("examples/texture_demo.ppm");
+    if (back.w != 480 || back.h != 300) {
+        _zag_println("FAIL ppm roundtrip");
+        return 1;
+    }
+    let mini: VgXf = vg_xf_mul(vg_xf_translate(396.0, 210.0), vg_xf_scale(0.125, 0.125));
+    vg_draw_image_xf(&fb, &back, mini, 255);
+    let mframe: VPath = vg_path_new();
+    vg_rounded_rect(&mframe, 396.0, 210.0, 60.0, 37.5, 4.0);
+    vg_stroke(&fb, &mframe, 2.0, 235, 220, 255, 255);
+    softgpu_text(&fb, 392, 282, "PPM LOAD", 150, 150, 175);
+
+    let rc2: i32 = softgpu_present(out, &fb);
+    if (rc2 != 0) {
+        _zag_println("FAIL texture present 2");
+        return 1;
+    }
+    _zag_print("roundtrip=");
+    _zag_print(_zag_i64_to_str(back.w as i64));
+    _zag_print("x");
+    _zag_println(_zag_i64_to_str(back.h as i64));
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("texture_demo: ok");
+    return 0;
+}

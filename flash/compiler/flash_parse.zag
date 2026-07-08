@@ -1,0 +1,623 @@
+// flash/compiler/flash_parse.zag — Flash recursive-descent parser.
+//
+// fn/struct/enum, all numeric families, let, raw { }, if/else, while, return,
+// switch, @import, @photonic, generic fn[T]/struct[T], !T, try/catch, methods.
+// No break/continue.
+
+@import("flash_ast.zag")
+@import("flash_lex.zag")
+@import("../toolchain/zag-poc/std/rt.zag")
+
+struct FlashParser {
+    toks: ArrayList[Token],
+    i:    i32,
+    err:  i32,
+}
+
+struct FlashProgResult {
+    decls: ArrayList[*FlashNode],
+    err:   i32,
+}
+
+fn fp_full_err(p: *FlashParser, msg: []u8, line: i32) void {
+    _zag_print("flash parse error (line ");
+    _zag_print(_zag_i64_to_str(line as i64));
+    _zag_print("): ");
+    _zag_println(msg);
+    p.*.err = 1;
+}
+
+fn fp_cur(p: *FlashParser) Token { return get[Token](p.*.toks, p.*.i); }
+fn fp_code(p: *FlashParser) i32 { return tk_code(fp_cur(p).kind); }
+fn fp_at_k(p: *FlashParser, k: Tk) bool { return fp_code(p) == tk_code(k); }
+fn fp_at_op(p: *FlashParser, s: []u8) bool {
+    return fp_at_k(p, Tk.Op) && @strEq(fp_cur(p).val, s);
+}
+fn fp_adv(p: *FlashParser) Token {
+    let t: Token = fp_cur(p);
+    if (t.kind == Tk.Err) {
+        fp_full_err(p, "invalid character in source", t.line);
+    }
+    p.*.i = p.*.i + 1;
+    return t;
+}
+fn fp_eat_semi(p: *FlashParser) void { if (fp_at_k(p, Tk.Semi)) { let _t: Token = fp_adv(p); } }
+
+fn fp_is_type_atom(p: *FlashParser) bool {
+    if (fp_at_k(p, Tk.Type) || fp_at_k(p, Tk.Ident)) { return true; }
+    if (fp_at_k(p, Tk.KwWave) || fp_at_k(p, Tk.KwBeam) || fp_at_k(p, Tk.KwPhase) || fp_at_k(p, Tk.KwTrit)) { return true; }
+    if (fp_at_op(p, "*") || fp_at_op(p, "?") || fp_at_op(p, "!")) { return true; }
+    if (fp_at_k(p, Tk.Lbracket)) { return true; }
+    if (fp_at_k(p, Tk.KwFn)) { return true; }
+    return false;
+}
+
+fn fp_matching_bracket(p: *FlashParser, open: i32) i32 {
+    let depth: i32 = 0;
+    let k: i32 = open;
+    let n: i32 = len[Token](p.*.toks);
+    while (k < n) {
+        let kc: i32 = tk_code(get[Token](p.*.toks, k).kind);
+        if (kc == tk_code(Tk.Lbracket)) { depth = depth + 1; }
+        else if (kc == tk_code(Tk.Rbracket)) {
+            depth = depth - 1;
+            if (depth == 0) { return k; }
+        }
+        k = k + 1;
+    }
+    return 0 - 1;
+}
+
+fn fp_lp_at(p: *FlashParser, idx: i32) bool {
+    if (idx < 0 || idx >= len[Token](p.*.toks)) { return false; }
+    return tk_code(get[Token](p.*.toks, idx).kind) == tk_code(Tk.Lp);
+}
+
+fn fp_lbrace_at(p: *FlashParser, idx: i32) bool {
+    if (idx < 0 || idx >= len[Token](p.*.toks)) { return false; }
+    return tk_code(get[Token](p.*.toks, idx).kind) == tk_code(Tk.Lbrace);
+}
+
+fn fp_parse_targs(p: *FlashParser) ArrayList[[]u8] {
+    let _ob: Token = fp_adv(p);
+    let targs: ArrayList[[]u8] = make[[]u8](2);
+    while (!fp_at_k(p, Tk.Rbracket)) {
+        push[[]u8](&targs, fp_parse_type(p));
+        if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    }
+    let _rb: Token = fp_adv(p);
+    return targs;
+}
+
+fn fp_parse_fn_type(p: *FlashParser) []u8 {
+    let _fn: Token = fp_adv(p);
+    let _o: Token = fp_adv(p);
+    let s: []u8 = "fn(";
+    let cnt: i32 = 0;
+    while (!fp_at_k(p, Tk.Rp)) {
+        if (cnt > 0) { s = _zag_str_concat(s, ","); }
+        s = _zag_str_concat(s, fp_parse_type(p));
+        cnt = cnt + 1;
+        if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    }
+    let _r: Token = fp_adv(p);
+    let ret: []u8 = fp_parse_type(p);
+    return _zag_str_concat(_zag_str_concat(s, ")"), ret);
+}
+
+fn fp_parse_type(p: *FlashParser) []u8 {
+    if (fp_at_k(p, Tk.KwFn)) { return fp_parse_fn_type(p); }
+    if (fp_at_op(p, "*")) { let _t: Token = fp_adv(p); return _zag_str_concat("*", fp_parse_type(p)); }
+    if (fp_at_op(p, "?")) { let _t: Token = fp_adv(p); return _zag_str_concat("?", fp_parse_type(p)); }
+    if (fp_at_op(p, "!")) { let _t: Token = fp_adv(p); return _zag_str_concat("!", fp_parse_type(p)); }
+    if (fp_at_k(p, Tk.Lbracket)) {
+        let _o: Token = fp_adv(p);
+        let _c: Token = fp_adv(p);
+        return _zag_str_concat("[]", fp_parse_type(p));
+    }
+    let nm: []u8 = fp_adv(p).val;
+    if (fp_at_k(p, Tk.Dot)) {
+        let _d: Token = fp_adv(p);
+        nm = _zag_str_concat(_zag_str_concat(nm, "__"), fp_adv(p).val);
+    }
+    if (fp_at_k(p, Tk.Lbracket)) {
+        let _ob: Token = fp_adv(p);
+        let s: []u8 = _zag_str_concat(nm, "[");
+        let count: i32 = 0;
+        while (!fp_at_k(p, Tk.Rbracket)) {
+            if (count > 0) { s = _zag_str_concat(s, ","); }
+            s = _zag_str_concat(s, fp_parse_type(p));
+            count = count + 1;
+            if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+        }
+        let _rb: Token = fp_adv(p);
+        return _zag_str_concat(s, "]");
+    }
+    return nm;
+}
+
+fn fp_op_prec(op: []u8) i32 {
+    if (@strEq(op, "||")) { return 1; }
+    if (@strEq(op, "&&")) { return 2; }
+    if (@strEq(op, "==") || @strEq(op, "!=")) { return 3; }
+    if (@strEq(op, "<") || @strEq(op, ">") || @strEq(op, "<=") || @strEq(op, ">=")) { return 4; }
+    if (@strEq(op, "+") || @strEq(op, "-")) { return 5; }
+    if (@strEq(op, "*") || @strEq(op, "/") || @strEq(op, "%")) { return 6; }
+    return 0;
+}
+
+fn fp_parse_expr(p: *FlashParser) *FlashNode {
+    let e: *FlashNode = fp_parse_bin(p, 1);
+    if (fp_at_k(p, Tk.KwOrelse)) {
+        let _o: Token = fp_adv(p);
+        return flash_mk_bin("orelse", e, fp_parse_bin(p, 1));
+    }
+    if (fp_at_k(p, Tk.KwCatch)) {
+        let _c: Token = fp_adv(p);
+        if (fp_at_k(p, Tk.Pipe)) {
+            let _p1: Token = fp_adv(p);
+            let cap: []u8 = fp_adv(p).val;
+            let _p2: Token = fp_adv(p);
+            let fb: *FlashNode = fp_parse_bin(p, 1);
+            let args: ArrayList[*FlashNode] = make[*FlashNode](3);
+            push[*FlashNode](&args, e);
+            push[*FlashNode](&args, flash_mk_ident(cap));
+            push[*FlashNode](&args, fb);
+            return flash_mk_call(flash_mk_ident("__catchc"), args);
+        }
+        let fb: *FlashNode = fp_parse_bin(p, 1);
+        let args: ArrayList[*FlashNode] = make[*FlashNode](2);
+        push[*FlashNode](&args, e);
+        push[*FlashNode](&args, fb);
+        return flash_mk_call(flash_mk_ident("__catch"), args);
+    }
+    return e;
+}
+
+fn fp_parse_bin(p: *FlashParser, min: i32) *FlashNode {
+    let left: *FlashNode = fp_parse_unary(p);
+    let go: i32 = 1;
+    while (go == 1) {
+        if (fp_at_k(p, Tk.Op)) {
+            let op: []u8 = fp_cur(p).val;
+            let prec: i32 = fp_op_prec(op);
+            if (prec > 0 && prec >= min) {
+                let _t: Token = fp_adv(p);
+                left = flash_mk_bin(op, left, fp_parse_bin(p, prec + 1));
+            } else { go = 0; }
+        } else { go = 0; }
+    }
+    return left;
+}
+
+fn fp_parse_unary(p: *FlashParser) *FlashNode {
+    if (fp_at_k(p, Tk.KwTry)) {
+        let _t: Token = fp_adv(p);
+        return flash_mk_un("try", fp_parse_unary(p));
+    }
+    if (fp_at_op(p, "-") || fp_at_op(p, "!") || fp_at_op(p, "&")) {
+        let op: []u8 = fp_adv(p).val;
+        return flash_mk_un(op, fp_parse_unary(p));
+    }
+    return fp_parse_postfix(p);
+}
+
+fn fp_parse_postfix(p: *FlashParser) *FlashNode {
+    let e: *FlashNode = fp_parse_primary(p);
+    let go: i32 = 1;
+    while (go == 1) {
+        if (fp_at_k(p, Tk.Ident) && @strEq(fp_cur(p).val, "as")) {
+            let _as: Token = fp_adv(p);
+            e = flash_mk_cast(e, fp_parse_type(p));
+        } else if (fp_at_k(p, Tk.Lp)) {
+            let _o: Token = fp_adv(p);
+            let args: ArrayList[*FlashNode] = make[*FlashNode](4);
+            while (!fp_at_k(p, Tk.Rp)) {
+                push[*FlashNode](&args, fp_parse_expr(p));
+                if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+            }
+            let _r: Token = fp_adv(p);
+            e = flash_mk_call(e, args);
+        } else if (fp_at_k(p, Tk.Lbracket)) {
+            let close: i32 = fp_matching_bracket(p, p.*.i);
+            if (fp_lp_at(p, close + 1)) {
+                let _ob: Token = fp_adv(p);
+                let targs: ArrayList[[]u8] = make[[]u8](2);
+                while (!fp_at_k(p, Tk.Rbracket)) {
+                    push[[]u8](&targs, fp_parse_type(p));
+                    if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+                }
+                let _rb: Token = fp_adv(p);
+                let _op: Token = fp_adv(p);
+                let cargs: ArrayList[*FlashNode] = make[*FlashNode](4);
+                while (!fp_at_k(p, Tk.Rp)) {
+                    push[*FlashNode](&cargs, fp_parse_expr(p));
+                    if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+                }
+                let _cp: Token = fp_adv(p);
+                e = flash_mk_gcall(e, cargs, targs);
+            } else {
+                let _o: Token = fp_adv(p);
+                let idx: *FlashNode = fp_parse_expr(p);
+                if (fp_at_k(p, Tk.DotDot)) {
+                    let _dd: Token = fp_adv(p);
+                    let hi: *FlashNode = flash_mk_ident("");
+                    let has_hi: i32 = 0;
+                    if (!fp_at_k(p, Tk.Rbracket)) {
+                        hi = fp_parse_expr(p);
+                        has_hi = 1;
+                    }
+                    let _r: Token = fp_adv(p);
+                    e = flash_mk_slice(e, idx, hi, has_hi);
+                } else {
+                    let _r: Token = fp_adv(p);
+                    e = flash_mk_index(e, idx);
+                }
+            }
+        } else if (fp_at_k(p, Tk.Dot)) {
+            let _d: Token = fp_adv(p);
+            e = flash_mk_field(e, fp_adv(p).val);
+        } else { go = 0; }
+    }
+    return e;
+}
+
+fn fp_parse_struct_lit(p: *FlashParser, name: []u8, targs: ArrayList[[]u8]) *FlashNode {
+    let _o: Token = fp_adv(p);
+    let fields: ArrayList[FieldInit] = make[FieldInit](4);
+    while (!fp_at_k(p, Tk.Rbrace)) {
+        let _dot: Token = fp_adv(p);
+        let fname: []u8 = fp_adv(p).val;
+        let _eq: Token = fp_adv(p);
+        push[FieldInit](&fields, FieldInit{ .name = fname, .val = fp_parse_expr(p) });
+        if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    }
+    let _r: Token = fp_adv(p);
+    return new(FlashNode{ .slit_ = StructLit{ .sname = name, .fields = fields, .targs = targs } });
+}
+
+fn fp_parse_primary(p: *FlashParser) *FlashNode {
+    if (fp_at_k(p, Tk.KwSwitch)) { return fp_parse_switch(p); }
+    if (fp_at_k(p, Tk.TritLit)) { return flash_mk_trit(fp_adv(p).val); }
+    if (fp_at_k(p, Tk.Int))   { return flash_mk_int(fp_adv(p).val); }
+    if (fp_at_k(p, Tk.Float)) { return flash_mk_float(fp_adv(p).val); }
+    if (fp_at_k(p, Tk.Str))   { return flash_mk_str(fp_adv(p).val); }
+    if (fp_at_k(p, Tk.Ident)) {
+        let name: []u8 = fp_adv(p).val;
+        if (fp_at_k(p, Tk.Lbrace)) { return fp_parse_struct_lit(p, name, make[[]u8](1)); }
+        if (fp_at_k(p, Tk.Lbracket)) {
+            let close: i32 = fp_matching_bracket(p, p.*.i);
+            if (fp_lbrace_at(p, close + 1)) {
+                return fp_parse_struct_lit(p, name, fp_parse_targs(p));
+            }
+        }
+        return flash_mk_ident(name);
+    }
+    if (fp_at_k(p, Tk.KwTrue))  { let _t: Token = fp_adv(p); return flash_mk_int("1"); }
+    if (fp_at_k(p, Tk.KwFalse)) { let _t: Token = fp_adv(p); return flash_mk_int("0"); }
+    if (fp_at_k(p, Tk.KwNull))  { let _t: Token = fp_adv(p); return flash_mk_ident("null"); }
+    if (fp_at_k(p, Tk.KwError)) { let _t: Token = fp_adv(p); return flash_mk_ident("error"); }
+    if (fp_at_k(p, Tk.Annot))   { return flash_mk_ident(fp_adv(p).val); }
+    if (fp_at_k(p, Tk.Lp)) {
+        let _o: Token = fp_adv(p);
+        let e: *FlashNode = fp_parse_expr(p);
+        let _c: Token = fp_adv(p);
+        return e;
+    }
+    return flash_mk_ident(fp_adv(p).val);
+}
+
+fn fp_parse_block(p: *FlashParser) ArrayList[*FlashNode] {
+    let _o: Token = fp_adv(p);
+    let stmts: ArrayList[*FlashNode] = make[*FlashNode](8);
+    while (!fp_at_k(p, Tk.Rbrace)) {
+        push[*FlashNode](&stmts, fp_full_stmt(p));
+    }
+    let _c: Token = fp_adv(p);
+    return stmts;
+}
+
+fn fp_parse_arm_body(p: *FlashParser) ArrayList[*FlashNode] {
+    if (fp_at_k(p, Tk.Lbrace)) { return fp_parse_block(p); }
+    let body: ArrayList[*FlashNode] = make[*FlashNode](1);
+    push[*FlashNode](&body, flash_mk_estmt(fp_parse_expr(p)));
+    if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    return body;
+}
+
+fn fp_parse_switch(p: *FlashParser) *FlashNode {
+    let _sw: Token = fp_adv(p);
+    let _o: Token = fp_adv(p);
+    let subject: *FlashNode = fp_parse_expr(p);
+    let _c: Token = fp_adv(p);
+    let _lb: Token = fp_adv(p);
+    let arms: ArrayList[SwitchArm] = make[SwitchArm](4);
+    let els_body: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let has_els: i32 = 0;
+    while (!fp_at_k(p, Tk.Rbrace)) {
+        if (fp_at_k(p, Tk.KwElse)) {
+            let _e: Token = fp_adv(p);
+            let _arrow: Token = fp_adv(p);
+            els_body = fp_parse_arm_body(p);
+            has_els = 1;
+        } else {
+            let tags: ArrayList[[]u8] = make[[]u8](2);
+            let more: i32 = 1;
+            while (more == 1) {
+                if (fp_at_k(p, Tk.Dot)) { let _dot: Token = fp_adv(p); }
+                push[[]u8](&tags, fp_adv(p).val);
+                if (fp_at_k(p, Tk.Comma)) { let _cm: Token = fp_adv(p); } else { more = 0; }
+            }
+            let _arrow: Token = fp_adv(p);
+            let cap: []u8 = "";
+            let has_cap: i32 = 0;
+            if (fp_at_k(p, Tk.Pipe)) {
+                let _p1: Token = fp_adv(p);
+                cap = fp_adv(p).val;
+                has_cap = 1;
+                let _p2: Token = fp_adv(p);
+            }
+            push[SwitchArm](&arms, SwitchArm{ .tags = tags, .cap = cap, .has_cap = has_cap, .body = fp_parse_arm_body(p) });
+        }
+    }
+    let _rb: Token = fp_adv(p);
+    return flash_mk_switch(subject, arms, els_body, has_els);
+}
+
+fn fp_full_stmt(p: *FlashParser) *FlashNode {
+    if (fp_at_k(p, Tk.KwSwitch)) { return fp_parse_switch(p); }
+    if (fp_at_k(p, Tk.KwRaw)) {
+        let _t: Token = fp_adv(p);
+        return flash_mk_raw(fp_parse_block(p));
+    }
+    if (fp_at_k(p, Tk.KwLet)) {
+        let _t: Token = fp_adv(p);
+        let name: []u8 = fp_adv(p).val;
+        let dty: []u8 = "";
+        let has_dty: i32 = 0;
+        if (fp_at_k(p, Tk.Colon)) {
+            let _c: Token = fp_adv(p);
+            dty = fp_parse_type(p);
+            has_dty = 1;
+        }
+        let has_init: i32 = 0;
+        let e: *FlashNode = flash_mk_ident("");
+        if (fp_at_op(p, "=")) {
+            let _eq: Token = fp_adv(p);
+            e = fp_parse_expr(p);
+            has_init = 1;
+        }
+        fp_eat_semi(p);
+        return flash_mk_let(name, dty, has_dty, has_init, e);
+    }
+    if (fp_at_k(p, Tk.KwReturn)) {
+        let _t: Token = fp_adv(p);
+        let has_expr: i32 = 1;
+        let e: *FlashNode = flash_mk_ident("");
+        if (fp_at_k(p, Tk.Semi)) { has_expr = 0; }
+        else { e = fp_parse_expr(p); }
+        fp_eat_semi(p);
+        return flash_mk_ret(has_expr, e);
+    }
+    if (fp_at_k(p, Tk.KwIf)) {
+        let _t: Token = fp_adv(p);
+        let _o: Token = fp_adv(p);
+        let cond: *FlashNode = fp_parse_expr(p);
+        let _c: Token = fp_adv(p);
+        let cap: []u8 = "";
+        let has_cap: i32 = 0;
+        if (fp_at_k(p, Tk.Pipe)) {
+            let _p1: Token = fp_adv(p);
+            cap = fp_adv(p).val;
+            has_cap = 1;
+            let _p2: Token = fp_adv(p);
+        }
+        let then_body: ArrayList[*FlashNode] = fp_parse_block(p);
+        let els_body: ArrayList[*FlashNode] = make[*FlashNode](2);
+        let has_els: i32 = 0;
+        if (fp_at_k(p, Tk.KwElse)) {
+            let _e: Token = fp_adv(p);
+            has_els = 1;
+            if (fp_at_k(p, Tk.KwIf)) { push[*FlashNode](&els_body, fp_full_stmt(p)); }
+            else { els_body = fp_parse_block(p); }
+        }
+        return flash_mk_if_cap(cond, then_body, els_body, has_els, cap, has_cap);
+    }
+    if (fp_at_k(p, Tk.KwWhile)) {
+        let _t: Token = fp_adv(p);
+        let _o: Token = fp_adv(p);
+        let cond: *FlashNode = fp_parse_expr(p);
+        let _c: Token = fp_adv(p);
+        return flash_mk_while(cond, fp_parse_block(p));
+    }
+    let e: *FlashNode = fp_parse_expr(p);
+    if (fp_at_op(p, "=")) {
+        let _eq: Token = fp_adv(p);
+        let rhs: *FlashNode = fp_parse_expr(p);
+        fp_eat_semi(p);
+        return flash_mk_assign(e, rhs);
+    }
+    fp_eat_semi(p);
+    return flash_mk_estmt(e);
+}
+
+fn fp_collect_annots(p: *FlashParser) ArrayList[[]u8] {
+    let annots: ArrayList[[]u8] = make[[]u8](2);
+    while (fp_at_k(p, Tk.Annot)) { push[[]u8](&annots, fp_adv(p).val); }
+    return annots;
+}
+
+fn fp_parse_field_list(p: *FlashParser) ArrayList[Param] {
+    let _lb: Token = fp_adv(p);
+    let fields: ArrayList[Param] = make[Param](4);
+    while (!fp_at_k(p, Tk.Rbrace)) {
+        let fname: []u8 = fp_adv(p).val;
+        let ft: []u8 = "void";
+        if (fp_at_k(p, Tk.Colon)) {
+            let _co: Token = fp_adv(p);
+            ft = fp_parse_type(p);
+        }
+        push[Param](&fields, Param{ .name = fname, .pty = ft });
+        if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    }
+    let _rb: Token = fp_adv(p);
+    return fields;
+}
+
+fn fp_parse_struct(p: *FlashParser) *FlashNode {
+    let annots: ArrayList[[]u8] = fp_collect_annots(p);
+    let _s: Token = fp_adv(p);
+    let name: []u8 = fp_adv(p).val;
+    let tparams: ArrayList[[]u8] = make[[]u8](2);
+    if (fp_at_k(p, Tk.Lbracket)) {
+        let _o: Token = fp_adv(p);
+        while (!fp_at_k(p, Tk.Rbracket)) {
+            push[[]u8](&tparams, fp_adv(p).val);
+            if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+        }
+        let _r: Token = fp_adv(p);
+    }
+    let fields: ArrayList[Param] = fp_parse_field_list(p);
+    return new(FlashNode{ .struct_ = StructDecl{ .name = name, .fields = fields, .tparams = tparams, .annots = annots } });
+}
+
+fn fp_parse_enum(p: *FlashParser) *FlashNode {
+    let _e: Token = fp_adv(p);
+    let name: []u8 = fp_adv(p).val;
+    let _lb: Token = fp_adv(p);
+    let members: ArrayList[[]u8] = make[[]u8](4);
+    while (!fp_at_k(p, Tk.Rbrace)) {
+        push[[]u8](&members, fp_adv(p).val);
+        if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    }
+    let _rb: Token = fp_adv(p);
+    return new(FlashNode{ .enum_ = EnumDecl{ .name = name, .members = members } });
+}
+
+fn fp_parse_union(p: *FlashParser) *FlashNode {
+    let _u: Token = fp_adv(p);
+    let name: []u8 = fp_adv(p).val;
+    let fields: ArrayList[Param] = fp_parse_field_list(p);
+    return new(FlashNode{ .union_d = UnionDecl{ .name = name, .fields = fields } });
+}
+
+fn fp_parse_error_decl(p: *FlashParser) *FlashNode {
+    let _e: Token = fp_adv(p);
+    let _lb: Token = fp_adv(p);
+    let members: ArrayList[[]u8] = make[[]u8](4);
+    while (!fp_at_k(p, Tk.Rbrace)) {
+        push[[]u8](&members, fp_adv(p).val);
+        if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    }
+    let _rb: Token = fp_adv(p);
+    return new(FlashNode{ .enum_ = EnumDecl{ .name = "__flash_errors", .members = members } });
+}
+
+fn fp_parse_fn(p: *FlashParser) *FlashNode {
+    let annots: ArrayList[[]u8] = fp_collect_annots(p);
+    let is_extern: i32 = 0;
+    if (fp_at_k(p, Tk.KwExtern)) { let _e: Token = fp_adv(p); is_extern = 1; }
+    let _fn: Token = fp_adv(p);
+    let recv_name: []u8 = "";
+    let recv_ty: []u8 = "";
+    let is_method: i32 = 0;
+    if (fp_at_k(p, Tk.Lp)) {
+        let _rp1: Token = fp_adv(p);
+        recv_name = fp_adv(p).val;
+        let _rc: Token = fp_adv(p);
+        recv_ty = fp_parse_type(p);
+        let _rp2: Token = fp_adv(p);
+        is_method = 1;
+    }
+    let bare_name: []u8 = fp_adv(p).val;
+    let name: []u8 = bare_name;
+    if (is_method == 1) { name = _zag_str_concat(_zag_str_concat(recv_ty, "_"), bare_name); }
+    let tparams: ArrayList[[]u8] = make[[]u8](2);
+    if (fp_at_k(p, Tk.Lbracket)) {
+        let _ob: Token = fp_adv(p);
+        while (!fp_at_k(p, Tk.Rbracket)) {
+            push[[]u8](&tparams, fp_adv(p).val);
+            if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+        }
+        let _rb: Token = fp_adv(p);
+    }
+    let _o: Token = fp_adv(p);
+    let params: ArrayList[Param] = make[Param](4);
+    if (is_method == 1) { push[Param](&params, Param{ .name = recv_name, .pty = recv_ty }); }
+    while (!fp_at_k(p, Tk.Rp)) {
+        let pn: []u8 = fp_adv(p).val;
+        let _co: Token = fp_adv(p);
+        push[Param](&params, Param{ .name = pn, .pty = fp_parse_type(p) });
+        if (fp_at_k(p, Tk.Comma)) { let _c: Token = fp_adv(p); }
+    }
+    let _r: Token = fp_adv(p);
+    let ret: []u8 = fp_parse_type(p);
+    while (fp_at_k(p, Tk.Annot)) { push[[]u8](&annots, fp_adv(p).val); }
+    let body: ArrayList[*FlashNode] = make[*FlashNode](8);
+    if (is_extern == 0 && !fp_at_k(p, Tk.Semi)) { body = fp_parse_block(p); }
+    else { fp_eat_semi(p); }
+    return new(FlashNode{ .fn_decl = FnDecl{
+        .name = name, .bare_name = bare_name, .tparams = tparams, .params = params,
+        .ret = ret, .annots = annots, .body = body, .is_method = is_method,
+        .recv_name = recv_name, .recv_ty = recv_ty, .line = _fn.line,
+    } });
+}
+
+fn fp_strip_quotes(s: []u8) []u8 {
+    if (s.len >= 2) { return s[1..s.len - 1]; }
+    return s;
+}
+
+// Peek past leading @annotations to see the next declaration keyword.
+fn fp_after_annots_is(p: *FlashParser, k: Tk) bool {
+    let save: i32 = p.*.i;
+    while (fp_at_k(p, Tk.Annot)) { let _a: Token = fp_adv(p); }
+    let hit: bool = fp_at_k(p, k);
+    p.*.i = save;
+    return hit;
+}
+
+fn fp_parse_import(p: *FlashParser) *FlashNode {
+    let _imp: Token = fp_adv(p);
+    let _lp: Token = fp_adv(p);
+    let path: []u8 = fp_strip_quotes(fp_adv(p).val);
+    let _rp: Token = fp_adv(p);
+    let alias: []u8 = "";
+    let has_alias: i32 = 0;
+    if (fp_at_k(p, Tk.Ident) && @strEq(fp_cur(p).val, "as")) {
+        let _as: Token = fp_adv(p);
+        alias = fp_adv(p).val;
+        has_alias = 1;
+    }
+    fp_eat_semi(p);
+    return new(FlashNode{ .import_ = Import{ .path = path, .alias = alias, .has_alias = has_alias } });
+}
+
+fn flash_parse_program(src: []u8) FlashProgResult {
+    let toks: ArrayList[Token] = lex(src);
+    let p: FlashParser = FlashParser{ .toks = toks, .i = 0, .err = 0 };
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](8);
+    while (!fp_at_k(&p, Tk.Eof)) {
+        if (fp_at_k(&p, Tk.Err)) {
+            let bad: Token = fp_adv(&p);
+            fp_full_err(&p, "invalid character in source", bad.line);
+        } else if (fp_at_k(&p, Tk.Annot) && @strEq(fp_cur(&p).val, "@import")) {
+            push[*FlashNode](&decls, fp_parse_import(&p));
+        } else if (fp_at_k(&p, Tk.KwStruct) || fp_after_annots_is(&p, Tk.KwStruct)) {
+            push[*FlashNode](&decls, fp_parse_struct(&p));
+        } else if (fp_at_k(&p, Tk.KwEnum)) {
+            push[*FlashNode](&decls, fp_parse_enum(&p));
+        } else if (fp_at_k(&p, Tk.KwUnion)) {
+            push[*FlashNode](&decls, fp_parse_union(&p));
+        } else if (fp_at_k(&p, Tk.KwError)) {
+            push[*FlashNode](&decls, fp_parse_error_decl(&p));
+        } else if (fp_at_k(&p, Tk.KwExtern) || fp_at_k(&p, Tk.KwFn) || fp_after_annots_is(&p, Tk.KwFn)) {
+            push[*FlashNode](&decls, fp_parse_fn(&p));
+        } else {
+            _zag_print("flash parse: unexpected top-level token: ");
+            _zag_println(fp_cur(&p).val);
+            _zag_exit(1);
+        }
+    }
+    return FlashProgResult{ .decls = decls, .err = p.err };
+}

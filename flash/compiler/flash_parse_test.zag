@@ -1,0 +1,105 @@
+// flash/compiler/flash_parse_test.zag — complex Flash parser regression sample.
+//
+// Usage:
+//   flash/toolchain/flashz flash/compiler/flash_parse_test.zag -o flash-parse-test --run
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("flash_parse.zag")
+
+fn expect_eq(got: i32, want: i32, label: []u8) void {
+    if (got != want) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" got ");
+        _zag_print(_zag_i64_to_str(got as i64));
+        _zag_print(" want ");
+        _zag_println(_zag_i64_to_str(want as i64));
+        _zag_exit(1);
+    }
+}
+
+fn count_kind(decls: ArrayList[*FlashNode], code: i32) i32 {
+    let n: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[*FlashNode](decls)) {
+        if (flash_node_code(get[*FlashNode](decls, i)) == code) { n = n + 1; }
+        i = i + 1;
+    }
+    return n;
+}
+
+fn find_fn(decls: ArrayList[*FlashNode], bare: []u8) *FlashNode {
+    let i: i32 = 0;
+    while (i < len[*FlashNode](decls)) {
+        let n: *FlashNode = get[*FlashNode](decls, i);
+        switch (n.*) {
+            .fn_decl => |f| { if (@strEq(f.bare_name, bare)) { return n; } }
+            else => { }
+        }
+        i = i + 1;
+    }
+    return null as *FlashNode;
+}
+
+fn main() i32 {
+    _zag_println("flash_parse_test: start");
+
+    let sample: []u8 = "@import(\"../stdlib/trit.zag\") as trit\n@import(\"../stdlib/photon.zag\")\nerror { RawDenied, LaserFault }\n@photonic\nstruct LatticeCell[T] {\n    coord: i32,\n    payload: T,\n    phase: phase,\n    power: p32,\n}\nenum PolTag { Off, Vert, Horz }\nfn route_beam[T](w: wave, gain: sat_i16, bias: f32) !beam @photonic {\n    let amp: p32 = 1.5;\n    if (gain < 0) {\n        return error.LaserFault;\n    }\n    raw {\n        let mw: f32 = bias * 1000.0;\n        target_voxel(0, 1, 2);\n    }\n    let routed: beam = try mix(w, amp);\n    return routed;\n}\nfn (self: trit) negate() trit {\n    return switch (self) {\n        .Neg => trit.Pos,\n        .Zero => trit.Zero,\n        .Pos => trit.Neg,\n        else => trit.Zero,\n    }\n}\nfn mix(w: wave, scale: p32) !beam {\n    let out: beam = Beam{ .power_mw = scale };\n    return out;\n}\nfn scan_column(pipe: *LatticeCell[wave], n: i32) i32 {\n    let i: i32 = 0;\n    let sum: sat_i16 = 0;\n    while (i < n) {\n        let cell: LatticeCell[wave] = pipe[i];\n        let pol: i8 = switch (cell.phase) {\n            0 => 0,\n            1 => 1,\n            else => 0 - 1,\n        };\n        sum = sum + pol as sat_i16;\n        i = i + 1;\n    }\n    return sum as i32;\n}\nfn recover(v: i8) trit {\n    return trit.from_i8(v) catch trit.zero();\n}\n";
+
+    let parsed: FlashProgResult = flash_parse_program(sample);
+    if (parsed.err != 0) {
+        _zag_println("FAIL sample parse returned err");
+        _zag_exit(1);
+    }
+    let decls: ArrayList[*FlashNode] = parsed.decls;
+
+    expect_eq(len[*FlashNode](decls), 10, "top-level decl count");
+    expect_eq(count_kind(decls, 10), 2, "@import count");
+    expect_eq(count_kind(decls, 30), 1, "struct count");
+    expect_eq(count_kind(decls, 31), 2, "enum count");
+    expect_eq(count_kind(decls, 1), 5, "fn count");
+
+    let route: *FlashNode = find_fn(decls, "route_beam");
+    if (route == null as *FlashNode) {
+        _zag_println("FAIL route_beam not found");
+        _zag_exit(1);
+    }
+    switch (route.*) {
+        .fn_decl => |f| {
+            expect_eq(len[[]u8](f.tparams), 1, "route_beam tparams");
+            expect_eq(len[Param](f.params), 3, "route_beam params");
+            expect_eq(@strEq(f.ret, "!beam"), 1, "route_beam ret !beam");
+            expect_eq(len[[]u8](f.annots), 1, "route_beam annots");
+        }
+        else => { _zag_println("FAIL route_beam not fn"); _zag_exit(1); }
+    }
+
+    let negate: *FlashNode = find_fn(decls, "negate");
+    switch (negate.*) {
+        .fn_decl => |f| {
+            expect_eq(f.is_method, 1, "negate is_method");
+            expect_eq(@strEq(f.recv_ty, "trit"), 1, "negate recv_ty");
+            expect_eq(@strEq(f.name, "trit_negate"), 1, "negate mangled name");
+        }
+        else => { _zag_println("FAIL negate not fn"); _zag_exit(1); }
+    }
+
+    let total: i32 = flash_count_program(decls);
+    if (total < 80) {
+        _zag_print("FAIL AST too small: ");
+        _zag_println(_zag_i64_to_str(total as i64));
+        _zag_exit(1);
+    }
+
+    _zag_print("flash_parse_test: nodes=");
+    _zag_println(_zag_i64_to_str(total as i64));
+
+    let bad_char: FlashProgResult = flash_parse_program("fn bad() void { let x: i32 = $; }");
+    if (bad_char.err == 0) {
+        _zag_println("FAIL invalid $ char should set parse err");
+        _zag_exit(1);
+    }
+
+    _zag_println("flash_parse_test: ok");
+    return 0;
+}

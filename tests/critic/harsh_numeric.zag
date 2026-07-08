@@ -1,0 +1,181 @@
+// harsh_numeric.zag — adversarial numeric catalog stress (50+ types, trit encodings).
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/types/numeric/catalog.zag")
+@import("../../flash/types/numeric/numeric_common.zag") as common
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn expect_trit_bits(width: i32, actual: i32, label: []u8) void {
+    let want: i32 = common.num_trit_encoding_bits(width);
+    if (actual != want) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" trit_bits got ");
+        print_i32(actual);
+        _zag_print(" want ");
+        print_i32(want);
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn check_named(name: []u8, width: i32, signed: i32) void {
+    if (lookup_type(name)) |d| {
+        if (d.width != width) { test_fail(name); }
+        if (d.signed != signed) { test_fail(name); }
+        expect_trit_bits(width, d.trit_encoding_bits, name);
+        test_pass(name);
+    } else {
+        test_fail(name);
+    }
+}
+
+// Native t-units: width IS the trit count (identity encoding, no re-encoding
+// formula), min/max symmetric, binary-host embedding priced in nbits.
+fn check_t_named(name: []u8, width: i32) void {
+    if (lookup_type(name)) |d| {
+        if (d.width != width) { test_fail(name); }
+        if (d.signed != 1) { test_fail(name); }
+        if (d.kind != common.KIND_TRIT_INT()) { test_fail(name); }
+        if (d.trit_encoding_bits != width) { test_fail(name); }
+        if (d.min_val != 0 - d.max_val) { test_fail(name); }
+        if (d.nbits != common.num_bit_encoding_bits(width)) { test_fail(name); }
+        test_pass(name);
+    } else {
+        test_fail(name);
+    }
+}
+
+// Native family owns the front of the catalog: t1..t80, widths in TRITS,
+// trit encoding is the identity (native types don't pay for their radix).
+fn scan_t_units() void {
+    let w: i32 = 1;
+    while (w <= 80) {
+        let idx: i32 = w - 1;
+        let d: TypeDescriptor = catalog_at(idx);
+        if (d.width != w || d.signed != 1) { test_fail("catalog_t_scan"); }
+        if (d.trit_encoding_bits != w) { test_fail("catalog_t_native_identity"); }
+        w = w + 1;
+    }
+    test_pass("catalog_t80_scan");
+}
+
+fn scan_i_units() void {
+    let w: i32 = 1;
+    while (w <= 127) {
+        let idx: i32 = 80 + w - 1;
+        let d: TypeDescriptor = catalog_at(idx);
+        if (d.width != w || d.signed != 1) { test_fail("catalog_i_scan"); }
+        expect_trit_bits(w, d.trit_encoding_bits, "catalog_i_scan");
+        w = w + 1;
+    }
+    test_pass("catalog_i127_scan");
+}
+
+fn scan_u_units() void {
+    let w: i32 = 1;
+    while (w <= 127) {
+        let idx: i32 = 207 + w - 1;
+        let d: TypeDescriptor = catalog_at(idx);
+        if (d.width != w || d.signed != 0) { test_fail("catalog_u_scan"); }
+        expect_trit_bits(w, d.trit_encoding_bits, "catalog_u_scan");
+        w = w + 1;
+    }
+    test_pass("catalog_u127_scan");
+}
+
+fn scan_fp_posit_sat_fixed_special() void {
+    let total: i32 = type_count();
+    let idx: i32 = 334;
+    while (idx < total) {
+        let d: TypeDescriptor = catalog_at(idx);
+        if (d.width < 1) { test_fail("catalog_tail_width"); }
+        if (d.trit_encoding_bits < 1) { test_fail("catalog_tail_trit"); }
+        idx = idx + 1;
+    }
+    test_pass("catalog_tail_scan");
+}
+
+fn main() i32 {
+    _zag_println("harsh_numeric: running");
+
+    let count: i32 = type_count();
+    if (count < 280) { test_fail("type_count_floor"); }
+    test_pass("type_count_floor");
+
+    // Task-mandated spot checks.
+    check_named("i1", 1, 1);
+    check_named("i127", 127, 1);
+    check_named("u63", 63, 0);
+    check_named("p64", 64, 0);
+    check_named("sat_i16", 16, 1);
+    check_named("fixed_16_16", 32, 1);
+    check_named("u11", 11, 0);
+    check_named("rns_3", 96, 0);
+
+    // Additional heterogeneous families (pushes past 50 named lookups).
+    check_named("i8", 8, 1);
+    check_named("i16", 16, 1);
+    check_named("i32", 32, 1);
+    check_named("i64", 64, 1);
+    check_named("i42", 42, 1);
+    check_named("u1", 1, 0);
+    check_named("u7", 7, 0);
+    check_named("u15", 15, 0);
+    check_named("u31", 31, 0);
+    check_named("u127", 127, 0);
+    check_named("f16", 16, 1);
+    check_named("f32", 32, 1);
+    check_named("f64", 64, 1);
+    check_named("f80", 80, 1);
+    check_named("f128", 128, 1);
+    check_named("p8", 8, 1);
+    check_named("p16", 16, 1);
+    check_named("p32", 32, 1);
+    check_named("quire", 512, 1);
+    check_named("sat_i8", 8, 1);
+    check_named("sat_i32", 32, 1);
+    check_named("sat_i64", 64, 1);
+    check_named("fixed_8_8", 16, 1);
+    check_named("fixed_32_32", 64, 1);
+    check_named("u_any", 128, 0);
+    check_named("i_any", 128, 1);
+    check_named("l32", 32, 1);
+    check_named("l16", 16, 1);
+    check_named("bf16", 16, 1);
+    check_named("mx_fp8", 8, 1);
+    check_named("mx_fp4", 4, 1);
+
+    // Native family: exact symmetric ranges, identity trit encoding.
+    check_t_named("t1", 1);
+    check_t_named("t9", 9);
+    check_t_named("t27", 27);
+    check_t_named("t40", 40);
+    check_t_named("t80", 80);
+
+    scan_t_units();
+    scan_i_units();
+    scan_u_units();
+    scan_fp_posit_sat_fixed_special();
+
+    if (binop_compatible("i32", "i32") != 1) { test_fail("same_family_i32"); }
+    if (is_mixed_posit_integer("p32", "i32") != 1) { test_fail("mixed_posit_int"); }
+    if (binop_compatible("p32", "i32") != 0) { test_fail("cross_family_binop"); }
+    if (binop_compatible("t9", "t27") != 1) { test_fail("same_family_t"); }
+    if (binop_compatible("t9", "trit") != 1) { test_fail("t_unit_trit_family"); }
+    if (binop_compatible("t9", "i32") != 0) { test_fail("cross_radix_binop"); }
+    test_pass("family_rules");
+
+    _zag_println("harsh_numeric: ok");
+    return 0;
+}

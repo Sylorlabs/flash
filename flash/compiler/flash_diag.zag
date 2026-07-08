@@ -1,0 +1,63 @@
+// flash/compiler/flash_diag.zag — minimal structured diagnostics for Flash SEMA.
+//
+// Error code registry:
+//   F0001  type mismatch
+//   F0002  mixed numeric family (posit + integer without cast)
+//   F0003  effect / capability violation (@realtime / @photonic)
+//   F0004  raw {} block effect leak
+//   F0005  generic instantiation failure
+//   F0006  parse error
+
+struct Span { file: []u8, line: i32, col: i32, len: i32 }
+
+struct Diag {
+    code: []u8,
+    msg: []u8,
+    span: Span,
+    note: []u8,
+    hint: []u8,
+}
+
+fn diag_span(file: []u8, line: i32, col: i32, len: i32) Span {
+    return Span{ .file = file, .line = line, .col = col, .len = len };
+}
+
+fn diag_print_int(n: i32) void {
+    _zag_print(_zag_i64_to_str(n as i64));
+}
+
+fn diag_print(d: *Diag) void {
+    _zag_print("error[");
+    _zag_print(d.*.code);
+    _zag_print("]: ");
+    _zag_println(d.*.msg);
+    if (d.*.span.file.len > 0 && d.*.span.line > 0) {
+        _zag_print("  --> ");
+        _zag_print(d.*.span.file);
+        _zag_print(":");
+        diag_print_int(d.*.span.line);
+        _zag_print(":");
+        diag_print_int(d.*.span.col);
+        _zag_println("");
+    }
+    if (d.*.note.len > 0) {
+        _zag_print("   = note: ");
+        _zag_println(d.*.note);
+    }
+    if (d.*.hint.len > 0) {
+        _zag_print("   = hint: ");
+        _zag_println(d.*.hint);
+    }
+}
+
+fn diag_emit(code: []u8, msg: []u8, file: []u8, line: i32, col: i32, tlen: i32,
+             note: []u8, hint: []u8) void {
+    let d: Diag = Diag{
+        .code = code,
+        .msg = msg,
+        .span = Span{ .file = file, .line = line, .col = col, .len = tlen },
+        .note = note,
+        .hint = hint,
+    };
+    diag_print(&d);
+}

@@ -1,0 +1,33 @@
+// spatial_test.zag — smoke test for zag-spatial modules
+
+@import("hardware_manager.zag")
+
+fn main() void {
+    let mgr: HardwareManager = manager_new(2, 2, 1, 2);
+    let mp: *HardwareManager = &mgr;
+
+    let c0: ChamberCoord = chamber_coord(0, 0, 0);
+    let c1: ChamberCoord = chamber_coord(1, 0, 0);
+    seat_nano_block(mp, c0, RotationState.R0);
+    seat_nano_block(mp, c1, RotationState.R90);
+
+    let markers: OrientationMarkers = OrientationMarkers{
+        .wall_pos_x = 1,
+        .wall_pos_y = 0,
+        .floor      = 1,
+        .ceiling    = 0,
+    };
+    let rot: RotationState = auto_detect_rotation(mp, c0, markers);
+    print_i32(rotation_to_deg(rot));
+
+    let summary: HardwareSummary = manager_summary(mgr);
+    print_i32(summary.occupied);
+    print_i32(summary.stripe_lanes);
+
+    if (resolve_logical_address(mgr, 0)) |addr| {
+        print_i32(addr.voxel.x);
+        print_i32(addr.lane);
+    }
+
+    manager_free(mp);
+}

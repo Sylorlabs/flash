@@ -1,0 +1,155 @@
+// harsh_spatial.zag — 8×8 lattice, four rotations, stripe striping edge cases.
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../zag-spatial/grid.zag")
+@import("../../zag-spatial/rotation.zag")
+@import("../../zag-spatial/stripe_pool.zag")
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn rot_for_cell(x: i32, y: i32) RotationState {
+    let slot: i32 = (x + y) % 4;
+    if (slot == 1) { return RotationState.R90; }
+    if (slot == 2) { return RotationState.R180; }
+    if (slot == 3) { return RotationState.R270; }
+    return RotationState.R0;
+}
+
+fn markers_for_rot(rot: RotationState) OrientationMarkers {
+    if (rot == RotationState.R90) {
+        return OrientationMarkers{ .wall_pos_x = 0, .wall_pos_y = 1, .floor = 1, .ceiling = 0 };
+    }
+    if (rot == RotationState.R180) {
+        return OrientationMarkers{ .wall_pos_x = 0, .wall_pos_y = 1, .floor = 0, .ceiling = 1 };
+    }
+    if (rot == RotationState.R270) {
+        return OrientationMarkers{ .wall_pos_x = 1, .wall_pos_y = 0, .floor = 0, .ceiling = 1 };
+    }
+    return OrientationMarkers{ .wall_pos_x = 1, .wall_pos_y = 0, .floor = 1, .ceiling = 0 };
+}
+
+fn occupy_lattice(g: *LatticeGrid) void {
+    let x: i32 = 0;
+    while (x < 8) {
+        let y: i32 = 0;
+        while (y < 8) {
+            let c: ChamberCoord = chamber_coord(x, y, 0);
+            let rot: RotationState = rot_for_cell(x, y);
+            if (set_chamber_occupied(g, c, 1) != 1) { test_fail("occupy"); }
+            if (set_chamber_rotation(g, c, rot) != 1) { test_fail("set_rot"); }
+            y = y + 1;
+        }
+        x = x + 1;
+    }
+    test_pass("occupy_8x8");
+}
+
+fn rotation_at(slot: i32) RotationState {
+    if (slot == 1) { return RotationState.R90; }
+    if (slot == 2) { return RotationState.R180; }
+    if (slot == 3) { return RotationState.R270; }
+    return RotationState.R0;
+}
+
+fn test_rotation_angles(g: LatticeGrid) void {
+    let ai: i32 = 0;
+    while (ai < 4) {
+        let rot: RotationState = rotation_at(ai);
+        let m: OrientationMarkers = markers_for_rot(rot);
+        if (detect_rotation_from_markers(m) != rot) { test_fail("detect_rotation"); }
+        let corner: VoxelLocal = voxel_local(0, 0, 0);
+        let mapped: VoxelLocal = remap_voxel_local(corner, rot);
+        let back: VoxelLocal = inverse_remap_voxel_local(mapped, rot);
+        if (back.x != corner.x || back.y != corner.y || back.z != corner.z) {
+            test_fail("rotation_roundtrip");
+        }
+        let c: ChamberCoord = chamber_coord(ai, 0, 0);
+        if (lattice_get(g, c)) |cell| {
+            if (rotation_mismatch(m, cell.rotation) != 0) { test_fail("rotation_mismatch"); }
+        } else {
+            test_fail("rotation_cell");
+        }
+        ai = ai + 1;
+    }
+    test_pass("rotation_angles");
+}
+
+fn test_stripe_roundtrip(g: *LatticeGrid, stripe_width: i32, label: []u8) void {
+    let pool: StripePool = pool_new(g, stripe_width);
+    if (pool.lane_count != 64 * stripe_width) {
+        test_fail(label);
+    }
+    let off: i32 = 0;
+    while (off < 128) {
+        if (logical_to_physical(pool, g.*, off)) |phys| {
+            let back: i32 = physical_to_logical(pool, phys);
+            if (back != off) { test_fail(label); }
+        } else {
+            if (off < pool.lane_count * 512) { test_fail(label); }
+        }
+        off = off + 1;
+    }
+    pool_free(&pool);
+    _zag_print("PASS ");
+    _zag_println(label);
+}
+
+fn test_stripe_edge_cases(g: *LatticeGrid) void {
+    let pool: StripePool = pool_new(g, 4);
+    if (logical_offset_in_range(pool, -1) == 1) {
+        test_fail("neg_offset");
+    }
+    let cap: i32 = pool_capacity_bytes(pool);
+    if (logical_offset_in_range(pool, cap + 16) == 1) {
+        test_fail("overflow_offset");
+    }
+    if (pool_lane_count(pool) != 256) { test_fail("lane_count"); }
+
+    let lanes: i32 = pool_lane_count(pool);
+    if (lanes < 1) { test_fail("stripe_write"); }
+    pool_free(&pool);
+    test_pass("stripe_edge_cases");
+}
+
+fn test_empty_pool() void {
+    let empty: LatticeGrid = lattice_new(2, 2, 1);
+    let pool: StripePool = pool_new(&empty, 2);
+    if (pool.lane_count != 0) { test_fail("empty_lane_count"); }
+    if (logical_to_physical(pool, empty, 0)) |_phys| {
+        test_fail("empty_lookup");
+    }
+    if (pool_capacity_bytes(pool) != 0) { test_fail("empty_capacity"); }
+    pool_free(&pool);
+    lattice_free(&empty);
+    test_pass("empty_pool");
+}
+
+fn main() i32 {
+    _zag_println("harsh_spatial: running");
+
+    let g: LatticeGrid = lattice_new(8, 8, 1);
+    let gp: *LatticeGrid = &g;
+    if (g.count != 64) { test_fail("lattice_count"); }
+    if (lattice_voxel_capacity(g) != 64 * 512) { test_fail("voxel_capacity"); }
+
+    occupy_lattice(gp);
+    test_rotation_angles(g);
+    test_stripe_roundtrip(gp, 1, "stripe_w1");
+    test_stripe_roundtrip(gp, 2, "stripe_w2");
+    test_stripe_roundtrip(gp, 4, "stripe_w4");
+    test_stripe_edge_cases(gp);
+    test_empty_pool();
+
+    lattice_free(gp);
+    _zag_println("harsh_spatial: ok");
+    return 0;
+}

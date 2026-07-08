@@ -1,0 +1,1487 @@
+// flash/driver/vgpu.flash.zag — vector graphics layer (competitive tier).
+//
+// Modern 2D rendering in Flash on top of the softgpu framebuffer:
+//   paths      — move/line/quad/cubic/close, beziers flattened to edges
+//   fill       — nonzero winding, 4×4 supersampled anti-aliasing
+//   compositing — per-pixel alpha blending (a: 0..255)
+//   gradients  — linear two-stop fills through the same AA rasterizer
+//   stroke     — width strokes via oriented quads + round joins
+//   shapes     — circles and rounded rects from cubic arcs (k = 0.552285)
+//
+// Execution routes through the engine device layer (engine.flash.zag):
+// on native Engine hardware this runs on the main processor; in the
+// emulation layer kernels compile via `znc --target gpu-vulkan` and will
+// execute on the host GPU once the pure-syscall DRM backend lands — the
+// CPU rasterizer below is the always-available fallback and the reference
+// implementation. CPU speed on commodity hardware is explicitly not the
+// design target; the Engine is.
+
+@import("softgpu.flash")
+@import("engine.flash")
+
+fn vg_verb_move() i32  { return 0; }
+fn vg_verb_line() i32  { return 1; }
+fn vg_verb_quad() i32  { return 2; }
+fn vg_verb_cubic() i32 { return 3; }
+fn vg_verb_close() i32 { return 4; }
+
+struct VPath {
+    vx:    ArrayList[f32],
+    vy:    ArrayList[f32],
+    verbs: ArrayList[i32],
+}
+
+struct VEdges {
+    ax: ArrayList[f32],
+    ay: ArrayList[f32],
+    bx: ArrayList[f32],
+    by: ArrayList[f32],
+}
+
+fn vg_path_new() VPath {
+    return VPath{
+        .vx = make[f32](16),
+        .vy = make[f32](16),
+        .verbs = make[i32](8),
+    };
+}
+
+fn vg_move_to(p: *VPath, x: f32, y: f32) void {
+    push[i32](&p.*.verbs, vg_verb_move());
+    push[f32](&p.*.vx, x);
+    push[f32](&p.*.vy, y);
+}
+
+fn vg_line_to(p: *VPath, x: f32, y: f32) void {
+    push[i32](&p.*.verbs, vg_verb_line());
+    push[f32](&p.*.vx, x);
+    push[f32](&p.*.vy, y);
+}
+
+fn vg_quad_to(p: *VPath, cx: f32, cy: f32, x: f32, y: f32) void {
+    push[i32](&p.*.verbs, vg_verb_quad());
+    push[f32](&p.*.vx, cx);
+    push[f32](&p.*.vy, cy);
+    push[f32](&p.*.vx, x);
+    push[f32](&p.*.vy, y);
+}
+
+fn vg_cubic_to(p: *VPath, c1x: f32, c1y: f32, c2x: f32, c2y: f32, x: f32, y: f32) void {
+    push[i32](&p.*.verbs, vg_verb_cubic());
+    push[f32](&p.*.vx, c1x);
+    push[f32](&p.*.vy, c1y);
+    push[f32](&p.*.vx, c2x);
+    push[f32](&p.*.vy, c2y);
+    push[f32](&p.*.vx, x);
+    push[f32](&p.*.vy, y);
+}
+
+fn vg_close(p: *VPath) void {
+    push[i32](&p.*.verbs, vg_verb_close());
+}
+
+fn vg_sqrt(v: f32) f32 {
+    if (v <= 0.0) { return 0.0; }
+    let x: f32 = v;
+    if (x < 1.0) { x = 1.0; }
+    let i: i32 = 0;
+    while (i < 16) {
+        x = (x + v / x) * 0.5;
+        i = i + 1;
+    }
+    return x;
+}
+
+fn vg_push_edge(e: *VEdges, x0: f32, y0: f32, x1: f32, y1: f32) void {
+    push[f32](&e.*.ax, x0);
+    push[f32](&e.*.ay, y0);
+    push[f32](&e.*.bx, x1);
+    push[f32](&e.*.by, y1);
+}
+
+// Flatten a path into line edges. auto_close = 1 closes open subpaths (fill
+// semantics, so nonzero winding is well defined); 0 leaves them open
+// (stroke semantics).
+fn vg_flatten_ex(p: *VPath, auto_close: i32) VEdges {
+    let e: VEdges = VEdges{
+        .ax = make[f32](32), .ay = make[f32](32),
+        .bx = make[f32](32), .by = make[f32](32),
+    };
+    let cx: f32 = 0.0;
+    let cy: f32 = 0.0;
+    let sx: f32 = 0.0;
+    let sy: f32 = 0.0;
+    let open: i32 = 0;
+    let pi: i32 = 0;
+    let vi: i32 = 0;
+    while (vi < len[i32](p.*.verbs)) {
+        let verb: i32 = get[i32](p.*.verbs, vi);
+        if (verb == vg_verb_move()) {
+            if (auto_close == 1 && open == 1 && (cx != sx || cy != sy)) {
+                vg_push_edge(&e, cx, cy, sx, sy);
+            }
+            cx = get[f32](p.*.vx, pi);
+            cy = get[f32](p.*.vy, pi);
+            sx = cx;
+            sy = cy;
+            open = 1;
+            pi = pi + 1;
+        } else if (verb == vg_verb_line()) {
+            let nx: f32 = get[f32](p.*.vx, pi);
+            let ny: f32 = get[f32](p.*.vy, pi);
+            vg_push_edge(&e, cx, cy, nx, ny);
+            cx = nx;
+            cy = ny;
+            pi = pi + 1;
+        } else if (verb == vg_verb_quad()) {
+            let qx: f32 = get[f32](p.*.vx, pi);
+            let qy: f32 = get[f32](p.*.vy, pi);
+            let nx: f32 = get[f32](p.*.vx, pi + 1);
+            let ny: f32 = get[f32](p.*.vy, pi + 1);
+            let px: f32 = cx;
+            let py: f32 = cy;
+            let k: i32 = 1;
+            while (k <= 16) {
+                let t: f32 = (k as f32) / 16.0;
+                let u: f32 = 1.0 - t;
+                let bxv: f32 = u * u * cx + 2.0 * u * t * qx + t * t * nx;
+                let byv: f32 = u * u * cy + 2.0 * u * t * qy + t * t * ny;
+                vg_push_edge(&e, px, py, bxv, byv);
+                px = bxv;
+                py = byv;
+                k = k + 1;
+            }
+            cx = nx;
+            cy = ny;
+            pi = pi + 2;
+        } else if (verb == vg_verb_cubic()) {
+            let c1x: f32 = get[f32](p.*.vx, pi);
+            let c1y: f32 = get[f32](p.*.vy, pi);
+            let c2x: f32 = get[f32](p.*.vx, pi + 1);
+            let c2y: f32 = get[f32](p.*.vy, pi + 1);
+            let nx: f32 = get[f32](p.*.vx, pi + 2);
+            let ny: f32 = get[f32](p.*.vy, pi + 2);
+            let px: f32 = cx;
+            let py: f32 = cy;
+            let k: i32 = 1;
+            while (k <= 16) {
+                let t: f32 = (k as f32) / 16.0;
+                let u: f32 = 1.0 - t;
+                let bxv: f32 = u * u * u * cx + 3.0 * u * u * t * c1x + 3.0 * u * t * t * c2x + t * t * t * nx;
+                let byv: f32 = u * u * u * cy + 3.0 * u * u * t * c1y + 3.0 * u * t * t * c2y + t * t * t * ny;
+                vg_push_edge(&e, px, py, bxv, byv);
+                px = bxv;
+                py = byv;
+                k = k + 1;
+            }
+            cx = nx;
+            cy = ny;
+            pi = pi + 3;
+        } else {
+            // close
+            if (open == 1 && (cx != sx || cy != sy)) {
+                vg_push_edge(&e, cx, cy, sx, sy);
+            }
+            cx = sx;
+            cy = sy;
+            open = 0;
+        }
+        vi = vi + 1;
+    }
+    if (auto_close == 1 && open == 1 && (cx != sx || cy != sy)) {
+        vg_push_edge(&e, cx, cy, sx, sy);
+    }
+    return e;
+}
+
+fn vg_flatten(p: *VPath) VEdges {
+    return vg_flatten_ex(p, 1);
+}
+
+fn vg_blend_px(fb: *SoftFb, x: i32, y: i32, r: i32, g: i32, b: i32, a: i32) void {
+    if (x < 0 || y < 0 || x >= fb.*.w || y >= fb.*.h) { return; }
+    if (softgpu_clip_test(fb, x, y) == 0) { return; }
+    let aa: i32 = a;
+    if (fb.*.mask_on == 1) {
+        aa = aa * (get[u8](fb.*.mask, y * fb.*.w + x) as i32) / 255;
+    }
+    a = aa;
+    if (a <= 0) { return; }
+    let o: i32 = (y * fb.*.w + x) * 3;
+    if (fb.*.dmg_on == 1) {
+        softgpu_damage_mark(fb, x, y);
+    }
+    if (a >= 255) {
+        set[u8](&fb.*.pix, o, r as u8);
+        set[u8](&fb.*.pix, o + 1, g as u8);
+        set[u8](&fb.*.pix, o + 2, b as u8);
+        if (fb.*.acc_on == 1) {
+            set[u8](&fb.*.acc, y * fb.*.w + x, 255);
+        }
+        return;
+    }
+    let dr: i32 = get[u8](fb.*.pix, o) as i32;
+    let dg: i32 = get[u8](fb.*.pix, o + 1) as i32;
+    let db: i32 = get[u8](fb.*.pix, o + 2) as i32;
+    set[u8](&fb.*.pix, o, ((r * a + dr * (255 - a)) / 255) as u8);
+    set[u8](&fb.*.pix, o + 1, ((g * a + dg * (255 - a)) / 255) as u8);
+    set[u8](&fb.*.pix, o + 2, ((b * a + db * (255 - a)) / 255) as u8);
+    if (fb.*.acc_on == 1) {
+        let oa: i32 = get[u8](fb.*.acc, y * fb.*.w + x) as i32;
+        set[u8](&fb.*.acc, y * fb.*.w + x, (a + (oa * (255 - a)) / 255) as u8);
+    }
+}
+
+fn vg_ceil_sub(v: f32) i32 {
+    let t: i32 = v as i32;
+    if ((t as f32) < v) { t = t + 1; }
+    return t;
+}
+
+fn vg_clamp_i(v: i32, lo: i32, hi: i32) i32 {
+    if (v < lo) { return lo; }
+    if (v > hi) { return hi; }
+    return v;
+}
+
+fn vg_lerp_ch(a: i32, b: i32, t: f32) i32 {
+    let v: f32 = (a as f32) + ((b - a) as f32) * t;
+    let r: i32 = v as i32;
+    return vg_clamp_i(r, 0, 255);
+}
+
+// Image (RGBA) + paint model for the fill core.
+
+struct VgImage {
+    w:   i32,
+    h:   i32,
+    pix: ArrayList[u8],   // RGBA
+}
+
+struct VgRgba {
+    r: i32, g: i32, b: i32, a: i32,
+}
+
+// mode: 0 solid, 1 linear gradient, 2 radial gradient, 3 write clip mask,
+// 4 image (sampled through ixf: device space -> image space).
+struct VgPaint {
+    mode: i32,
+    r: i32, g: i32, b: i32, a: i32,
+    r2: i32, g2: i32, b2: i32, a2: i32,
+    gx0: f32, gy0: f32, gx1: f32, gy1: f32,
+    img: *VgImage,
+    ixf: VgXf,
+}
+
+fn vg_paint_base(mode: i32, r: i32, g: i32, b: i32, a: i32) VgPaint {
+    return VgPaint{
+        .mode = mode, .r = r, .g = g, .b = b, .a = a,
+        .r2 = r, .g2 = g, .b2 = b, .a2 = a,
+        .gx0 = 0.0, .gy0 = 0.0, .gx1 = 1.0, .gy1 = 0.0,
+        .img = null as *VgImage, .ixf = vg_xf_identity(),
+    };
+}
+
+fn vg_img_texel(img: *VgImage, x: i32, y: i32) VgRgba {
+    let cx: i32 = vg_clamp_i(x, 0, img.*.w - 1);
+    let cy: i32 = vg_clamp_i(y, 0, img.*.h - 1);
+    let o: i32 = (cy * img.*.w + cx) * 4;
+    return VgRgba{
+        .r = get[u8](img.*.pix, o) as i32,
+        .g = get[u8](img.*.pix, o + 1) as i32,
+        .b = get[u8](img.*.pix, o + 2) as i32,
+        .a = get[u8](img.*.pix, o + 3) as i32,
+    };
+}
+
+// Bilinear sample at image-space (u, v) in pixels.
+fn vg_img_sample(img: *VgImage, u: f32, v: f32) VgRgba {
+    let su: f32 = u - 0.5;
+    let sv: f32 = v - 0.5;
+    if (su < 0.0) { su = 0.0; }
+    if (sv < 0.0) { sv = 0.0; }
+    let mx: f32 = (img.*.w - 1) as f32;
+    let my: f32 = (img.*.h - 1) as f32;
+    if (su > mx) { su = mx; }
+    if (sv > my) { sv = my; }
+    let x0: i32 = su as i32;
+    let y0: i32 = sv as i32;
+    let fx: f32 = su - (x0 as f32);
+    let fy: f32 = sv - (y0 as f32);
+    let t00: VgRgba = vg_img_texel(img, x0, y0);
+    let t10: VgRgba = vg_img_texel(img, x0 + 1, y0);
+    let t01: VgRgba = vg_img_texel(img, x0, y0 + 1);
+    let t11: VgRgba = vg_img_texel(img, x0 + 1, y0 + 1);
+    let w00: f32 = (1.0 - fx) * (1.0 - fy);
+    let w10: f32 = fx * (1.0 - fy);
+    let w01: f32 = (1.0 - fx) * fy;
+    let w11: f32 = fx * fy;
+    return VgRgba{
+        .r = ((t00.r as f32) * w00 + (t10.r as f32) * w10 + (t01.r as f32) * w01 + (t11.r as f32) * w11) as i32,
+        .g = ((t00.g as f32) * w00 + (t10.g as f32) * w10 + (t01.g as f32) * w01 + (t11.g as f32) * w11) as i32,
+        .b = ((t00.b as f32) * w00 + (t10.b as f32) * w10 + (t01.b as f32) * w01 + (t11.b as f32) * w11) as i32,
+        .a = ((t00.a as f32) * w00 + (t10.a as f32) * w10 + (t01.a as f32) * w01 + (t11.a as f32) * w11) as i32,
+    };
+}
+
+// Core AA scanline fill over flattened edges, colored by `paint`.
+fn vg_fill_edges(fb: *SoftFb, e: *VEdges, paint: *VgPaint) void {
+    let ne: i32 = len[f32](e.*.ax);
+    if (ne < 1) { return; }
+    let minx: f32 = get[f32](e.*.ax, 0);
+    let maxx: f32 = minx;
+    let miny: f32 = get[f32](e.*.ay, 0);
+    let maxy: f32 = miny;
+    let i: i32 = 0;
+    while (i < ne) {
+        let x0: f32 = get[f32](e.*.ax, i);
+        let y0: f32 = get[f32](e.*.ay, i);
+        let x1: f32 = get[f32](e.*.bx, i);
+        let y1: f32 = get[f32](e.*.by, i);
+        if (x0 < minx) { minx = x0; }
+        if (x1 < minx) { minx = x1; }
+        if (x0 > maxx) { maxx = x0; }
+        if (x1 > maxx) { maxx = x1; }
+        if (y0 < miny) { miny = y0; }
+        if (y1 < miny) { miny = y1; }
+        if (y0 > maxy) { maxy = y0; }
+        if (y1 > maxy) { maxy = y1; }
+        i = i + 1;
+    }
+    let py0: i32 = vg_clamp_i(miny as i32, 0, fb.*.h - 1);
+    let py1: i32 = vg_clamp_i((maxy as i32) + 1, 0, fb.*.h - 1);
+    let px0: i32 = vg_clamp_i(minx as i32, 0, fb.*.w - 1);
+    let px1: i32 = vg_clamp_i((maxx as i32) + 1, 0, fb.*.w - 1);
+    if (fb.*.clip_on == 1 && paint.*.mode != 3) {
+        px0 = vg_clamp_i(px0, fb.*.clip_x0, fb.*.w - 1);
+        px1 = vg_clamp_i(px1, 0, fb.*.clip_x1);
+        py0 = vg_clamp_i(py0, fb.*.clip_y0, fb.*.h - 1);
+        py1 = vg_clamp_i(py1, 0, fb.*.clip_y1);
+    }
+    let wpx: i32 = px1 - px0 + 1;
+    if (wpx < 1 || py1 < py0) { return; }
+
+    let cov: ArrayList[i32] = make[i32](wpx);
+    let ci: i32 = 0;
+    while (ci < wpx) { push[i32](&cov, 0); ci = ci + 1; }
+    let cxs: ArrayList[f32] = make[f32](32);
+    let cdirs: ArrayList[i32] = make[i32](32);
+
+    let gdx: f32 = paint.*.gx1 - paint.*.gx0;
+    let gdy: f32 = paint.*.gy1 - paint.*.gy0;
+    let glen2: f32 = gdx * gdx + gdy * gdy;
+    if (glen2 <= 0.0) { glen2 = 1.0; }
+
+    let py: i32 = py0;
+    while (py <= py1) {
+        ci = 0;
+        while (ci < wpx) { set[i32](&cov, ci, 0); ci = ci + 1; }
+        let sub: i32 = 0;
+        while (sub < 4) {
+            let sy: f32 = (py as f32) + ((sub * 2 + 1) as f32) / 8.0;
+            while (len[f32](cxs) > 0) { let _p: f32 = pop[f32](&cxs); }
+            while (len[i32](cdirs) > 0) { let _q: i32 = pop[i32](&cdirs); }
+            i = 0;
+            while (i < ne) {
+                let y0: f32 = get[f32](e.*.ay, i);
+                let y1: f32 = get[f32](e.*.by, i);
+                let hit: i32 = 0;
+                let dir: i32 = 0;
+                if (y0 <= sy && sy < y1) { hit = 1; dir = 1; }
+                if (y1 <= sy && sy < y0) { hit = 1; dir = -1; }
+                if (hit == 1) {
+                    let x0: f32 = get[f32](e.*.ax, i);
+                    let x1: f32 = get[f32](e.*.bx, i);
+                    let t: f32 = (sy - y0) / (y1 - y0);
+                    push[f32](&cxs, x0 + t * (x1 - x0));
+                    push[i32](&cdirs, dir);
+                }
+                i = i + 1;
+            }
+            let si: i32 = 1;
+            while (si < len[f32](cxs)) {
+                let kx: f32 = get[f32](cxs, si);
+                let kd: i32 = get[i32](cdirs, si);
+                let sj: i32 = si - 1;
+                let moving: i32 = 1;
+                while (moving == 1) {
+                    if (sj >= 0 && get[f32](cxs, sj) > kx) {
+                        set[f32](&cxs, sj + 1, get[f32](cxs, sj));
+                        set[i32](&cdirs, sj + 1, get[i32](cdirs, sj));
+                        sj = sj - 1;
+                    } else {
+                        moving = 0;
+                    }
+                }
+                set[f32](&cxs, sj + 1, kx);
+                set[i32](&cdirs, sj + 1, kd);
+                si = si + 1;
+            }
+            let winding: i32 = 0;
+            let span_x: f32 = 0.0;
+            let wi: i32 = 0;
+            while (wi < len[f32](cxs)) {
+                let prevw: i32 = winding;
+                winding = winding + get[i32](cdirs, wi);
+                let xv: f32 = get[f32](cxs, wi);
+                if (prevw == 0 && winding != 0) {
+                    span_x = xv;
+                }
+                if (prevw != 0 && winding == 0) {
+                    let ka: i32 = vg_ceil_sub((span_x - (px0 as f32)) * 4.0 - 0.5);
+                    let kb: i32 = vg_ceil_sub((xv - (px0 as f32)) * 4.0 - 0.5);
+                    ka = vg_clamp_i(ka, 0, wpx * 4);
+                    kb = vg_clamp_i(kb, 0, wpx * 4);
+                    let k: i32 = ka;
+                    while (k < kb) {
+                        set[i32](&cov, k / 4, get[i32](cov, k / 4) + 1);
+                        k = k + 1;
+                    }
+                }
+                wi = wi + 1;
+            }
+            sub = sub + 1;
+        }
+        let px: i32 = 0;
+        while (px < wpx) {
+            let c: i32 = get[i32](cov, px);
+            if (c > 0) {
+                if (paint.*.mode == 3) {
+                    set[u8](&fb.*.mask, py * fb.*.w + px0 + px, ((c * 255) / 16) as u8);
+                } else {
+                    let cr: i32 = paint.*.r;
+                    let cg: i32 = paint.*.g;
+                    let cb: i32 = paint.*.b;
+                    let ca: i32 = paint.*.a;
+                    let fx: f32 = ((px0 + px) as f32) + 0.5;
+                    let fy: f32 = (py as f32) + 0.5;
+                    if (paint.*.mode == 1) {
+                        let t: f32 = ((fx - paint.*.gx0) * gdx + (fy - paint.*.gy0) * gdy) / glen2;
+                        if (t < 0.0) { t = 0.0; }
+                        if (t > 1.0) { t = 1.0; }
+                        cr = vg_lerp_ch(paint.*.r, paint.*.r2, t);
+                        cg = vg_lerp_ch(paint.*.g, paint.*.g2, t);
+                        cb = vg_lerp_ch(paint.*.b, paint.*.b2, t);
+                        ca = vg_lerp_ch(paint.*.a, paint.*.a2, t);
+                    }
+                    if (paint.*.mode == 2) {
+                        let ddx: f32 = fx - paint.*.gx0;
+                        let ddy: f32 = fy - paint.*.gy0;
+                        let t: f32 = vg_sqrt(ddx * ddx + ddy * ddy) / paint.*.gx1;
+                        if (t < 0.0) { t = 0.0; }
+                        if (t > 1.0) { t = 1.0; }
+                        cr = vg_lerp_ch(paint.*.r, paint.*.r2, t);
+                        cg = vg_lerp_ch(paint.*.g, paint.*.g2, t);
+                        cb = vg_lerp_ch(paint.*.b, paint.*.b2, t);
+                        ca = vg_lerp_ch(paint.*.a, paint.*.a2, t);
+                    }
+                    if (paint.*.mode == 4) {
+                        let u: f32 = paint.*.ixf.a * fx + paint.*.ixf.c * fy + paint.*.ixf.e;
+                        let v: f32 = paint.*.ixf.b * fx + paint.*.ixf.d * fy + paint.*.ixf.f;
+                        let s: VgRgba = vg_img_sample(paint.*.img, u, v);
+                        cr = s.r;
+                        cg = s.g;
+                        cb = s.b;
+                        ca = (s.a * paint.*.a) / 255;
+                    }
+                    vg_blend_px(fb, px0 + px, py, cr, cg, cb, (ca * c) / 16);
+                }
+            }
+            px = px + 1;
+        }
+        py = py + 1;
+    }
+}
+
+fn vg_fill(fb: *SoftFb, p: *VPath, r: i32, g: i32, b: i32, a: i32) void {
+    let e: VEdges = vg_flatten(p);
+    let paint: VgPaint = vg_paint_base(0, r, g, b, a);
+    vg_fill_edges(fb, &e, &paint);
+}
+
+fn vg_fill_linear(
+    fb: *SoftFb, p: *VPath,
+    gx0: f32, gy0: f32, gx1: f32, gy1: f32,
+    r: i32, g: i32, b: i32, a: i32,
+    r2: i32, g2: i32, b2: i32, a2: i32,
+) void {
+    let e: VEdges = vg_flatten(p);
+    let paint: VgPaint = vg_paint_base(1, r, g, b, a);
+    paint.r2 = r2;
+    paint.g2 = g2;
+    paint.b2 = b2;
+    paint.a2 = a2;
+    paint.gx0 = gx0;
+    paint.gy0 = gy0;
+    paint.gx1 = gx1;
+    paint.gy1 = gy1;
+    vg_fill_edges(fb, &e, &paint);
+}
+
+// ── shape helpers ────────────────────────────────────────────────────────────
+
+fn vg_circle(p: *VPath, cx: f32, cy: f32, rad: f32) void {
+    let k: f32 = 0.552285 * rad;
+    vg_move_to(p, cx + rad, cy);
+    vg_cubic_to(p, cx + rad, cy + k, cx + k, cy + rad, cx, cy + rad);
+    vg_cubic_to(p, cx - k, cy + rad, cx - rad, cy + k, cx - rad, cy);
+    vg_cubic_to(p, cx - rad, cy - k, cx - k, cy - rad, cx, cy - rad);
+    vg_cubic_to(p, cx + k, cy - rad, cx + rad, cy - k, cx + rad, cy);
+    vg_close(p);
+}
+
+fn vg_rounded_rect(p: *VPath, x: f32, y: f32, w: f32, h: f32, rad: f32) void {
+    let k: f32 = 0.552285 * rad;
+    vg_move_to(p, x + rad, y);
+    vg_line_to(p, x + w - rad, y);
+    vg_cubic_to(p, x + w - rad + k, y, x + w, y + rad - k, x + w, y + rad);
+    vg_line_to(p, x + w, y + h - rad);
+    vg_cubic_to(p, x + w, y + h - rad + k, x + w - rad + k, y + h, x + w - rad, y + h);
+    vg_line_to(p, x + rad, y + h);
+    vg_cubic_to(p, x + rad - k, y + h, x, y + h - rad + k, x, y + h - rad);
+    vg_line_to(p, x, y + rad);
+    vg_cubic_to(p, x, y + rad - k, x + rad - k, y, x + rad, y);
+    vg_close(p);
+}
+
+// ── stroking (oriented quads + round joins) ─────────────────────────────────
+
+fn vg_stroke_seg(fb: *SoftFb, x0: f32, y0: f32, x1: f32, y1: f32, hw: f32, r: i32, g: i32, b: i32, a: i32) void {
+    let dx: f32 = x1 - x0;
+    let dy: f32 = y1 - y0;
+    let ln: f32 = vg_sqrt(dx * dx + dy * dy);
+    if (ln <= 0.0001) { return; }
+    let nx: f32 = (0.0 - dy) / ln * hw;
+    let ny: f32 = dx / ln * hw;
+    let q: VPath = vg_path_new();
+    vg_move_to(&q, x0 + nx, y0 + ny);
+    vg_line_to(&q, x1 + nx, y1 + ny);
+    vg_line_to(&q, x1 - nx, y1 - ny);
+    vg_line_to(&q, x0 - nx, y0 - ny);
+    vg_close(&q);
+    vg_fill(fb, &q, r, g, b, a);
+}
+
+// ── stroking: single outline path, filled once (seamless at any alpha) ──────
+//
+// All segment quads, join geometry, and caps become subpaths of ONE path
+// filled with nonzero winding, so overlaps never double-blend. Chains within
+// the flattened edge soup are detected by endpoint continuity.
+
+// Negative-area (clockwise) circle: matches segment-quad winding so stroke
+// disks reinforce coverage instead of canceling it.
+fn vg_circle_neg(p: *VPath, cx: f32, cy: f32, rad: f32) void {
+    let k: f32 = 0.552285 * rad;
+    vg_move_to(p, cx + rad, cy);
+    vg_cubic_to(p, cx + rad, cy - k, cx + k, cy - rad, cx, cy - rad);
+    vg_cubic_to(p, cx - k, cy - rad, cx - rad, cy - k, cx - rad, cy);
+    vg_cubic_to(p, cx - rad, cy + k, cx - k, cy + rad, cx, cy + rad);
+    vg_cubic_to(p, cx + k, cy + rad, cx + rad, cy + k, cx + rad, cy);
+    vg_close(p);
+}
+
+fn vg_cap_butt() i32   { return 0; }
+fn vg_cap_round() i32  { return 1; }
+fn vg_cap_square() i32 { return 2; }
+fn vg_join_bevel() i32 { return 0; }
+fn vg_join_round() i32 { return 1; }
+fn vg_join_miter() i32 { return 2; }
+
+// Fill a stroke outline: every closed subpath is normalized to the same
+// orientation (by signed area) so overlapping quads, join disks, and caps
+// reinforce winding instead of canceling — seamless at any alpha. User path
+// fills are NOT normalized (winding-based holes stay available there).
+// Paint variant: outlines fill with any VgPaint (gradients, images, clip
+// masks) — the solid-color entry below wraps this one.
+fn vg_stroke_fill_outline_paint(fb: *SoftFb, q: *VPath, paint: *VgPaint) void {
+    let e: VEdges = vg_flatten(q);
+    let ne: i32 = len[f32](e.ax);
+    let start: i32 = 0;
+    let i: i32 = 1;
+    while (i <= ne) {
+        let boundary: i32 = 0;
+        if (i == ne) {
+            boundary = 1;
+        } else if (get[f32](e.ax, i) != get[f32](e.bx, i - 1) || get[f32](e.ay, i) != get[f32](e.by, i - 1)) {
+            boundary = 1;
+        }
+        if (boundary == 1) {
+            let area: f32 = 0.0;
+            let k: i32 = start;
+            while (k < i) {
+                area = area + get[f32](e.ax, k) * get[f32](e.by, k) - get[f32](e.bx, k) * get[f32](e.ay, k);
+                k = k + 1;
+            }
+            if (area > 0.0) {
+                k = start;
+                while (k < i) {
+                    let tx: f32 = get[f32](e.ax, k);
+                    let ty: f32 = get[f32](e.ay, k);
+                    set[f32](&e.ax, k, get[f32](e.bx, k));
+                    set[f32](&e.ay, k, get[f32](e.by, k));
+                    set[f32](&e.bx, k, tx);
+                    set[f32](&e.by, k, ty);
+                    k = k + 1;
+                }
+            }
+            start = i;
+        }
+        i = i + 1;
+    }
+    vg_fill_edges(fb, &e, paint);
+}
+
+fn vg_stroke_fill_outline(fb: *SoftFb, q: *VPath, r: i32, g: i32, b: i32, a: i32) void {
+    let paint: VgPaint = vg_paint_base(0, r, g, b, a);
+    vg_stroke_fill_outline_paint(fb, q, &paint);
+}
+
+fn vg_stroke_cap(q: *VPath, x: f32, y: f32, ux: f32, uy: f32, nx: f32, ny: f32, hw: f32, cap: i32) void {
+    if (cap == 1) {
+        vg_circle_neg(q, x, y, hw);
+        return;
+    }
+    if (cap == 2) {
+        // vertex order gives NEGATIVE signed area by construction (matches
+        // segment quads / vg_circle_neg) — a positively wound cap merged into
+        // its quad's chain dodges normalization and cancels winding where the
+        // cap overlaps other stroke geometry (butting contours in text faces).
+        let ex: f32 = ux * hw;
+        let ey: f32 = uy * hw;
+        vg_move_to(q, x - nx, y - ny);
+        vg_line_to(q, x - nx + ex, y - ny + ey);
+        vg_line_to(q, x + nx + ex, y + ny + ey);
+        vg_line_to(q, x + nx, y + ny);
+        vg_close(q);
+    }
+}
+
+// Build (but do not fill) the outline of a stroke: segment quads, joins, and
+// caps as subpaths, all negatively wound by construction. Shared by solid
+// strokes, dashed strokes, and filled text faces — fill the result with
+// vg_stroke_fill_outline / vg_stroke_fill_outline_paint.
+fn vg_stroke_outline(p: *VPath, width: f32, cap: i32, join: i32) VPath {
+    let e: VEdges = vg_flatten_ex(p, 0);
+    let hw: f32 = width * 0.5;
+    let ne: i32 = len[f32](e.ax);
+    let q: VPath = vg_path_new();
+    let i: i32 = 0;
+    while (i < ne) {
+        let x0: f32 = get[f32](e.ax, i);
+        let y0: f32 = get[f32](e.ay, i);
+        let x1: f32 = get[f32](e.bx, i);
+        let y1: f32 = get[f32](e.by, i);
+        let dx: f32 = x1 - x0;
+        let dy: f32 = y1 - y0;
+        let ln: f32 = vg_sqrt(dx * dx + dy * dy);
+        if (ln > 0.0001) {
+            let ux: f32 = dx / ln;
+            let uy: f32 = dy / ln;
+            let nx: f32 = (0.0 - uy) * hw;
+            let ny: f32 = ux * hw;
+            // segment body
+            vg_move_to(&q, x0 + nx, y0 + ny);
+            vg_line_to(&q, x1 + nx, y1 + ny);
+            vg_line_to(&q, x1 - nx, y1 - ny);
+            vg_line_to(&q, x0 - nx, y0 - ny);
+            vg_close(&q);
+            // chain topology
+            let chain_start: i32 = 1;
+            if (i > 0) {
+                if (get[f32](e.bx, i - 1) == x0 && get[f32](e.by, i - 1) == y0) { chain_start = 0; }
+            }
+            let chain_end: i32 = 1;
+            if (i + 1 < ne) {
+                if (get[f32](e.ax, i + 1) == x1 && get[f32](e.ay, i + 1) == y1) { chain_end = 0; }
+            }
+            if (chain_end == 0) {
+                // interior joint at (x1,y1)
+                if (join == 1) {
+                    vg_circle_neg(&q, x1, y1, hw);
+                } else {
+                    let ndx: f32 = get[f32](e.bx, i + 1) - x1;
+                    let ndy: f32 = get[f32](e.by, i + 1) - y1;
+                    let nln: f32 = vg_sqrt(ndx * ndx + ndy * ndy);
+                    if (nln > 0.0001) {
+                        let nnx: f32 = (0.0 - ndy) / nln * hw;
+                        let nny: f32 = ndx / nln * hw;
+                        // bevel triangles (also the miter-limit fallback
+                        // base), vertex-ordered for negative signed area so
+                        // they match segment-quad winding
+                        let tc: f32 = nx * nny - ny * nnx;
+                        if (tc > 0.0) {
+                            vg_move_to(&q, x1, y1);
+                            vg_line_to(&q, x1 + nnx, y1 + nny);
+                            vg_line_to(&q, x1 + nx, y1 + ny);
+                            vg_close(&q);
+                            vg_move_to(&q, x1, y1);
+                            vg_line_to(&q, x1 - nnx, y1 - nny);
+                            vg_line_to(&q, x1 - nx, y1 - ny);
+                            vg_close(&q);
+                        } else {
+                            vg_move_to(&q, x1, y1);
+                            vg_line_to(&q, x1 + nx, y1 + ny);
+                            vg_line_to(&q, x1 + nnx, y1 + nny);
+                            vg_close(&q);
+                            vg_move_to(&q, x1, y1);
+                            vg_line_to(&q, x1 - nx, y1 - ny);
+                            vg_line_to(&q, x1 - nnx, y1 - nny);
+                            vg_close(&q);
+                        }
+                        if (join == 2) {
+                            // miter: outer-side offset-line intersection.
+                            // turn direction (TRUE 2D cross of the two unit
+                            // directions) picks the outer side; the wedge
+                            // (corner, tip, corner) extends the bevel to the
+                            // miter point unless the 4.0 limit is exceeded.
+                            // Traversal order is turn-conditioned so the wedge
+                            // is NEGATIVELY wound by construction on both turn
+                            // sides — a positive wedge over the segment quads
+                            // cancels winding and punches a notch hole.
+                            let cross: f32 = ux * (ndy / nln) - uy * (ndx / nln);
+                            if (cross > 0.0001 || cross < -0.0001) {
+                                let sgn: f32 = 1.0;
+                                if (cross > 0.0) { sgn = 0.0 - 1.0; }
+                                let o1x: f32 = nx / hw * sgn;
+                                let o1y: f32 = ny / hw * sgn;
+                                let o2x: f32 = nnx / hw * sgn;
+                                let o2y: f32 = nny / hw * sgn;
+                                let mx: f32 = o1x + o2x;
+                                let my: f32 = o1y + o2y;
+                                let mlen: f32 = vg_sqrt(mx * mx + my * my);
+                                if (mlen > 0.0001) {
+                                    mx = mx / mlen;
+                                    my = my / mlen;
+                                    let cosh: f32 = mx * o1x + my * o1y;
+                                    if (cosh > 0.25) {
+                                        let mdist: f32 = hw / cosh;
+                                        if (cross < 0.0) {
+                                            vg_move_to(&q, x1 + o1x * hw, y1 + o1y * hw);
+                                            vg_line_to(&q, x1 + mx * mdist, y1 + my * mdist);
+                                            vg_line_to(&q, x1 + o2x * hw, y1 + o2y * hw);
+                                            vg_line_to(&q, x1, y1);
+                                            vg_close(&q);
+                                        } else {
+                                            vg_move_to(&q, x1 + o2x * hw, y1 + o2y * hw);
+                                            vg_line_to(&q, x1 + mx * mdist, y1 + my * mdist);
+                                            vg_line_to(&q, x1 + o1x * hw, y1 + o1y * hw);
+                                            vg_line_to(&q, x1, y1);
+                                            vg_close(&q);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (chain_start == 1) {
+                vg_stroke_cap(&q, x0, y0, 0.0 - ux, 0.0 - uy, nx, ny, hw, cap);
+            }
+            if (chain_end == 1) {
+                vg_stroke_cap(&q, x1, y1, ux, uy, nx, ny, hw, cap);
+            }
+        }
+        i = i + 1;
+    }
+    return q;
+}
+
+fn vg_stroke_ex(fb: *SoftFb, p: *VPath, width: f32, cap: i32, join: i32, r: i32, g: i32, b: i32, a: i32) void {
+    let q: VPath = vg_stroke_outline(p, width, cap, join);
+    vg_stroke_fill_outline(fb, &q, r, g, b, a);
+}
+
+// Default stroke: round caps, round joins.
+fn vg_stroke(fb: *SoftFb, p: *VPath, width: f32, r: i32, g: i32, b: i32, a: i32) void {
+    vg_stroke_ex(fb, p, width, vg_cap_round(), vg_join_round(), r, g, b, a);
+}
+
+// ── v2: trig, transforms, radial gradients, blur, arcs, dashes, scaled text ──
+
+fn vg_pi() f32 { return 3.1415926; }
+
+// Taylor sine after range reduction to [-pi, pi].
+fn vg_sin(x: f32) f32 {
+    let v: f32 = x;
+    while (v > vg_pi()) { v = v - 2.0 * vg_pi(); }
+    while (v < 0.0 - vg_pi()) { v = v + 2.0 * vg_pi(); }
+    let v2: f32 = v * v;
+    let t: f32 = v;
+    let acc: f32 = v;
+    t = t * v2 / 6.0;
+    acc = acc - t;
+    t = t * v2 / 20.0;
+    acc = acc + t;
+    t = t * v2 / 42.0;
+    acc = acc - t;
+    t = t * v2 / 72.0;
+    acc = acc + t;
+    return acc;
+}
+
+fn vg_cos(x: f32) f32 {
+    return vg_sin(x + vg_pi() * 0.5);
+}
+
+// Affine transform: x' = a*x + c*y + e ; y' = b*x + d*y + f.
+struct VgXf {
+    a: f32, b: f32, c: f32, d: f32, e: f32, f: f32,
+}
+
+fn vg_xf_identity() VgXf {
+    return VgXf{ .a = 1.0, .b = 0.0, .c = 0.0, .d = 1.0, .e = 0.0, .f = 0.0 };
+}
+
+fn vg_xf_translate(tx: f32, ty: f32) VgXf {
+    return VgXf{ .a = 1.0, .b = 0.0, .c = 0.0, .d = 1.0, .e = tx, .f = ty };
+}
+
+fn vg_xf_scale(sx: f32, sy: f32) VgXf {
+    return VgXf{ .a = sx, .b = 0.0, .c = 0.0, .d = sy, .e = 0.0, .f = 0.0 };
+}
+
+fn vg_xf_rotate(rad: f32) VgXf {
+    let cs: f32 = vg_cos(rad);
+    let sn: f32 = vg_sin(rad);
+    return VgXf{ .a = cs, .b = sn, .c = 0.0 - sn, .d = cs, .e = 0.0, .f = 0.0 };
+}
+
+// m ∘ n: apply n first, then m.
+fn vg_xf_mul(m: VgXf, n: VgXf) VgXf {
+    return VgXf{
+        .a = m.a * n.a + m.c * n.b,
+        .b = m.b * n.a + m.d * n.b,
+        .c = m.a * n.c + m.c * n.d,
+        .d = m.b * n.c + m.d * n.d,
+        .e = m.a * n.e + m.c * n.f + m.e,
+        .f = m.b * n.e + m.d * n.f + m.f,
+    };
+}
+
+fn vg_path_transform(p: *VPath, m: VgXf) void {
+    let i: i32 = 0;
+    while (i < len[f32](p.*.vx)) {
+        let x: f32 = get[f32](p.*.vx, i);
+        let y: f32 = get[f32](p.*.vy, i);
+        set[f32](&p.*.vx, i, m.a * x + m.c * y + m.e);
+        set[f32](&p.*.vy, i, m.b * x + m.d * y + m.f);
+        i = i + 1;
+    }
+}
+
+fn vg_fill_radial(
+    fb: *SoftFb, p: *VPath,
+    cx: f32, cy: f32, rad: f32,
+    r: i32, g: i32, b: i32, a: i32,
+    r2: i32, g2: i32, b2: i32, a2: i32,
+) void {
+    let e: VEdges = vg_flatten(p);
+    let paint: VgPaint = vg_paint_base(2, r, g, b, a);
+    paint.r2 = r2;
+    paint.g2 = g2;
+    paint.b2 = b2;
+    paint.a2 = a2;
+    paint.gx0 = cx;
+    paint.gy0 = cy;
+    paint.gx1 = rad;
+    vg_fill_edges(fb, &e, &paint);
+}
+
+// Separable box blur over a framebuffer region (radius in pixels). Two
+// passes approximate a soft gaussian well enough for UI shadows.
+fn vg_blur_region(fb: *SoftFb, x0: i32, y0: i32, w: i32, h: i32, radius: i32) void {
+    if (radius < 1) { return; }
+    let rx0: i32 = vg_clamp_i(x0, 0, fb.*.w - 1);
+    let ry0: i32 = vg_clamp_i(y0, 0, fb.*.h - 1);
+    let rx1: i32 = vg_clamp_i(x0 + w - 1, 0, fb.*.w - 1);
+    let ry1: i32 = vg_clamp_i(y0 + h - 1, 0, fb.*.h - 1);
+    let rw: i32 = rx1 - rx0 + 1;
+    let rh: i32 = ry1 - ry0 + 1;
+    if (rw < 1 || rh < 1) { return; }
+    softgpu_damage_mark_rect(fb, rx0, ry0, rx1, ry1);
+    let tmp: ArrayList[u8] = make[u8](rw * rh * 3);
+    let ti: i32 = 0;
+    while (ti < rw * rh * 3) { push[u8](&tmp, 0); ti = ti + 1; }
+    let win: i32 = radius * 2 + 1;
+
+    // horizontal pass fb → tmp
+    let y: i32 = 0;
+    while (y < rh) {
+        let x: i32 = 0;
+        while (x < rw) {
+            let sr: i32 = 0;
+            let sg: i32 = 0;
+            let sb: i32 = 0;
+            let k: i32 = 0 - radius;
+            while (k <= radius) {
+                let sx: i32 = vg_clamp_i(x + k, 0, rw - 1);
+                let o: i32 = ((ry0 + y) * fb.*.w + rx0 + sx) * 3;
+                sr = sr + (get[u8](fb.*.pix, o) as i32);
+                sg = sg + (get[u8](fb.*.pix, o + 1) as i32);
+                sb = sb + (get[u8](fb.*.pix, o + 2) as i32);
+                k = k + 1;
+            }
+            let to: i32 = (y * rw + x) * 3;
+            set[u8](&tmp, to, (sr / win) as u8);
+            set[u8](&tmp, to + 1, (sg / win) as u8);
+            set[u8](&tmp, to + 2, (sb / win) as u8);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    // vertical pass tmp → fb
+    y = 0;
+    while (y < rh) {
+        let x: i32 = 0;
+        while (x < rw) {
+            let sr: i32 = 0;
+            let sg: i32 = 0;
+            let sb: i32 = 0;
+            let k: i32 = 0 - radius;
+            while (k <= radius) {
+                let sy: i32 = vg_clamp_i(y + k, 0, rh - 1);
+                let to: i32 = (sy * rw + x) * 3;
+                sr = sr + (get[u8](tmp, to) as i32);
+                sg = sg + (get[u8](tmp, to + 1) as i32);
+                sb = sb + (get[u8](tmp, to + 2) as i32);
+                k = k + 1;
+            }
+            let o: i32 = ((ry0 + y) * fb.*.w + rx0 + x) * 3;
+            set[u8](&fb.*.pix, o, (sr / win) as u8);
+            set[u8](&fb.*.pix, o + 1, (sg / win) as u8);
+            set[u8](&fb.*.pix, o + 2, (sb / win) as u8);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+// Append arc points (line segments) from angle a0 to a1; the caller supplies
+// the initial move_to/line_to positioning.
+fn vg_arc(p: *VPath, cx: f32, cy: f32, rad: f32, a0: f32, a1: f32, segs: i32) void {
+    let i: i32 = 1;
+    while (i <= segs) {
+        let t: f32 = a0 + (a1 - a0) * (i as f32) / (segs as f32);
+        vg_line_to(p, cx + rad * vg_cos(t), cy + rad * vg_sin(t));
+        i = i + 1;
+    }
+}
+
+// Donut segment (gauge slice) between radii r_in..r_out over a0..a1.
+fn vg_donut(p: *VPath, cx: f32, cy: f32, r_out: f32, r_in: f32, a0: f32, a1: f32) void {
+    vg_move_to(p, cx + r_out * vg_cos(a0), cy + r_out * vg_sin(a0));
+    vg_arc(p, cx, cy, r_out, a0, a1, 24);
+    vg_line_to(p, cx + r_in * vg_cos(a1), cy + r_in * vg_sin(a1));
+    let i: i32 = 1;
+    while (i <= 24) {
+        let t: f32 = a1 + (a0 - a1) * (i as f32) / 24.0;
+        vg_line_to(p, cx + r_in * vg_cos(t), cy + r_in * vg_sin(t));
+        i = i + 1;
+    }
+    vg_close(p);
+}
+
+// Dashed stroke: on/off lengths marched along the flattened polyline.
+// Slice a path into its dash runs: the same arc-length pen walk the old dash
+// stroker used, but emitting a PATH of "on" polylines instead of painting
+// quads directly. The dash phase carries across edges, and a run that
+// continues through a vertex keeps its polyline — so the stroker puts a JOIN
+// there and caps only real dash ends.
+fn vg_dash_path(p: *VPath, on_len: f32, off_len: f32) VPath {
+    let e: VEdges = vg_flatten_ex(p, 0);
+    let q: VPath = vg_path_new();
+    let pen_on: i32 = 1;
+    let left: f32 = on_len;
+    let run_open: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[f32](e.ax)) {
+        let x0: f32 = get[f32](e.ax, i);
+        let y0: f32 = get[f32](e.ay, i);
+        let x1: f32 = get[f32](e.bx, i);
+        let y1: f32 = get[f32](e.by, i);
+        if (i > 0) {
+            if (get[f32](e.bx, i - 1) != x0 || get[f32](e.by, i - 1) != y0) {
+                run_open = 0;   // new subpath — never bridge a dash across it
+            }
+        }
+        let dx: f32 = x1 - x0;
+        let dy: f32 = y1 - y0;
+        let ln: f32 = vg_sqrt(dx * dx + dy * dy);
+        let pos: f32 = 0.0;
+        while (pos < ln) {
+            let step: f32 = left;
+            if (pos + step > ln) { step = ln - pos; }
+            let t0: f32 = pos / ln;
+            let t1: f32 = (pos + step) / ln;
+            if (pen_on == 1) {
+                if (run_open == 0) {
+                    vg_move_to(&q, x0 + dx * t0, y0 + dy * t0);
+                    run_open = 1;
+                }
+                vg_line_to(&q, x0 + dx * t1, y0 + dy * t1);
+            }
+            pos = pos + step;
+            left = left - step;
+            if (left <= 0.0001) {
+                if (pen_on == 1) {
+                    pen_on = 0;
+                    left = off_len;
+                    run_open = 0;
+                } else {
+                    pen_on = 1;
+                    left = on_len;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return q;
+}
+
+// Dashed stroke through the SAME outline builder as solid strokes: one
+// normalized fill, so translucent dashes have no seams, and every dash end
+// gets a real cap (round/square/butt) with joins inside multi-edge runs.
+fn vg_stroke_dash_ex(
+    fb: *SoftFb, p: *VPath, width: f32,
+    on_len: f32, off_len: f32,
+    cap: i32, join: i32,
+    r: i32, g: i32, b: i32, a: i32,
+) void {
+    let d: VPath = vg_dash_path(p, on_len, off_len);
+    let q: VPath = vg_stroke_outline(&d, width, cap, join);
+    vg_stroke_fill_outline(fb, &q, r, g, b, a);
+}
+
+// Compat entry: butt caps + bevel joins match the old per-quad dash look.
+fn vg_stroke_dash(
+    fb: *SoftFb, p: *VPath, width: f32,
+    on_len: f32, off_len: f32,
+    r: i32, g: i32, b: i32, a: i32,
+) void {
+    vg_stroke_dash_ex(fb, p, width, on_len, off_len, vg_cap_butt(), vg_join_bevel(), r, g, b, a);
+}
+
+// Scalable dot-matrix text: each lit cell of the 5×7 glyph becomes an AA
+// disk of radius dot*0.55 — crisp at small sizes, flip-dot at large ones.
+fn vg_text_dots(fb: *SoftFb, x: f32, y: f32, s: []u8, dot: f32, r: i32, g: i32, b: i32, a: i32) void {
+    let i: i32 = 0;
+    while (i < s.len) {
+        let bits: []u8 = softgpu_glyph(s[i] as i32);
+        let row: i32 = 0;
+        while (row < 7) {
+            let col: i32 = 0;
+            while (col < 5) {
+                if (bits[row * 5 + col] == '1') {
+                    let d: VPath = vg_path_new();
+                    vg_circle(&d,
+                        x + ((i * 6 + col) as f32) * dot,
+                        y + (row as f32) * dot,
+                        dot * 0.55);
+                    vg_fill(fb, &d, r, g, b, a);
+                }
+                col = col + 1;
+            }
+            row = row + 1;
+        }
+        i = i + 1;
+    }
+}
+
+// ── v3: clipping and textures ────────────────────────────────────────────────
+
+// Rect clip (canvas-style state on the framebuffer).
+fn vg_set_clip(fb: *SoftFb, x: i32, y: i32, w: i32, h: i32) void {
+    softgpu_set_clip(fb, x, y, w, h);
+}
+
+fn vg_clear_clip(fb: *SoftFb) void {
+    softgpu_clear_clip(fb);
+}
+
+// Path-shaped clip: rasterizes the path's AA coverage into the framebuffer
+// mask; subsequent blended drawing is modulated by it (soft edges included).
+fn vg_clip_path(fb: *SoftFb, p: *VPath) void {
+    let need: i32 = fb.*.w * fb.*.h;
+    while (len[u8](fb.*.mask) < need) { push[u8](&fb.*.mask, 0); }
+    let mi: i32 = 0;
+    while (mi < need) { set[u8](&fb.*.mask, mi, 0); mi = mi + 1; }
+    let e: VEdges = vg_flatten(p);
+    let paint: VgPaint = vg_paint_base(3, 0, 0, 0, 255);
+    vg_fill_edges(fb, &e, &paint);
+    fb.*.mask_on = 1;
+}
+
+fn vg_clip_path_off(fb: *SoftFb) void {
+    fb.*.mask_on = 0;
+}
+
+// Inverse of an affine transform.
+fn vg_xf_invert(m: VgXf) VgXf {
+    let det: f32 = m.a * m.d - m.b * m.c;
+    if (det == 0.0) { return vg_xf_identity(); }
+    return VgXf{
+        .a = m.d / det,
+        .b = (0.0 - m.b) / det,
+        .c = (0.0 - m.c) / det,
+        .d = m.a / det,
+        .e = (m.c * m.f - m.d * m.e) / det,
+        .f = (m.b * m.e - m.a * m.f) / det,
+    };
+}
+
+// ── images ───────────────────────────────────────────────────────────────────
+
+fn vg_image_new(w: i32, h: i32) VgImage {
+    let n: i32 = w * h * 4;
+    let pix: ArrayList[u8] = make[u8](n);
+    let i: i32 = 0;
+    while (i < n) { push[u8](&pix, 0); i = i + 1; }
+    return VgImage{ .w = w, .h = h, .pix = pix };
+}
+
+fn vg_image_set(img: *VgImage, x: i32, y: i32, r: i32, g: i32, b: i32, a: i32) void {
+    if (x < 0 || y < 0 || x >= img.*.w || y >= img.*.h) { return; }
+    let o: i32 = (y * img.*.w + x) * 4;
+    set[u8](&img.*.pix, o, r as u8);
+    set[u8](&img.*.pix, o + 1, g as u8);
+    set[u8](&img.*.pix, o + 2, b as u8);
+    set[u8](&img.*.pix, o + 3, a as u8);
+}
+
+fn vg_ppm_skip_ws(s: []u8, at: i32) i32 {
+    let i: i32 = at;
+    while (i < s.len) {
+        let c: i32 = s[i] as i32;
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') { i = i + 1; }
+        else { return i; }
+    }
+    return i;
+}
+
+fn vg_ppm_read_int(s: []u8, at: i32) i32 {
+    let i: i32 = at;
+    let v: i32 = 0;
+    while (i < s.len) {
+        let c: i32 = s[i] as i32;
+        if (c >= '0' && c <= '9') {
+            v = v * 10 + (c - '0');
+            i = i + 1;
+        } else {
+            return v;
+        }
+    }
+    return v;
+}
+
+fn vg_ppm_int_end(s: []u8, at: i32) i32 {
+    let i: i32 = at;
+    while (i < s.len) {
+        let c: i32 = s[i] as i32;
+        if (c >= '0' && c <= '9') { i = i + 1; }
+        else { return i; }
+    }
+    return i;
+}
+
+// Load a binary P6 PPM as an RGBA image (alpha = 255). Returns w = 0 on
+// failure — callers must check.
+fn vg_image_load_ppm(path: []u8) VgImage {
+    let bad: VgImage = VgImage{ .w = 0, .h = 0, .pix = make[u8](0) };
+    let s: []u8 = _zag_read_file(path);
+    if (s.len < 11) { return bad; }
+    if (s[0] != 'P' || s[1] != '6') { return bad; }
+    let at: i32 = vg_ppm_skip_ws(s, 2);
+    let w: i32 = vg_ppm_read_int(s, at);
+    at = vg_ppm_skip_ws(s, vg_ppm_int_end(s, at));
+    let h: i32 = vg_ppm_read_int(s, at);
+    at = vg_ppm_skip_ws(s, vg_ppm_int_end(s, at));
+    let maxv: i32 = vg_ppm_read_int(s, at);
+    at = vg_ppm_int_end(s, at) + 1;   // single whitespace after maxval
+    if (w < 1 || h < 1 || maxv != 255) { return bad; }
+    if (s.len < at + w * h * 3) { return bad; }
+    let img: VgImage = vg_image_new(w, h);
+    let i: i32 = 0;
+    while (i < w * h) {
+        let o: i32 = at + i * 3;
+        set[u8](&img.pix, i * 4, s[o]);
+        set[u8](&img.pix, i * 4 + 1, s[o + 1]);
+        set[u8](&img.pix, i * 4 + 2, s[o + 2]);
+        set[u8](&img.pix, i * 4 + 3, 255);
+        i = i + 1;
+    }
+    return img;
+}
+
+// Fill a path with an image placed by `m` (image space → device space).
+fn vg_fill_image(fb: *SoftFb, p: *VPath, img: *VgImage, m: VgXf, alpha: i32) void {
+    let e: VEdges = vg_flatten(p);
+    let paint: VgPaint = vg_paint_base(4, 255, 255, 255, alpha);
+    paint.img = img;
+    paint.ixf = vg_xf_invert(m);
+    vg_fill_edges(fb, &e, &paint);
+}
+
+// Draw the whole image under an affine transform (bilinear, alpha-blended).
+fn vg_draw_image_xf(fb: *SoftFb, img: *VgImage, m: VgXf, alpha: i32) void {
+    let p: VPath = vg_path_new();
+    vg_move_to(&p, 0.0, 0.0);
+    vg_line_to(&p, img.*.w as f32, 0.0);
+    vg_line_to(&p, img.*.w as f32, img.*.h as f32);
+    vg_line_to(&p, 0.0, img.*.h as f32);
+    vg_close(&p);
+    vg_path_transform(&p, m);
+    vg_fill_image(fb, &p, img, m, alpha);
+}
+
+fn vg_draw_image(fb: *SoftFb, img: *VgImage, x: f32, y: f32, scale: f32) void {
+    let m: VgXf = vg_xf_mul(vg_xf_translate(x, y), vg_xf_scale(scale, scale));
+    vg_draw_image_xf(fb, img, m, 255);
+}
+
+// ── v4: offscreen layers with group opacity ──────────────────────────────────
+//
+// A layer is a black-cleared framebuffer with an alpha-accumulation plane:
+// ordinary blending against black then produces premultiplied content, and
+// the plane records total coverage — so a whole group of overlapping draws
+// composites onto a destination at one opacity without internal double-
+// darkening. Layers are full framebuffers: every vgpu/softgpu call works on
+// them, including vg_blur_region (blurred-group shadows).
+
+fn vg_layer_new(w: i32, h: i32) SoftFb {
+    let l: SoftFb = softgpu_new(w, h);
+    let n: i32 = w * h;
+    let i: i32 = 0;
+    while (i < n) { push[u8](&l.acc, 0); i = i + 1; }
+    l.acc_on = 1;
+    return l;
+}
+
+fn vg_layer_reset(l: *SoftFb) void {
+    softgpu_clear(l, 0, 0, 0);
+    let n: i32 = l.*.w * l.*.h;
+    let i: i32 = 0;
+    while (i < n) { set[u8](&l.*.acc, i, 0); i = i + 1; }
+}
+
+// Premultiplied source-over of a layer at (ox,oy) with group opacity 0..255.
+fn vg_layer_composite(dst: *SoftFb, l: *SoftFb, ox: i32, oy: i32, opacity: i32) void {
+    let y: i32 = 0;
+    while (y < l.*.h) {
+        let x: i32 = 0;
+        while (x < l.*.w) {
+            let la: i32 = get[u8](l.*.acc, y * l.*.w + x) as i32;
+            if (la > 0) {
+                let dx: i32 = ox + x;
+                let dy: i32 = oy + y;
+                if (dx >= 0 && dy >= 0 && dx < dst.*.w && dy < dst.*.h) {
+                    if (softgpu_clip_test(dst, dx, dy) == 1) {
+                        let ea: i32 = (la * opacity) / 255;
+                        let so: i32 = (y * l.*.w + x) * 3;
+                        let doff: i32 = (dy * dst.*.w + dx) * 3;
+                        let sr: i32 = ((get[u8](l.*.pix, so) as i32) * opacity) / 255;
+                        let sg: i32 = ((get[u8](l.*.pix, so + 1) as i32) * opacity) / 255;
+                        let sb: i32 = ((get[u8](l.*.pix, so + 2) as i32) * opacity) / 255;
+                        let dr: i32 = get[u8](dst.*.pix, doff) as i32;
+                        let dg: i32 = get[u8](dst.*.pix, doff + 1) as i32;
+                        let db: i32 = get[u8](dst.*.pix, doff + 2) as i32;
+                        set[u8](&dst.*.pix, doff, (sr + (dr * (255 - ea)) / 255) as u8);
+                        set[u8](&dst.*.pix, doff + 1, (sg + (dg * (255 - ea)) / 255) as u8);
+                        set[u8](&dst.*.pix, doff + 2, (sb + (db * (255 - ea)) / 255) as u8);
+                        if (dst.*.dmg_on == 1) {
+                            softgpu_damage_mark(dst, dx, dy);
+                        }
+                        if (dst.*.acc_on == 1) {
+                            let oa: i32 = get[u8](dst.*.acc, dy * dst.*.w + dx) as i32;
+                            set[u8](&dst.*.acc, dy * dst.*.w + dx, (ea + (oa * (255 - ea)) / 255) as u8);
+                        }
+                    }
+                }
+            }
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+// ── v5: single-stroke vector font ────────────────────────────────────────────
+//
+// Glyphs are polylines on a 10-wide × 14-tall grid (baseline y = 14),
+// encoded "x,y x,y ...;x,y ..." (';' separates polylines). Rendered through
+// vg_stroke_ex with round caps/joins, so text scales to any size and any
+// weight with full anti-aliasing. Advance is 13 grid units.
+
+fn vg_font_glyph(c: i32) []u8 {
+    if (c == 'A') { return "0,14 5,0 10,14;2,10 8,10"; }
+    if (c == 'B') { return "0,0 0,14;0,0 7,0 9,2 9,5 7,7 0,7;7,7 9,9 9,12 7,14 0,14"; }
+    if (c == 'C') { return "10,3 7,0 3,0 0,3 0,11 3,14 7,14 10,11"; }
+    if (c == 'D') { return "0,0 0,14;0,0 6,0 10,4 10,10 6,14 0,14"; }
+    if (c == 'E') { return "10,0 0,0 0,14 10,14;0,7 7,7"; }
+    if (c == 'F') { return "10,0 0,0 0,14;0,7 7,7"; }
+    if (c == 'G') { return "10,3 7,0 3,0 0,3 0,11 3,14 7,14 10,11 10,8 5,8"; }
+    if (c == 'H') { return "0,0 0,14;10,0 10,14;0,7 10,7"; }
+    if (c == 'I') { return "5,0 5,14;2,0 8,0;2,14 8,14"; }
+    if (c == 'J') { return "8,0 8,11 5,14 3,14 0,11"; }
+    if (c == 'K') { return "0,0 0,14;10,0 0,7;3,5 10,14"; }
+    if (c == 'L') { return "0,0 0,14 10,14"; }
+    if (c == 'M') { return "0,14 0,0 5,8 10,0 10,14"; }
+    if (c == 'N') { return "0,14 0,0 10,14 10,0"; }
+    if (c == 'O') { return "3,0 7,0 10,3 10,11 7,14 3,14 0,11 0,3 3,0"; }
+    if (c == 'P') { return "0,14 0,0 7,0 10,3 10,5 7,8 0,8"; }
+    if (c == 'Q') { return "3,0 7,0 10,3 10,11 7,14 3,14 0,11 0,3 3,0;6,10 10,14"; }
+    if (c == 'R') { return "0,14 0,0 7,0 10,3 10,5 7,8 0,8;4,8 10,14"; }
+    if (c == 'S') { return "10,3 7,0 3,0 0,2 0,5 3,7 7,7 10,9 10,12 7,14 3,14 0,11"; }
+    if (c == 'T') { return "0,0 10,0;5,0 5,14"; }
+    if (c == 'U') { return "0,0 0,11 3,14 7,14 10,11 10,0"; }
+    if (c == 'V') { return "0,0 5,14 10,0"; }
+    if (c == 'W') { return "0,0 2,14 5,6 8,14 10,0"; }
+    if (c == 'X') { return "0,0 10,14;10,0 0,14"; }
+    if (c == 'Y') { return "0,0 5,7 10,0;5,7 5,14"; }
+    if (c == 'Z') { return "0,0 10,0 0,14 10,14"; }
+    if (c == '0') { return "3,0 7,0 10,3 10,11 7,14 3,14 0,11 0,3 3,0;3,10 7,4"; }
+    if (c == '1') { return "2,3 5,0 5,14;2,14 8,14"; }
+    if (c == '2') { return "0,3 3,0 7,0 10,3 10,5 0,14 10,14"; }
+    if (c == '3') { return "0,2 3,0 7,0 10,2 10,5 7,7 4,7;7,7 10,9 10,12 7,14 3,14 0,12"; }
+    if (c == '4') { return "8,14 8,0 0,10 10,10"; }
+    if (c == '5') { return "10,0 0,0 0,6 6,6 10,8 10,11 7,14 3,14 0,12"; }
+    if (c == '6') { return "9,2 6,0 3,0 0,3 0,11 3,14 7,14 10,11 10,9 7,6 3,6 0,9"; }
+    if (c == '7') { return "0,0 10,0 4,14"; }
+    if (c == '8') { return "3,0 7,0 9,2 9,5 7,7 3,7 1,5 1,2 3,0;3,7 7,7 10,9 10,12 7,14 3,14 0,12 0,9 3,7"; }
+    if (c == '9') { return "10,5 7,8 3,8 0,5 0,3 3,0 7,0 10,3 10,11 7,14 4,14 1,12"; }
+    if (c == '-') { return "2,7 8,7"; }
+    if (c == '+') { return "5,4 5,10;2,7 8,7"; }
+    if (c == '.') { return "5,13 5,14"; }
+    if (c == ':') { return "5,4 5,5;5,12 5,13"; }
+    if (c == '=') { return "1,5 9,5;1,9 9,9"; }
+    if (c == '/') { return "10,0 0,14"; }
+    return "";
+}
+
+fn vg_font_read_int(s: []u8, at: i32) i32 {
+    let i: i32 = at;
+    let v: i32 = 0;
+    while (i < s.len) {
+        let c: i32 = s[i] as i32;
+        if (c >= '0' && c <= '9') {
+            v = v * 10 + (c - '0');
+            i = i + 1;
+        } else {
+            return v;
+        }
+    }
+    return v;
+}
+
+fn vg_font_int_end(s: []u8, at: i32) i32 {
+    let i: i32 = at;
+    while (i < s.len) {
+        let c: i32 = s[i] as i32;
+        if (c >= '0' && c <= '9') { i = i + 1; }
+        else { return i; }
+    }
+    return i;
+}
+
+// Build one glyph's polylines into `p` (unscaled grid coordinates).
+fn vg_font_build(p: *VPath, spec: []u8) void {
+    let at: i32 = 0;
+    let pen_down: i32 = 0;
+    while (at < spec.len) {
+        let x: i32 = vg_font_read_int(spec, at);
+        at = vg_font_int_end(spec, at) + 1;   // skip ','
+        let y: i32 = vg_font_read_int(spec, at);
+        at = vg_font_int_end(spec, at);
+        if (pen_down == 0) {
+            vg_move_to(p, x as f32, y as f32);
+            pen_down = 1;
+        } else {
+            vg_line_to(p, x as f32, y as f32);
+        }
+        if (at < spec.len) {
+            if (spec[at] == ';') { pen_down = 0; }
+            at = at + 1;
+        }
+    }
+}
+
+fn vg_text_width(s: []u8, size: f32) f32 {
+    return (s.len as f32) * 13.0 * (size / 14.0);
+}
+
+// Scalable stroked text: `size` is the cap height in pixels, `weight` the
+// stroke width in pixels (e.g. size/9 regular, size/5 bold).
+fn vg_text_vec(fb: *SoftFb, x: f32, y: f32, s: []u8, size: f32, weight: f32, r: i32, g: i32, b: i32, a: i32) void {
+    let sc: f32 = size / 14.0;
+    let i: i32 = 0;
+    while (i < s.len) {
+        let spec: []u8 = vg_font_glyph(s[i] as i32);
+        if (spec.len > 0) {
+            let p: VPath = vg_path_new();
+            vg_font_build(&p, spec);
+            let m: VgXf = vg_xf_mul(
+                vg_xf_translate(x + (i as f32) * 13.0 * sc, y),
+                vg_xf_scale(sc, sc));
+            vg_path_transform(&p, m);
+            vg_stroke_ex(fb, &p, weight, vg_cap_round(), vg_join_round(), r, g, b, a);
+        }
+        i = i + 1;
+    }
+}
+
+// ── v6: filled outline font faces ────────────────────────────────────────────
+//
+// The single-stroke skeletons expand into CLOSED OUTLINE CONTOURS via the
+// stroke outline builder, giving a filled face instead of a painted stroke.
+// Because the result is a path filled in one pass, faces take any VgPaint —
+// gradient text, image-textured text, even text-shaped clip masks — and stay
+// seam-free at any alpha.
+
+fn vg_path_append(dst: *VPath, src: *VPath) void {
+    let i: i32 = 0;
+    while (i < len[f32](src.*.vx)) {
+        push[f32](&dst.*.vx, get[f32](src.*.vx, i));
+        push[f32](&dst.*.vy, get[f32](src.*.vy, i));
+        i = i + 1;
+    }
+    let j: i32 = 0;
+    while (j < len[i32](src.*.verbs)) {
+        push[i32](&dst.*.verbs, get[i32](src.*.verbs, j));
+        j = j + 1;
+    }
+}
+
+// The combined outline contours of a whole string, as one fillable path.
+// Square caps + miter joins give flat print-style terminals; pass round/round
+// for a softer face.
+fn vg_text_outline(x: f32, y: f32, s: []u8, size: f32, weight: f32, cap: i32, join: i32) VPath {
+    let sc: f32 = size / 14.0;
+    let q: VPath = vg_path_new();
+    let i: i32 = 0;
+    while (i < s.len) {
+        let spec: []u8 = vg_font_glyph(s[i] as i32);
+        if (spec.len > 0) {
+            let p: VPath = vg_path_new();
+            vg_font_build(&p, spec);
+            let m: VgXf = vg_xf_mul(
+                vg_xf_translate(x + (i as f32) * 13.0 * sc, y),
+                vg_xf_scale(sc, sc));
+            vg_path_transform(&p, m);
+            let o: VPath = vg_stroke_outline(&p, weight, cap, join);
+            vg_path_append(&q, &o);
+        }
+        i = i + 1;
+    }
+    return q;
+}
+
+// Filled text face with an arbitrary paint (solid, gradient, image, clip).
+fn vg_text_face(fb: *SoftFb, x: f32, y: f32, s: []u8, size: f32, weight: f32, paint: *VgPaint) void {
+    let q: VPath = vg_text_outline(x, y, s, size, weight, vg_cap_square(), vg_join_miter());
+    vg_stroke_fill_outline_paint(fb, &q, paint);
+}
+
+// Solid-color filled face convenience entry.
+fn vg_text_face_solid(fb: *SoftFb, x: f32, y: f32, s: []u8, size: f32, weight: f32, r: i32, g: i32, b: i32, a: i32) void {
+    let paint: VgPaint = vg_paint_base(0, r, g, b, a);
+    vg_text_face(fb, x, y, s, size, weight, &paint);
+}

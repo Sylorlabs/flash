@@ -1,0 +1,459 @@
+// flash/compiler/parse.zag — parser for .flash.zag → FlashProgram AST.
+
+@import("../toolchain/zag-poc/std/list.zag")
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("flash_diag.zag")
+@import("flash_lex.zag")
+
+enum FlashTy {
+    Trit, Wave, P32, SatI16, Mat3, TritTriple,
+}
+
+enum RawCallKind {
+    FireShield, InjectPhase, SetLaserMw, TargetVoxel, ManualPolarity,
+}
+
+struct RawCall {
+    kind: RawCallKind,
+    args: ArrayList[f32],
+}
+
+enum FlashStmtKind {
+    TritBind, WaveBind, P32Bind, SatI16Bind, TritOp, Mat3Op, RawBlock,
+}
+
+struct FlashStmt {
+    kind: FlashStmtKind,
+    line: i32,
+    name: []u8,
+    trit_lit: i32,
+    float_lit: f32,
+    op_name: []u8,
+    op_a: []u8,
+    op_b: []u8,
+    op_c: []u8,
+    op_d: []u8,
+    op_argc: i32,
+    op_dst: []u8,
+    raw_calls: ArrayList[RawCall],
+}
+
+struct FlashProgram {
+    name: []u8,
+    stmts: ArrayList[FlashStmt],
+}
+
+struct FlashParseResult {
+    prog: FlashProgram,
+    err: i32,
+}
+
+struct FParser {
+    toks: ArrayList[FToken],
+    pos: i32,
+    err: i32,
+    file: []u8,
+}
+
+fn fp_parse_err(p: *FParser, msg: []u8, line: i32) void {
+    diag_emit("F0006", msg, p.*.file, line, 1, 1, "", "");
+    p.*.err = 1;
+}
+
+fn fp_peek(p: *FParser) FToken {
+    return get[FToken](p.*.toks, p.*.pos);
+}
+
+fn fp_advance(p: *FParser) FToken {
+    let t: FToken = fp_peek(p);
+    if (t.kind != Fk.Eof) { p.*.pos = p.*.pos + 1; }
+    return t;
+}
+
+fn fp_expect(p: *FParser, kind: Fk) FToken {
+    let t: FToken = fp_advance(p);
+    if (t.kind != kind) {
+        fp_parse_err(p, "unexpected token in surface parse", t.line);
+    }
+    return t;
+}
+
+fn fp_match(p: *FParser, kind: Fk) i32 {
+    if (fp_peek(p).kind == kind) {
+        let _t: FToken = fp_advance(p);
+        return 1;
+    }
+    return 0;
+}
+
+fn fp_skip_semi(p: *FParser) void {
+    let _s: i32 = fp_match(p, Fk.Semi);
+}
+
+fn fp_trit_lit(tok: FToken) i32 {
+    if (tok.kind == Fk.Ident && @strEq(tok.val, "T")) { return -1; }
+    if (tok.kind == Fk.Int && @strEq(tok.val, "+1")) { return 1; }
+    if (tok.kind == Fk.Int && @strEq(tok.val, "-1")) { return -1; }
+    if (tok.kind == Fk.Int && @strEq(tok.val, "0")) { return 0; }
+    if (tok.kind == Fk.Int && @strEq(tok.val, "1")) { return 1; }
+    return 99;
+}
+
+fn fp_dot_index(s: []u8) i32 {
+    let i: i32 = 0;
+    while (i < s.len) {
+        if (s[i] == '.') { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn fp_parse_float(tok: FToken) f32 {
+    if (tok.kind == Fk.Int) {
+        return _zag_str_to_i64(tok.val) as f32;
+    }
+    if (tok.kind == Fk.Float) {
+        let dot: i32 = fp_dot_index(tok.val);
+        if (dot < 0) {
+            return _zag_str_to_i64(tok.val) as f32;
+        }
+        let whole: f32 = _zag_str_to_i64(tok.val[0..dot]) as f32;
+        let frac_s: []u8 = tok.val[dot + 1..];
+        let frac: f32 = _zag_str_to_i64(frac_s) as f32;
+        let denom: f32 = 1.0;
+        let fi: i32 = 0;
+        while (fi < frac_s.len) {
+            denom = denom * 10.0;
+            fi = fi + 1;
+        }
+        return whole + frac / denom;
+    }
+    return 0.0;
+}
+
+fn fp_raw_kind_checked(p: *FParser, name: []u8, line: i32) RawCallKind {
+    if (@strEq(name, "fire_shield"))      { return RawCallKind.FireShield; }
+    if (@strEq(name, "inject_phase"))     { return RawCallKind.InjectPhase; }
+    if (@strEq(name, "set_laser_mw"))     { return RawCallKind.SetLaserMw; }
+    if (@strEq(name, "target_voxel"))     { return RawCallKind.TargetVoxel; }
+    if (@strEq(name, "manual_polarity"))  { return RawCallKind.ManualPolarity; }
+    fp_parse_err(p, _zag_str_concat("unknown raw call: ", name), line);
+    return RawCallKind.FireShield;
+}
+
+fn fp_raw_arg_count(kind: RawCallKind) i32 {
+    return switch (kind) {
+        .FireShield => 4,
+        .InjectPhase => 4,
+        .SetLaserMw => 3,
+        .TargetVoxel => 3,
+        .ManualPolarity => 4,
+    };
+}
+
+fn fp_parse_raw_call(p: *FParser) RawCall {
+    let name_tok: FToken = fp_expect(p, Fk.Ident);
+    let kind: RawCallKind = fp_raw_kind_checked(p, name_tok.val, name_tok.line);
+    fp_expect(p, Fk.Lp);
+    let args: ArrayList[f32] = make[f32](6);
+    let need: i32 = fp_raw_arg_count(kind);
+    let ai: i32 = 0;
+    while (ai < need) {
+        let at: FToken = fp_advance(p);
+        push[f32](&args, fp_parse_float(at));
+        if (ai + 1 < need) { fp_expect(p, Fk.Comma); }
+        ai = ai + 1;
+    }
+    fp_expect(p, Fk.Rp);
+    fp_skip_semi(p);
+    return RawCall{ .kind = kind, .args = args };
+}
+
+fn fp_parse_raw_block(p: *FParser) FlashStmt {
+    let hdr: FToken = fp_peek(p);
+    fp_expect(p, Fk.Lbrace);
+    let calls: ArrayList[RawCall] = make[RawCall](8);
+    while (fp_peek(p).kind != Fk.Rbrace && fp_peek(p).kind != Fk.Eof && fp_peek(p).kind != Fk.Err) {
+        let rc: RawCall = fp_parse_raw_call(p);
+        push[RawCall](&calls, rc);
+    }
+    fp_expect(p, Fk.Rbrace);
+    return FlashStmt{
+        .kind = FlashStmtKind.RawBlock,
+        .line = hdr.line,
+        .name = "",
+        .trit_lit = 0,
+        .float_lit = 0.0,
+        .op_name = "",
+        .op_a = "",
+        .op_b = "",
+        .op_c = "",
+        .op_d = "",
+        .op_argc = 0,
+        .op_dst = "",
+        .raw_calls = calls,
+    };
+}
+
+fn fp_parse_trit_bind(p: *FParser) FlashStmt {
+    let nm: FToken = fp_expect(p, Fk.Ident);
+    fp_expect(p, Fk.Eq);
+    let lit: FToken = fp_advance(p);
+    fp_skip_semi(p);
+    return FlashStmt{
+        .kind = FlashStmtKind.TritBind,
+        .line = nm.line,
+        .name = nm.val,
+        .trit_lit = fp_trit_lit(lit),
+        .float_lit = 0.0,
+        .op_name = "",
+        .op_a = "",
+        .op_b = "",
+        .op_c = "",
+        .op_d = "",
+        .op_argc = 0,
+        .op_dst = "",
+        .raw_calls = make[RawCall](0),
+    };
+}
+
+fn fp_parse_wave_bind(p: *FParser) FlashStmt {
+    let nm: FToken = fp_expect(p, Fk.Ident);
+    fp_expect(p, Fk.Eq);
+    let _d: FToken = fp_expect(p, Fk.KwDefault);
+    fp_skip_semi(p);
+    return FlashStmt{
+        .kind = FlashStmtKind.WaveBind,
+        .line = nm.line,
+        .name = nm.val,
+        .trit_lit = 0,
+        .float_lit = 0.0,
+        .op_name = "",
+        .op_a = "",
+        .op_b = "",
+        .op_c = "",
+        .op_d = "",
+        .op_argc = 0,
+        .op_dst = "",
+        .raw_calls = make[RawCall](0),
+    };
+}
+
+fn fp_parse_p32_bind(p: *FParser) FlashStmt {
+    let nm: FToken = fp_expect(p, Fk.Ident);
+    fp_expect(p, Fk.Eq);
+    let lit: FToken = fp_advance(p);
+    fp_skip_semi(p);
+    return FlashStmt{
+        .kind = FlashStmtKind.P32Bind,
+        .line = nm.line,
+        .name = nm.val,
+        .trit_lit = 0,
+        .float_lit = fp_parse_float(lit),
+        .op_name = "",
+        .op_a = "",
+        .op_b = "",
+        .op_c = "",
+        .op_d = "",
+        .op_argc = 0,
+        .op_dst = "",
+        .raw_calls = make[RawCall](0),
+    };
+}
+
+fn fp_parse_sat_bind(p: *FParser) FlashStmt {
+    let nm: FToken = fp_expect(p, Fk.Ident);
+    fp_expect(p, Fk.Eq);
+    let lit: FToken = fp_advance(p);
+    fp_skip_semi(p);
+    return FlashStmt{
+        .kind = FlashStmtKind.SatI16Bind,
+        .line = nm.line,
+        .name = nm.val,
+        .trit_lit = _zag_str_to_i64(lit.val) as i32,
+        .float_lit = 0.0,
+        .op_name = "",
+        .op_a = "",
+        .op_b = "",
+        .op_c = "",
+        .op_d = "",
+        .op_argc = 0,
+        .op_dst = "",
+        .raw_calls = make[RawCall](0),
+    };
+}
+
+fn fp_is_mat3_op(name: []u8) i32 {
+    if (name.len < 5) { return 0; }
+    if (name[0] == 'm' && name[1] == 'a' && name[2] == 't' && name[3] == '3' && name[4] == '_') {
+        return 1;
+    }
+    return 0;
+}
+
+fn fp_parse_mat3_op(p: *FParser) FlashStmt {
+    let op: FToken = fp_expect(p, Fk.Ident);
+    fp_expect(p, Fk.Lp);
+    let a: []u8 = "";
+    let b: []u8 = "";
+    let c: []u8 = "";
+    let d: []u8 = "";
+    let argc: i32 = 0;
+    if (@strEq(op.val, "mat3_identity") == 1 || @strEq(op.val, "mat3_rotation_xy_90") == 1) {
+        argc = 0;
+    } else if (@strEq(op.val, "mat3_mul") == 1) {
+        let a_tok: FToken = fp_expect(p, Fk.Ident);
+        a = a_tok.val;
+        fp_expect(p, Fk.Comma);
+        let b_tok: FToken = fp_expect(p, Fk.Ident);
+        b = b_tok.val;
+        argc = 2;
+    } else if (@strEq(op.val, "mat3_apply") == 1) {
+        let a_tok: FToken = fp_expect(p, Fk.Ident);
+        a = a_tok.val;
+        fp_expect(p, Fk.Comma);
+        let b_tok: FToken = fp_expect(p, Fk.Ident);
+        b = b_tok.val;
+        fp_expect(p, Fk.Comma);
+        let c_tok: FToken = fp_expect(p, Fk.Ident);
+        c = c_tok.val;
+        fp_expect(p, Fk.Comma);
+        let d_tok: FToken = fp_expect(p, Fk.Ident);
+        d = d_tok.val;
+        argc = 4;
+    } else {
+        fp_parse_err(p, "unknown optical op", op.line);
+    }
+    fp_expect(p, Fk.Rp);
+    fp_expect(p, Fk.Eq);
+    let dst: FToken = fp_expect(p, Fk.Ident);
+    fp_skip_semi(p);
+    return FlashStmt{
+        .kind = FlashStmtKind.Mat3Op,
+        .line = op.line,
+        .name = "",
+        .trit_lit = 0,
+        .float_lit = 0.0,
+        .op_name = op.val,
+        .op_a = a,
+        .op_b = b,
+        .op_c = c,
+        .op_d = d,
+        .op_argc = argc,
+        .op_dst = dst.val,
+        .raw_calls = make[RawCall](0),
+    };
+}
+
+fn fp_parse_trit_op(p: *FParser) FlashStmt {
+    let op: FToken = fp_expect(p, Fk.Ident);
+    if (fp_is_mat3_op(op.val) == 1) {
+        p.*.pos = p.*.pos - 1;
+        return fp_parse_mat3_op(p);
+    }
+    fp_expect(p, Fk.Lp);
+    let a: FToken = fp_expect(p, Fk.Ident);
+    fp_expect(p, Fk.Comma);
+    let b: FToken = fp_expect(p, Fk.Ident);
+    fp_expect(p, Fk.Rp);
+    fp_expect(p, Fk.Eq);
+    let dst: FToken = fp_expect(p, Fk.Ident);
+    fp_skip_semi(p);
+    return FlashStmt{
+        .kind = FlashStmtKind.TritOp,
+        .line = op.line,
+        .name = "",
+        .trit_lit = 0,
+        .float_lit = 0.0,
+        .op_name = op.val,
+        .op_a = a.val,
+        .op_b = b.val,
+        .op_c = "",
+        .op_d = "",
+        .op_argc = 2,
+        .op_dst = dst.val,
+        .raw_calls = make[RawCall](0),
+    };
+}
+
+fn fp_parse_stmt(p: *FParser) FlashStmt {
+    let t: FToken = fp_peek(p);
+    if (t.kind == Fk.KwTrit) {
+        let _k: FToken = fp_advance(p);
+        return fp_parse_trit_bind(p);
+    }
+    if (t.kind == Fk.KwWave) {
+        let _k: FToken = fp_advance(p);
+        return fp_parse_wave_bind(p);
+    }
+    if (t.kind == Fk.KwP32) {
+        let _k: FToken = fp_advance(p);
+        return fp_parse_p32_bind(p);
+    }
+    if (t.kind == Fk.KwSatI16) {
+        let _k: FToken = fp_advance(p);
+        return fp_parse_sat_bind(p);
+    }
+    if (t.kind == Fk.KwRaw) {
+        let _k: FToken = fp_advance(p);
+        return fp_parse_raw_block(p);
+    }
+    if (t.kind == Fk.KwOptical) {
+        let _k: FToken = fp_advance(p);
+        return fp_parse_mat3_op(p);
+    }
+    if (t.kind == Fk.KwLet) {
+        let _k: FToken = fp_advance(p);
+        return fp_parse_trit_op(p);
+    }
+    if (t.kind == Fk.Ident) {
+        return fp_parse_trit_op(p);
+    }
+    fp_parse_err(p, "unexpected token in surface statement", t.line);
+    return FlashStmt{
+        .kind = FlashStmtKind.TritBind,
+        .line = t.line,
+        .name = "",
+        .trit_lit = 0,
+        .float_lit = 0.0,
+        .op_name = "",
+        .op_a = "",
+        .op_b = "",
+        .op_c = "",
+        .op_d = "",
+        .op_argc = 0,
+        .op_dst = "",
+        .raw_calls = make[RawCall](0),
+    };
+}
+
+fn flash_parse(src: []u8, file: []u8) FlashParseResult {
+    let toks: ArrayList[FToken] = flash_lex(src);
+    let p: FParser = FParser{ .toks = toks, .pos = 0, .err = 0, .file = file };
+    let prog: FlashProgram = FlashProgram{
+        .name = "flash_program",
+        .stmts = make[FlashStmt](16),
+    };
+
+    if (fp_peek(&p).kind == Fk.KwProgram) {
+        let _k: FToken = fp_advance(&p);
+        let nm: FToken = fp_advance(&p);
+        if (nm.kind == Fk.Str) {
+            prog.name = nm.val;
+        } else if (nm.kind == Fk.Ident) {
+            prog.name = nm.val;
+        }
+        fp_skip_semi(&p);
+    }
+
+    while (fp_peek(&p).kind != Fk.Eof) {
+        if (fp_peek(&p).kind == Fk.Err) {
+            let bad: FToken = fp_advance(&p);
+            fp_parse_err(&p, "invalid character in surface source", bad.line);
+        } else {
+            let st: FlashStmt = fp_parse_stmt(&p);
+            push[FlashStmt](&prog.stmts, st);
+        }
+    }
+    return FlashParseResult{ .prog = prog, .err = p.err };
+}

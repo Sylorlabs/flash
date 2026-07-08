@@ -1,0 +1,22 @@
+// flash/stdlib/flash_std.zag — unified Flash standard library umbrella.
+//
+//   @import("flash/stdlib/flash_std.zag") as flash
+//
+// Re-exports:
+//   trit / photon       — balanced-ternary + carrier structs
+//   photonic            — session API over hardware_manager + flash_to_zag
+//   io                  — print_trit, print_wave, print_type_info
+//   numeric_ops         — trit_to_i32, posit_to_trit_lanes, fp_to_amplitude
+//   catalog             — flash/types/numeric/catalog (type families + lookup)
+//
+// Extended libraries (import alongside flash_std when needed):
+//   @import("flash/ternary/ternary_std.zag") as tern
+//   @import("flash/wave/wave_std.zag") as wave
+//   @import("flash/runtime/runtime_std.zag") as photonic_rt
+
+@import("trit.zag")
+@import("photon.zag")
+@import("photonic.zag")
+@import("io.zag")
+@import("numeric_ops.zag")
+@import("../types/numeric/catalog.zag")

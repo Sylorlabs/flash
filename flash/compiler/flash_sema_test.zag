@@ -1,0 +1,184 @@
+// flash/compiler/flash_sema_test.zag — Flash SEMA unit tests.
+//
+// Verifies:
+//   • valid trit / wave / beam / phase typing passes
+//   • mixed posit+integer without cast is rejected
+//   • raw {} enters RawMode; @realtime constraint checked
+//   • flash_sema_surface adapter on .flash.zag surface programs
+//   • generic monomorphization template registry (Box[i32])
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("flash_sema.zag")
+@import("flash_sema_surface.zag")
+@import("parse.zag")
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn build_valid_program() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](4);
+
+    let params: ArrayList[Param] = make[Param](8);
+    push[Param](&params, Param{ .name = "a", .pty = "Trit" });
+    push[Param](&params, Param{ .name = "b", .pty = "Trit" });
+    push[Param](&params, Param{ .name = "wave_a", .pty = "Wave" });
+    push[Param](&params, Param{ .name = "wave_b", .pty = "Wave" });
+    push[Param](&params, Param{ .name = "beam_a", .pty = "Beam" });
+    push[Param](&params, Param{ .name = "beam_b", .pty = "Beam" });
+    push[Param](&params, Param{ .name = "phase_a", .pty = "Phase" });
+    push[Param](&params, Param{ .name = "phase_b", .pty = "Phase" });
+    push[Param](&params, Param{ .name = "ival", .pty = "i32" });
+
+    let body: ArrayList[*FlashNode] = make[*FlashNode](12);
+
+    let trit_sum: *FlashNode = flash_mk_bin("+", flash_mk_ident("a"), flash_mk_ident("b"));
+    flash_push_stmt(&body, flash_mk_let("c", "Trit", 1, 1, trit_sum));
+
+    let wave_sum: *FlashNode = flash_mk_bin("+", flash_mk_ident("wave_a"), flash_mk_ident("wave_b"));
+    flash_push_stmt(&body, flash_mk_let("w", "Wave", 1, 1, wave_sum));
+
+    let beam_op: *FlashNode = flash_mk_bin("+", flash_mk_ident("beam_a"), flash_mk_ident("beam_b"));
+    flash_push_stmt(&body, flash_mk_let("bm", "Beam", 1, 1, beam_op));
+
+    let phase_op: *FlashNode = flash_mk_bin("+", flash_mk_ident("phase_a"), flash_mk_ident("phase_b"));
+    flash_push_stmt(&body, flash_mk_let("ph", "Phase", 1, 1, phase_op));
+
+    let casted: *FlashNode = flash_mk_cast(flash_mk_ident("ival"), "p32");
+    flash_push_stmt(&body, flash_mk_let("p", "p32", 1, 1, casted));
+
+    let targs: ArrayList[[]u8] = make[[]u8](2);
+    push[[]u8](&targs, "i32");
+    let box_call: *FlashNode = flash_mk_gcall(flash_mk_ident("Box"), make[*FlashNode](1), targs);
+    flash_push_stmt(&body, flash_mk_let("boxed", "Box_i32", 1, 1, box_call));
+
+    let raw_body: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let raw_call_args: ArrayList[*FlashNode] = make[*FlashNode](2);
+    flash_push_stmt(&raw_body, flash_mk_estmt(
+        flash_mk_call(flash_mk_ident("fire_shield"), raw_call_args)));
+    flash_push_stmt(&body, flash_mk_raw(raw_body));
+
+    flash_push_stmt(&body, flash_mk_ret(1, flash_mk_ident("c")));
+
+    push[*FlashNode](&decls, flash_mk_fn_params("valid_main", "Trit", params, body));
+    return decls;
+}
+
+fn build_invalid_mixed_program() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](4);
+
+    flash_push_stmt(&body, flash_mk_let("posit", "p32", 1, 1,
+        flash_mk_cast(flash_mk_int("1"), "p32")));
+    flash_push_stmt(&body, flash_mk_let("integer", "i32", 1, 1, flash_mk_int("2")));
+
+    let bad: *FlashNode = flash_mk_bin("+", flash_mk_ident("posit"), flash_mk_ident("integer"));
+    flash_push_stmt(&body, flash_mk_let("invalid", "p32", 1, 1, bad));
+    flash_push_stmt(&body, flash_mk_ret(1, flash_mk_ident("invalid")));
+
+    push[*FlashNode](&decls, flash_mk_fn("invalid_main", "p32", body));
+    return decls;
+}
+
+fn build_realtime_violation() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](2);
+
+    let io_args: ArrayList[*FlashNode] = make[*FlashNode](2);
+    push[*FlashNode](&io_args, flash_mk_int("1"));
+    flash_push_stmt(&body, flash_mk_estmt(
+        flash_mk_call(flash_mk_ident("_zag_println"), io_args)));
+
+    let annots: ArrayList[[]u8] = make[[]u8](2);
+    push[[]u8](&annots, "@realtime");
+
+    push[*FlashNode](&decls, flash_mk_fn_ann("rt_bad", "void", annots, body));
+    return decls;
+}
+
+fn main() i32 {
+    _zag_println("flash_sema_test: running");
+
+    if (family_of("p32") != family_posit()) { test_fail("catalog_posit"); }
+    if (family_of("i32") != family_integer()) { test_fail("catalog_integer"); }
+    if (binop_compatible("Trit", "Trit") != 1) { test_fail("catalog_trit_compat"); }
+    if (is_mixed_posit_integer("p32", "i32") != 1) { test_fail("catalog_mixed_detect"); }
+    test_pass("catalog");
+
+    let targs: ArrayList[[]u8] = make[[]u8](2);
+    push[[]u8](&targs, "i32");
+    let mangled: []u8 = mono_instantiate("Box", targs);
+    if (@strEq(mangled, "Box__i32") == 0) { test_fail("mono_mangle"); }
+    let sema_ctx: SemaCtx = sema_ctx_new("mono_test.zag");
+    let resolved: []u8 = mono_resolve_template(&sema_ctx, mangled, targs);
+    if (@strEq(resolved, "Box_i32") == 0) { test_fail("mono_resolve"); }
+
+    let targs_unknown: ArrayList[[]u8] = make[[]u8](2);
+    push[[]u8](&targs_unknown, "unknown");
+    let mangled_unknown: []u8 = mono_instantiate("Box", targs_unknown);
+    if (@strEq(mangled_unknown, "Box__unknown") == 0) { test_fail("mono_mangle_unknown"); }
+    let sema_unknown: SemaCtx = sema_ctx_new("unknown.zag");
+    let _resolved_unknown: []u8 = mono_resolve_template(&sema_unknown, mangled_unknown, targs_unknown);
+    if (sema_unknown.errors < 1) { test_fail("mono_unknown_F0005"); }
+    test_pass("monomorphization");
+
+    let valid: ArrayList[*FlashNode] = build_valid_program();
+    let err_valid: i32 = sema_check_program(valid, "valid.zag");
+    if (err_valid != 0) { test_fail("valid_program"); }
+    test_pass("valid_program");
+
+    let invalid: ArrayList[*FlashNode] = build_invalid_mixed_program();
+    let err_invalid: i32 = sema_check_program(invalid, "invalid.zag");
+    if (err_invalid < 1) { test_fail("reject_mixed_posit_integer"); }
+    test_pass("reject_mixed_posit_integer");
+
+    let rt: ArrayList[*FlashNode] = build_realtime_violation();
+    let err_rt: i32 = sema_check_program(rt, "rt_bad.zag");
+    if (err_rt < 1) { test_fail("realtime_violation"); }
+    test_pass("realtime_violation");
+
+    let trit_src: []u8 = "program trit_ops\ntrit x = +1\ntrit y = T\nlet trit_add(x, y) = z\n";
+    let trit_res: FlashParseResult = flash_parse(trit_src, "trit_ops.flash.zag");
+    if (trit_res.err != 0) { test_fail("surface_trit_ops_parse"); }
+    let trit_prog: FlashProgram = trit_res.prog;
+    if (flash_sema_surface(&trit_prog, "trit_ops.flash.zag") != 0) { test_fail("surface_trit_ops"); }
+    test_pass("surface_trit_ops");
+
+    let wave_src: []u8 = "program wave_p32\nwave beam = default\np32 gain = 2.25\nsat_i16 lane = 1024\n";
+    let wave_res: FlashParseResult = flash_parse(wave_src, "wave_p32.flash.zag");
+    if (wave_res.err != 0) { test_fail("surface_wave_p32_parse"); }
+    let wave_prog: FlashProgram = wave_res.prog;
+    if (flash_sema_surface(&wave_prog, "wave_p32.flash.zag") != 0) { test_fail("surface_wave_p32"); }
+    test_pass("surface_wave_p32");
+
+    let raw_src: []u8 = "program raw_block\ntrit gate = 0\nraw {\n    target_voxel(0, 1, 2);\n    set_laser_mw(0, 0, 1.5);\n}\n";
+    let raw_res: FlashParseResult = flash_parse(raw_src, "raw_block.flash.zag");
+    if (raw_res.err != 0) { test_fail("surface_raw_block_parse"); }
+    let raw_prog: FlashProgram = raw_res.prog;
+    if (flash_sema_surface(&raw_prog, "raw_block.flash.zag") != 0) { test_fail("surface_raw_block"); }
+    test_pass("surface_raw_block");
+
+    let mixed_src: []u8 = "program bad_mixed\np32 gain = 2.25\nsat_i16 lane = 1024\nlet trit_add(gain, lane) = z\n";
+    let mixed_res: FlashParseResult = flash_parse(mixed_src, "bad_mixed.flash.zag");
+    if (mixed_res.err != 0) { test_fail("surface_reject_mixed_bindings_parse"); }
+    let mixed_prog: FlashProgram = mixed_res.prog;
+    if (flash_sema_surface(&mixed_prog, "bad_mixed.flash.zag") < 1) {
+        test_fail("surface_reject_mixed_bindings");
+    }
+    test_pass("surface_reject_mixed_bindings");
+
+    let bad_raw_src: []u8 = "program bad_raw_call\nraw {\n    fire_sheild(0, 0, 0, 1.0);\n}\n";
+    let bad_raw_res: FlashParseResult = flash_parse(bad_raw_src, "bad_raw_call.flash.zag");
+    if (bad_raw_res.err == 0) { test_fail("surface_reject_bad_raw_call"); }
+    test_pass("surface_reject_bad_raw_call");
+
+    _zag_println("flash_sema_test: all passed");
+    return 0;
+}

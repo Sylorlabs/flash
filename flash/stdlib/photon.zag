@@ -1,0 +1,52 @@
+// flash/stdlib/photon.zag — wave, beam, and phase carriers for photonic routing.
+
+@import("trit.zag")
+
+// Optical carrier kinds mapped from Flash surface syntax.
+enum PhotonKind { Wave, Beam, Phase }
+
+struct Wave {
+    amplitude: f32,
+    wavelength_nm: f32,
+    phase_rad: f32,
+}
+
+struct Beam {
+    power_mw: f32,
+    waist_um: f32,
+    polarization: Trit,
+}
+
+struct Phase {
+    offset_rad: f32,
+    rate_rad_per_ns: f32,
+    carrier: Trit,
+}
+
+fn wave_default() Wave {
+    return Wave{ .amplitude = 1.0, .wavelength_nm = 1550.0, .phase_rad = 0.0 };
+}
+
+fn beam_default() Beam {
+    return Beam{ .power_mw = 1.0, .waist_um = 5.0, .polarization = trit(1) };
+}
+
+fn phase_default() Phase {
+    return Phase{ .offset_rad = 0.0, .rate_rad_per_ns = 0.0, .carrier = trit(0) };
+}
+
+fn wave_phase_delta(w: Wave, dt_ns: f32) f32 {
+    let c_nm_per_ns: f32 = 299792.458;
+    let omega: f32 = 6.2831853 * c_nm_per_ns / w.wavelength_nm;
+    return w.phase_rad + omega * dt_ns;
+}
+
+fn beam_route_axis(b: Beam) i32 {
+    return b.polarization.val;
+}
+
+fn phase_spin(p: Phase) Trit {
+    if (p.rate_rad_per_ns > 0.0) { return trit(1); }
+    if (p.rate_rad_per_ns < 0.0) { return trit(-1); }
+    return p.carrier;
+}

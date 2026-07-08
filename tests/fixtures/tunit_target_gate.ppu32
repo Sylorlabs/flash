@@ -1,0 +1,5 @@
+# ppu32 assembly v1
+target = "ppu32"
+name = "tunit_target_gate"
+format = "ppu32-v1"
+[insns]

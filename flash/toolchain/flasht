@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# flash/toolchain/flasht — Flash ternary toolchain driver.
+#
+# Hardware targets (ppu32 / fimg / engine) invoke flashc in emit-only mode — never znc.
+# All other compilations delegate to the bundled flashz backend.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+FLASHC="${FLASHC:-$ROOT/flashc}"
+FLASHZ="${FLASHZ:-$ROOT/flash/toolchain/flashz}"
+DISCARD_SHIM="${FLASHT_DISCARD_SHIM:-$ROOT/.test_bin/flasht_discard.zag}"
+
+flasht_target() {
+    local prev=""
+    for arg in "$@"; do
+        if [[ "$prev" == "--target" ]]; then
+            echo "$arg"
+            return 0
+        fi
+        prev="$arg"
+    done
+    echo ""
+}
+
+flasht_is_hw_target() {
+    case "${1:-}" in
+        ppu32|fimg|engine) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+flasht_invoke_flashc_hw() {
+    local src=""
+    local -a rest=()
+    local skip=0
+    for arg in "$@"; do
+        if [[ "$skip" -eq 1 ]]; then
+            skip=0
+            continue
+        fi
+        if [[ -z "$src" && "$arg" != -* ]]; then
+            src="$arg"
+            continue
+        fi
+        case "$arg" in
+            -o|--run) skip=1 ;;
+            *) rest+=("$arg") ;;
+        esac
+    done
+    if [[ -z "$src" ]]; then
+        echo "::error::flasht: missing source file for hardware target" >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$DISCARD_SHIM")"
+    : > "$DISCARD_SHIM"
+    exec "$FLASHC" "$src" "$DISCARD_SHIM" "${rest[@]}"
+}
+
+TARGET="$(flasht_target "$@")"
+if [[ -n "$TARGET" ]] && flasht_is_hw_target "$TARGET"; then
+    if [[ ! -x "$FLASHC" ]]; then
+        echo "::error::flasht: flashc missing for hardware target '$TARGET'" >&2
+        exit 1
+    fi
+    flasht_invoke_flashc_hw "$@"
+fi
+
+if [[ ! -x "$FLASHZ" ]]; then
+    echo "::error::flasht: flash/toolchain/flashz missing" >&2
+    exit 1
+fi
+exec "$FLASHZ" "$@"

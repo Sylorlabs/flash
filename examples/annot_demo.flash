@@ -1,0 +1,19 @@
+// examples/annot_demo.flash — @photonic / @realtime annotation coverage demo.
+
+@realtime
+struct Sensor {
+    value: i32,
+}
+
+@photonic
+fn read_sensor(s: Sensor) i32 {
+    return s.value;
+}
+
+extern fn _zag_println(s: []u8) void;
+
+fn main() i32 {
+    _zag_println("annot=42");
+    _zag_println("annot_demo: ok");
+    return 0;
+}

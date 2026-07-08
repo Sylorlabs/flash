@@ -1,0 +1,66 @@
+// examples/gp_demo.flash.zag — general-purpose Flash (full language path).
+//
+// Unlike surface `program` sources, this file is parsed by flash_parse.zag and
+// lowered through flash_emit_zag.zag: functions with parameters, recursion,
+// if/while control flow, strings, slices, structs, and trit interop.
+
+struct Counter {
+    hits: i32,
+    label: []u8,
+}
+
+fn fib(n: i32) i32 {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn count_words(s: []u8) i32 {
+    let count: i32 = 0;
+    let in_word: i32 = 0;
+    let i: i32 = 0;
+    while (i < s.len) {
+        let c: i32 = s[i] as i32;
+        if (c == ' ') {
+            in_word = 0;
+        } else {
+            if (in_word == 0) { count = count + 1; }
+            in_word = 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+fn bump(c: *Counter) void {
+    c.*.hits = c.*.hits + 1;
+}
+
+fn main() i32 {
+    let f: i32 = fib(10);
+    _zag_print("fib10=");
+    _zag_println(_zag_i64_to_str(f as i64));
+
+    let msg: []u8 = "flash is going self hosted";
+    let words: i32 = count_words(msg);
+    _zag_print("words=");
+    _zag_println(_zag_i64_to_str(words as i64));
+
+    let head: []u8 = msg[0..5];
+    _zag_print("head=");
+    _zag_println(head);
+
+    let ctr: Counter = Counter{ .hits = 0, .label = "demo" };
+    bump(&ctr);
+    bump(&ctr);
+    _zag_print("hits=");
+    _zag_println(_zag_i64_to_str(ctr.hits as i64));
+
+    let a: trit = 1;
+    let b: trit = T;
+    let s: trit = trit_add(a, b);
+    _zag_print("gp trit s=");
+    _zag_println(_zag_i64_to_str(trit_val(s) as i64));
+
+    _zag_println("gp_demo: ok");
+    return 0;
+}

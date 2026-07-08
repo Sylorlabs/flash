@@ -1,0 +1,35 @@
+// ternary_std.zag — umbrella import for the Flash balanced-ternary standard library
+//
+//   @import("ternary/ternary_std.zag") as tern
+//
+// Re-exports:
+//   trit.*           — Trit enum, i8 wire values, validators
+//   truth_tables.*   — AND/OR/NOT/XOR/consensus/implication tables
+//   arithmetic.*     — add/sub/mul, carry, PhaseShiftEmit metadata
+
+@import("trit.zag")
+@import("truth_tables.zag")
+@import("arithmetic.zag")
+
+// ── convenience aliases (qualified import surface) ─────────────────────────────
+
+fn neg() trit.Trit { return trit.neg(); }
+fn zero() trit.Trit { return trit.zero(); }
+fn pos() trit.Trit { return trit.pos(); }
+
+fn and(a: i8, b: i8) i8 @pure { return truth_tables.ternary_and(a, b); }
+fn or(a: i8, b: i8) i8 @pure { return truth_tables.ternary_or(a, b); }
+fn xor(a: i8, b: i8) i8 @pure { return truth_tables.ternary_xor(a, b); }
+fn not(a: i8) i8 @pure { return truth_tables.ternary_not(a); }
+
+fn add1(a: i8, b: i8, cin: i8) arithmetic.TritAddResult @pure {
+    return arithmetic.add(a, b, cin);
+}
+
+fn sub1(a: i8, b: i8, bin: i8) arithmetic.TritSubResult @pure {
+    return arithmetic.sub(a, b, bin);
+}
+
+fn mul1(a: i8, b: i8) arithmetic.TritMulResult @pure {
+    return arithmetic.mul(a, b);
+}

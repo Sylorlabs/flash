@@ -1,0 +1,335 @@
+// flash/compiler/flash_sema_surface.zag — FlashProgram (.flash.zag) → flash_sema adapter.
+//
+// Lowers compact surface syntax into a synthetic main() FlashNode tree and runs
+// flash_sema.zag (effects, @realtime/@photonic, mixed posit+integer, raw {}).
+//
+// Surface-only checks (binding env) run before AST lowering.
+
+@import("flash_ast.zag")
+@import("flash_diag.zag")
+@import("flash_sema.zag")
+@import("parse.zag")
+@import("../types/numeric/catalog.zag")
+@import("../toolchain/zag-poc/std/list.zag")
+@import("../toolchain/zag-poc/std/rt.zag")
+
+struct FssEnv {
+    names: ArrayList[[]u8],
+    types: ArrayList[FlashTy],
+}
+
+fn fss_has(env: *FssEnv, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](env.*.names)) {
+        if (@strEq(get[[]u8](env.*.names, i), name)) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fss_bind(env: *FssEnv, name: []u8, ty: FlashTy) void {
+    push[[]u8](&env.*.names, name);
+    push[FlashTy](&env.*.types, ty);
+}
+
+fn fss_lookup_ty(env: *FssEnv, name: []u8) FlashTy {
+    let i: i32 = 0;
+    while (i < len[[]u8](env.*.names)) {
+        if (@strEq(get[[]u8](env.*.names, i), name)) {
+            return get[FlashTy](env.*.types, i);
+        }
+        i = i + 1;
+    }
+    return FlashTy.Trit;
+}
+
+fn fss_ty_name(ty: FlashTy) []u8 {
+    if (ty == FlashTy.Trit)       { return "trit"; }
+    if (ty == FlashTy.Wave)       { return "Wave"; }
+    if (ty == FlashTy.P32)        { return "p32"; }
+    if (ty == FlashTy.SatI16)     { return "sat_i16"; }
+    if (ty == FlashTy.Mat3)       { return "Mat3"; }
+    if (ty == FlashTy.TritTriple) { return "TritTriple"; }
+    return "";
+}
+
+fn fss_surface_err(file: []u8, line: i32, code: []u8, msg: []u8) void {
+    diag_emit(code, msg, file, line, 1, 1,
+        "Flash surface semantic analysis",
+        "fix the binding types or add an explicit cast");
+}
+
+fn fss_valid_trit(v: i32) i32 {
+    if (v == -1 || v == 0 || v == 1) { return 1; }
+    return 0;
+}
+
+fn fss_valid_raw(kind: RawCallKind, argc: i32) i32 {
+    let need: i32 = 4;
+    if (kind == RawCallKind.InjectPhase)    { need = 4; }
+    if (kind == RawCallKind.SetLaserMw)     { need = 3; }
+    if (kind == RawCallKind.TargetVoxel)    { need = 3; }
+    if (kind == RawCallKind.ManualPolarity) { need = 4; }
+    if (kind == RawCallKind.FireShield)     { need = 4; }
+    if (argc == need) { return 1; }
+    return 0;
+}
+
+fn fss_check_mixed_trit_op(env: *FssEnv, st: FlashStmt, file: []u8) i32 {
+    let ta: FlashTy = fss_lookup_ty(env, st.op_a);
+    let tb: FlashTy = fss_lookup_ty(env, st.op_b);
+    let na: []u8 = fss_ty_name(ta);
+    let nb: []u8 = fss_ty_name(tb);
+    if (is_mixed_posit_integer(na, nb) == 1) {
+        fss_surface_err(file, st.line, "F0002",
+            "mixed posit and integer in surface trit op — add explicit cast");
+        return 1;
+    }
+    if (ta != FlashTy.Trit) {
+        fss_surface_err(file, st.line, "F0001", "expected trit binding in surface trit op");
+        return 1;
+    }
+    if (tb != FlashTy.Trit) {
+        fss_surface_err(file, st.line, "F0001", "expected trit binding in surface trit op");
+        return 1;
+    }
+    return 0;
+}
+
+fn fss_check_surface_stmt(env: *FssEnv, st: FlashStmt, file: []u8) i32 {
+    let errs: i32 = 0;
+    if (st.kind == FlashStmtKind.TritBind) {
+        if (fss_valid_trit(st.trit_lit) == 0) {
+            fss_surface_err(file, st.line, "F0001", "invalid trit literal in surface binding");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, FlashTy.Trit);
+        }
+    } else if (st.kind == FlashStmtKind.WaveBind) {
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, FlashTy.Wave);
+        }
+    } else if (st.kind == FlashStmtKind.P32Bind) {
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, FlashTy.P32);
+        }
+    } else if (st.kind == FlashStmtKind.SatI16Bind) {
+        if (st.trit_lit < -32768 || st.trit_lit > 32767) {
+            fss_surface_err(file, st.line, "F0001", "sat_i16 surface binding out of range");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, FlashTy.SatI16);
+        }
+    } else if (st.kind == FlashStmtKind.TritOp) {
+        if (fss_has(env, st.op_a) == 0) {
+            fss_surface_err(file, st.line, "F0001", "unknown identifier in surface trit op");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.op_b) == 0) {
+            fss_surface_err(file, st.line, "F0001", "unknown identifier in surface trit op");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.op_a) == 1 && fss_has(env, st.op_b) == 1) {
+            errs = errs + fss_check_mixed_trit_op(env, st, file);
+        }
+        if (fss_has(env, st.op_dst) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.op_dst, FlashTy.Trit);
+        }
+    } else if (st.kind == FlashStmtKind.Mat3Op) {
+        if (fss_has(env, st.op_dst) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            if (@strEq(st.op_name, "mat3_apply") == 1) {
+                fss_bind(env, st.op_dst, FlashTy.TritTriple);
+            } else {
+                fss_bind(env, st.op_dst, FlashTy.Mat3);
+            }
+        }
+    } else if (st.kind == FlashStmtKind.RawBlock) {
+        let ci: i32 = 0;
+        while (ci < len[RawCall](st.raw_calls)) {
+            let rc: RawCall = get[RawCall](st.raw_calls, ci);
+            if (fss_valid_raw(rc.kind, len[f32](rc.args)) == 0) {
+                fss_surface_err(file, st.line, "F0004", "raw {} call arity mismatch");
+                errs = errs + 1;
+            }
+            ci = ci + 1;
+        }
+    }
+    return errs;
+}
+
+fn fss_surface_validate(prog: *FlashProgram, file: []u8) i32 {
+    let env: FssEnv = FssEnv{
+        .names = make[[]u8](16),
+        .types = make[FlashTy](16),
+    };
+    let errs: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[FlashStmt](prog.*.stmts)) {
+        let st: FlashStmt = get[FlashStmt](prog.*.stmts, i);
+        errs = errs + fss_check_surface_stmt(&env, st, file);
+        i = i + 1;
+    }
+    return errs;
+}
+
+fn fss_trit_lit_text(v: i32) []u8 {
+    if (v == -1) { return "T"; }
+    if (v == 1)  { return "+1"; }
+    if (v == 0)  { return "0"; }
+    return _zag_i64_to_str(v as i64);
+}
+
+fn fss_f32_text(v: f32) []u8 {
+    let whole: i32 = v as i32;
+    let frac: f32 = v - whole as f32;
+    if (frac < 0.0) {
+        frac = 0.0 - frac;
+        whole = 0 - whole;
+    }
+    if (frac > 0.0001) {
+        let scaled: i32 = (frac * 1000.0) as i32;
+        let s: []u8 = _zag_i64_to_str(whole as i64);
+        s = _zag_str_concat(s, ".");
+        return _zag_str_concat(s, _zag_i64_to_str(scaled as i64));
+    }
+    return _zag_i64_to_str(whole as i64);
+}
+
+fn fss_raw_call_name(kind: RawCallKind) []u8 {
+    if (kind == RawCallKind.FireShield)     { return "fire_shield"; }
+    if (kind == RawCallKind.InjectPhase)    { return "inject_phase"; }
+    if (kind == RawCallKind.SetLaserMw)     { return "set_laser_mw"; }
+    if (kind == RawCallKind.TargetVoxel)    { return "target_voxel"; }
+    return "manual_polarity";
+}
+
+fn fss_push_f32_arg(args: *ArrayList[*FlashNode], v: f32) void {
+    push[*FlashNode](args, flash_mk_float(fss_f32_text(v)));
+}
+
+fn fss_raw_call_node(rc: RawCall) *FlashNode {
+    let args: ArrayList[*FlashNode] = make[*FlashNode](6);
+    let ai: i32 = 0;
+    while (ai < len[f32](rc.args)) {
+        fss_push_f32_arg(&args, get[f32](rc.args, ai));
+        ai = ai + 1;
+    }
+    let name: []u8 = fss_raw_call_name(rc.kind);
+    return flash_mk_call(flash_mk_ident(name), args);
+}
+
+fn fss_mat3_ret_ty(op: []u8) []u8 {
+    if (@strEq(op, "mat3_apply") == 1) { return "TritTriple"; }
+    return "Mat3";
+}
+
+fn fss_mat3_call_node(st: FlashStmt) *FlashNode {
+    let args: ArrayList[*FlashNode] = make[*FlashNode](4);
+    if (st.op_argc >= 1) { push[*FlashNode](&args, flash_mk_ident(st.op_a)); }
+    if (st.op_argc >= 2) { push[*FlashNode](&args, flash_mk_ident(st.op_b)); }
+    if (st.op_argc >= 3) { push[*FlashNode](&args, flash_mk_ident(st.op_c)); }
+    if (st.op_argc >= 4) { push[*FlashNode](&args, flash_mk_ident(st.op_d)); }
+    return flash_mk_call(flash_mk_ident(st.op_name), args);
+}
+
+fn fss_stmt_to_node(st: FlashStmt) *FlashNode {
+    if (st.kind == FlashStmtKind.TritBind) {
+        return flash_mk_let(st.name, "trit", 1, 1,
+            flash_mk_trit(fss_trit_lit_text(st.trit_lit)));
+    }
+    if (st.kind == FlashStmtKind.WaveBind) {
+        let args: ArrayList[*FlashNode] = make[*FlashNode](1);
+        return flash_mk_let(st.name, "Wave", 1, 1,
+            flash_mk_call(flash_mk_ident("wave_default"), args));
+    }
+    if (st.kind == FlashStmtKind.P32Bind) {
+        return flash_mk_let(st.name, "p32", 1, 1,
+            flash_mk_cast(flash_mk_float(fss_f32_text(st.float_lit)), "p32"));
+    }
+    if (st.kind == FlashStmtKind.SatI16Bind) {
+        return flash_mk_let(st.name, "sat_i16", 1, 1,
+            flash_mk_cast(flash_mk_int(_zag_i64_to_str(st.trit_lit as i64)), "sat_i16"));
+    }
+    if (st.kind == FlashStmtKind.TritOp) {
+        let args: ArrayList[*FlashNode] = make[*FlashNode](2);
+        push[*FlashNode](&args, flash_mk_ident(st.op_a));
+        // trit_neg is unary in the runtime; the surface DSL's second operand
+        // participates only in manifest lowering.
+        if (@strEq(st.op_name, "trit_neg") == 0) {
+            push[*FlashNode](&args, flash_mk_ident(st.op_b));
+        }
+        return flash_mk_let(st.op_dst, "trit", 1, 1,
+            flash_mk_call(flash_mk_ident(st.op_name), args));
+    }
+    if (st.kind == FlashStmtKind.Mat3Op) {
+        return flash_mk_let(st.op_dst, fss_mat3_ret_ty(st.op_name), 1, 1,
+            fss_mat3_call_node(st));
+    }
+    if (st.kind == FlashStmtKind.RawBlock) {
+        let body: ArrayList[*FlashNode] = make[*FlashNode](8);
+        let ci: i32 = 0;
+        while (ci < len[RawCall](st.raw_calls)) {
+            let rc: RawCall = get[RawCall](st.raw_calls, ci);
+            push[*FlashNode](&body, flash_mk_estmt(fss_raw_call_node(rc)));
+            ci = ci + 1;
+        }
+        return flash_mk_raw(body);
+    }
+    return flash_mk_estmt(flash_mk_ident(""));
+}
+
+fn fss_prog_to_main_fn(prog: *FlashProgram) TypedFn {
+    let body: ArrayList[*FlashNode] = make[*FlashNode](20);
+    let i: i32 = 0;
+    while (i < len[FlashStmt](prog.*.stmts)) {
+        push[*FlashNode](&body, fss_stmt_to_node(get[FlashStmt](prog.*.stmts, i)));
+        i = i + 1;
+    }
+    let decl: FnDecl = FnDecl{
+        .name      = "main",
+        .bare_name = "main",
+        .tparams   = make[[]u8](1),
+        .params    = make[Param](1),
+        .ret       = "i32",
+        .annots    = make[[]u8](1),
+        .body      = body,
+        .is_method = 0,
+        .recv_name = "",
+        .recv_ty   = "",
+        .line      = 1,
+    };
+    return TypedFn{ .decl = decl, .ret_ty = "i32" };
+}
+
+fn fss_prog_to_fn_node(prog: *FlashProgram) *FlashNode {
+    let tf: TypedFn = fss_prog_to_main_fn(prog);
+    return new(FlashNode{ .fn_decl = tf.decl });
+}
+
+fn flash_sema_surface(prog: *FlashProgram, file: []u8) i32 {
+    let surf_errs: i32 = fss_surface_validate(prog, file);
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](1);
+    push[*FlashNode](&decls, fss_prog_to_fn_node(prog));
+    let ast_errs: i32 = sema_check_program(decls, file);
+    return surf_errs + ast_errs;
+}

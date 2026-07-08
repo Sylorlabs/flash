@@ -1,0 +1,156 @@
+// harsh_ternary.zag — exhaustive 3×3 truth-table adversarial sweep.
+//
+// Truth tables from flash/stdlib/trit_math.zag (znc-safe mirror of ternary/truth_tables.zag).
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/stdlib/trit_math.zag") as tm
+
+fn wire_at(idx: i32) i8 {
+    if (idx == 0) { return 0 - 1; }
+    if (idx == 1) { return 0; }
+    return 1;
+}
+
+fn table_cell(t: tm.TruthTable9, row: i32, col: i32) i8 {
+    return tm.lookup(t, wire_at(row), wire_at(col));
+}
+
+fn sweep_and(t: tm.TruthTable9, name: []u8) void {
+    let row: i32 = 0;
+    while (row < 3) {
+        let col: i32 = 0;
+        while (col < 3) {
+            let a: i8 = wire_at(row);
+            let b: i8 = wire_at(col);
+            if (tm.ternary_and(a, b) != table_cell(t, row, col)) {
+                _zag_print("FAIL ");
+                _zag_println(name);
+                _zag_exit(1);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn sweep_or(t: tm.TruthTable9, name: []u8) void {
+    let row: i32 = 0;
+    while (row < 3) {
+        let col: i32 = 0;
+        while (col < 3) {
+            let a: i8 = wire_at(row);
+            let b: i8 = wire_at(col);
+            if (tm.ternary_or(a, b) != table_cell(t, row, col)) {
+                _zag_print("FAIL ");
+                _zag_println(name);
+                _zag_exit(1);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn sweep_xor(t: tm.TruthTable9, name: []u8) void {
+    let row: i32 = 0;
+    while (row < 3) {
+        let col: i32 = 0;
+        while (col < 3) {
+            let a: i8 = wire_at(row);
+            let b: i8 = wire_at(col);
+            if (tm.ternary_xor(a, b) != table_cell(t, row, col)) {
+                _zag_print("FAIL ");
+                _zag_println(name);
+                _zag_exit(1);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn sweep_consensus(t: tm.TruthTable9, name: []u8) void {
+    let row: i32 = 0;
+    while (row < 3) {
+        let col: i32 = 0;
+        while (col < 3) {
+            let a: i8 = wire_at(row);
+            let b: i8 = wire_at(col);
+            if (tm.consensus(a, b) != table_cell(t, row, col)) {
+                _zag_print("FAIL ");
+                _zag_println(name);
+                _zag_exit(1);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn sweep_implication(t: tm.TruthTable9, name: []u8) void {
+    let row: i32 = 0;
+    while (row < 3) {
+        let col: i32 = 0;
+        while (col < 3) {
+            let a: i8 = wire_at(row);
+            let b: i8 = wire_at(col);
+            if (tm.implication(a, b) != table_cell(t, row, col)) {
+                _zag_print("FAIL ");
+                _zag_println(name);
+                _zag_exit(1);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn main() i32 {
+    _zag_println("harsh_ternary: running");
+
+    sweep_and(tm.table_and(), "ternary_and");
+    sweep_or(tm.table_or(), "ternary_or");
+    sweep_xor(tm.table_xor(), "ternary_xor");
+    sweep_consensus(tm.table_consensus(), "consensus");
+    sweep_implication(tm.table_implication(), "implication");
+
+    let row: i32 = 0;
+    while (row < 3) {
+        let col: i32 = 0;
+        while (col < 3) {
+            let a: i8 = wire_at(row);
+            let b: i8 = wire_at(col);
+            if (tm.ternary_xor(a, b) != tm.xor_mod3_compute(a, b)) {
+                _zag_println("FAIL xor_mod3_equiv");
+                _zag_exit(1);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    _zag_println("PASS xor_mod3_equiv");
+
+    let i: i32 = 0;
+    while (i < 3) {
+        let a: i8 = wire_at(i);
+        if (tm.ternary_not(a) != (0 - a)) {
+            _zag_println("FAIL ternary_not");
+            _zag_exit(1);
+        }
+        i = i + 1;
+    }
+    _zag_println("PASS ternary_not");
+
+    _zag_println("harsh_ternary: ok");
+    return 0;
+}

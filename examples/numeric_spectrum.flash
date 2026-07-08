@@ -1,0 +1,15 @@
+// examples/numeric_spectrum.flash.zag — heterogeneous numeric family demo.
+//
+// Families exercised via Flash surface bindings:
+//   i     — sat_i16 signed clamp lane
+//   u     — sat_i16 clamp lane for large magnitudes (same type as i_lane)
+//   fp    — p32 literals (IEEE float → posit lowering)
+//   posit — p32 es=2 register
+
+program numeric_spectrum
+
+sat_i16 i_lane = 42
+sat_i16 u_lane = 32000
+p32 posit_a = 1.5
+p32 posit_b = 3.14159
+wave carrier = default

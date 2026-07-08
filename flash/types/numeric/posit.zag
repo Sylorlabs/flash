@@ -1,0 +1,133 @@
+// flash/types/numeric/posit.zag — posit + quire metadata (p8/p16/p32/p64).
+
+@import("numeric_common.zag") as common
+
+fn posit_unit_count() i32 { return 5; }
+
+fn posit_descriptor_p8() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "p8",
+        .kind = common.KIND_POSIT(),
+        .width = 8,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(8),
+        .storage_bytes = 1,
+        .es = 0,
+        .useed = 2,
+        .nbits = 8,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn posit_descriptor_p16() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "p16",
+        .kind = common.KIND_POSIT(),
+        .width = 16,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(16),
+        .storage_bytes = 2,
+        .es = 1,
+        .useed = 4,
+        .nbits = 16,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn posit_descriptor_p32() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "p32",
+        .kind = common.KIND_POSIT(),
+        .width = 32,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(32),
+        .storage_bytes = 4,
+        .es = 2,
+        .useed = 16,
+        .nbits = 32,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn posit_descriptor_p64() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "p64",
+        .kind = common.KIND_POSIT(),
+        .width = 64,
+        .signed = 0,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(64),
+        .storage_bytes = 8,
+        .es = 3,
+        .useed = 256,
+        .nbits = 64,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn posit_descriptor_quire() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "quire",
+        .kind = common.KIND_QUIRE(),
+        .width = 512,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(512),
+        .storage_bytes = 64,
+        .es = 0,
+        .useed = 0,
+        .nbits = 512,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn posit_descriptor_at(idx: i32) common.TypeDescriptor {
+    if (idx == 0) { return posit_descriptor_p8(); }
+    if (idx == 1) { return posit_descriptor_p16(); }
+    if (idx == 2) { return posit_descriptor_p32(); }
+    if (idx == 3) { return posit_descriptor_p64(); }
+    if (idx == 4) { return posit_descriptor_quire(); }
+    return common.td_empty();
+}
+
+fn posit_lookup(name: []u8) ?common.TypeDescriptor {
+    if (@strEq(name, "p8"))  { return posit_descriptor_p8(); }
+    if (@strEq(name, "p16")) { return posit_descriptor_p16(); }
+    if (@strEq(name, "p32")) { return posit_descriptor_p32(); }
+    if (@strEq(name, "p64")) { return posit_descriptor_p64(); }
+    if (@strEq(name, "quire")) { return posit_descriptor_quire(); }
+    return null;
+}

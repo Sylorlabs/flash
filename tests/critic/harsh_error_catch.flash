@@ -1,0 +1,12 @@
+// harsh_error_catch.flash — must fail stage-1 --check (unknown error member).
+
+error { NotFound, BadInput };
+
+fn lookup(id: i32) !i32 {
+    if (id < 0) { return error.TotallyUnknown; }
+    return id;
+}
+
+fn main() i32 {
+    return 0;
+}

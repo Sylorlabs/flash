@@ -1,0 +1,81 @@
+// examples/ui_engine_demo.flash — the retained UI engine across three frames.
+//
+// Frame 0: full render of a themed dashboard built as a widget tree.
+// Frame 1: state changes (gauge 72→91, progress 40→85, toggle on, button
+//          pressed, new sparkline sample) marked as damage.
+// Frame 2: damage render — ONLY dirty widget regions repaint, and the engine
+//          reports the repainted-pixel cost vs the full frame.
+
+@import("../flash/ui/ui.flash")
+
+fn main() i32 {
+    let fb: SoftFb = softgpu_new(480, 320);
+    let ui: UiTree = ui_new(480, 320);
+
+    // ── build the tree ───────────────────────────────────────────────────────
+    let _title: i32 = ui_vlabel(&ui, -1, 24.0, 18.0, "ENGINE DECK", 24.0, 1);
+    let _sub: i32 = ui_label(&ui, -1, 26.0, 50.0, "RETAINED UI - DAMAGE TRACKED", 1);
+
+    let card1: i32 = ui_card(&ui, -1, 24.0, 70.0, 210.0, 160.0);
+    let _c1t: i32 = ui_label(&ui, card1, 16.0, 14.0, "CORE LOAD", 0);
+    let gauge: i32 = ui_gauge(&ui, card1, 105.0, 92.0, 46.0, 72);
+    let _c1b: i32 = ui_label(&ui, card1, 16.0, 142.0, "THROUGHPUT INDEX", 1);
+
+    let card2: i32 = ui_card(&ui, -1, 250.0, 70.0, 206.0, 160.0);
+    let _c2t: i32 = ui_label(&ui, card2, 16.0, 14.0, "LATTICE", 0);
+    let prog: i32 = ui_progress(&ui, card2, 16.0, 34.0, 174.0, 40);
+    let _c2l: i32 = ui_label(&ui, card2, 16.0, 52.0, "SEATING", 1);
+    let tog: i32 = ui_toggle(&ui, card2, 16.0, 68.0, 0);
+    let _c2m: i32 = ui_label(&ui, card2, 58.0, 73.0, "RAW MODE", 1);
+    let spark: i32 = ui_spark(&ui, card2, 16.0, 96.0, 174.0, 48.0);
+    let s0: ArrayList[i32] = make[i32](8);
+    push[i32](&s0, 20);
+    push[i32](&s0, 45);
+    push[i32](&s0, 30);
+    push[i32](&s0, 70);
+    push[i32](&s0, 55);
+    push[i32](&s0, 82);
+    let si: i32 = 0;
+    while (si < len[i32](s0)) {
+        ui_spark_push(&ui, spark, get[i32](s0, si));
+        si = si + 1;
+    }
+
+    let btn1: i32 = ui_button(&ui, -1, 24.0, 250.0, 120.0, 32.0, "IGNITE", 0);
+    let _btn2: i32 = ui_button(&ui, -1, 156.0, 250.0, 120.0, 32.0, "CALIBRATE", 1);
+
+    // ── frame 0: full render ─────────────────────────────────────────────────
+    ui_render_full(&ui, &fb);
+    let out: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/ui_engine_f0.ppm" };
+    let rc0: i32 = softgpu_present(out, &fb);
+    if (rc0 != 0) { _zag_println("FAIL present f0"); return 1; }
+    _zag_print("f0 full=");
+    _zag_println(_zag_i64_to_str((480 * 320) as i64));
+
+    // ── frame 1: state changes → damage ─────────────────────────────────────
+    ui_set_value(&ui, gauge, 91);
+    ui_set_value(&ui, prog, 85);
+    ui_set_value(&ui, tog, 1);
+    ui_set_value(&ui, btn1, 1);
+    ui_spark_push(&ui, spark, 96);
+
+    let repainted: i32 = ui_render_damage(&ui, &fb);
+    let out1: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/ui_engine_f1.ppm" };
+    let rc1: i32 = softgpu_present(out1, &fb);
+    if (rc1 != 0) { _zag_println("FAIL present f1"); return 1; }
+    _zag_print("f1 damage=");
+    _zag_print(_zag_i64_to_str(repainted as i64));
+    _zag_print(" (");
+    _zag_print(_zag_i64_to_str(((repainted * 100) / (480 * 320)) as i64));
+    _zag_println(" pct of full)");
+
+    // ── frame 2: no changes → zero damage ────────────────────────────────────
+    let repainted2: i32 = ui_render_damage(&ui, &fb);
+    _zag_print("f2 damage=");
+    _zag_println(_zag_i64_to_str(repainted2 as i64));
+
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("ui_engine_demo: ok");
+    return 0;
+}

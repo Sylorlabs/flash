@@ -1,0 +1,374 @@
+// selfhost/fsema_surface.flash.zag — surface program → fsema adapter.
+//
+// Port of flash/compiler/flash_sema_surface.zag: binding-env checks plus
+// lowering compact surface syntax into a synthetic main() FNode tree.
+
+@import("sparse.flash")
+@import("fsema.flash")
+
+struct FssEnv {
+    names: ArrayList[[]u8],
+    types: ArrayList[[]u8],
+}
+
+fn fss_has(env: *FssEnv, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](env.*.names)) {
+        if (@strEq(get[[]u8](env.*.names, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fss_bind(env: *FssEnv, name: []u8, ty: []u8) void {
+    push[[]u8](&env.*.names, name);
+    push[[]u8](&env.*.types, ty);
+}
+
+fn fss_lookup_ty(env: *FssEnv, name: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](env.*.names)) {
+        if (@strEq(get[[]u8](env.*.names, i), name) == 1) {
+            return get[[]u8](env.*.types, i);
+        }
+        i = i + 1;
+    }
+    return "trit";
+}
+
+fn fss_surface_err(file: []u8, line: i32, code: []u8, msg: []u8) void {
+    _zag_print("flashc1 surface ");
+    _zag_print(code);
+    _zag_print(" (");
+    _zag_print(file);
+    _zag_print(":");
+    _zag_print(_zag_i64_to_str(line as i64));
+    _zag_print("): ");
+    _zag_println(msg);
+}
+
+fn fss_valid_trit(v: i32) i32 {
+    if (v == -1 || v == 0 || v == 1) { return 1; }
+    return 0;
+}
+
+fn fss_raw_arg_count(name: []u8) i32 {
+    if (@strEq(name, "set_laser_mw") == 1) { return 3; }
+    if (@strEq(name, "target_voxel") == 1) { return 3; }
+    return 4;
+}
+
+fn fss_check_mixed_trit_op(env: *FssEnv, st: SpStmt, file: []u8) i32 {
+    let ta: []u8 = fss_lookup_ty(env, st.op_a);
+    let tb: []u8 = fss_lookup_ty(env, st.op_b);
+    if (fs_is_mixed_posit_integer(ta, tb) == 1) {
+        fss_surface_err(file, st.line, "F0002",
+            "mixed posit and integer in surface trit op — add explicit cast");
+        return 1;
+    }
+    if (@strEq(ta, "trit") == 0) {
+        fss_surface_err(file, st.line, "F0001", "expected trit binding in surface trit op");
+        return 1;
+    }
+    if (@strEq(tb, "trit") == 0) {
+        fss_surface_err(file, st.line, "F0001", "expected trit binding in surface trit op");
+        return 1;
+    }
+    return 0;
+}
+
+fn fss_check_surface_stmt(env: *FssEnv, st: SpStmt, file: []u8) i32 {
+    let errs: i32 = 0;
+    if (st.kind == spk_trit_bind()) {
+        if (fss_valid_trit(st.trit_lit) == 0) {
+            fss_surface_err(file, st.line, "F0001", "invalid trit literal in surface binding");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, "trit");
+        }
+    } else if (st.kind == spk_wave_bind()) {
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, "Wave");
+        }
+    } else if (st.kind == spk_p32_bind()) {
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, "p32");
+        }
+    } else if (st.kind == spk_sat_bind()) {
+        if (st.trit_lit < -32768 || st.trit_lit > 32767) {
+            fss_surface_err(file, st.line, "F0001", "sat_i16 surface binding out of range");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.name) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.name, "sat_i16");
+        }
+    } else if (st.kind == spk_trit_op()) {
+        if (fss_has(env, st.op_a) == 0) {
+            fss_surface_err(file, st.line, "F0001", "unknown identifier in surface trit op");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.op_b) == 0) {
+            fss_surface_err(file, st.line, "F0001", "unknown identifier in surface trit op");
+            errs = errs + 1;
+        }
+        if (fss_has(env, st.op_a) == 1 && fss_has(env, st.op_b) == 1) {
+            errs = errs + fss_check_mixed_trit_op(env, st, file);
+        }
+        if (fss_has(env, st.op_dst) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            fss_bind(env, st.op_dst, "trit");
+        }
+    } else if (st.kind == spk_mat3_op()) {
+        if (fss_has(env, st.op_dst) == 1) {
+            fss_surface_err(file, st.line, "F0001", "duplicate surface binding name");
+            errs = errs + 1;
+        } else {
+            if (@strEq(st.op_name, "mat3_apply") == 1) {
+                fss_bind(env, st.op_dst, "TritTriple");
+            } else {
+                fss_bind(env, st.op_dst, "Mat3");
+            }
+        }
+    } else if (st.kind == spk_raw_block()) {
+        let ci: i32 = 0;
+        while (ci < len[SpRawCall](st.raws)) {
+            let rc: SpRawCall = get[SpRawCall](st.raws, ci);
+            let need: i32 = fss_raw_arg_count(rc.name);
+            if (len[f32](rc.args) != need) {
+                fss_surface_err(file, st.line, "F0004", "raw {} call arity mismatch");
+                errs = errs + 1;
+            }
+            ci = ci + 1;
+        }
+    }
+    return errs;
+}
+
+fn fss_surface_extra_validate(prog: *SpProgram, file: []u8) i32 {
+    let env: FssEnv = FssEnv{
+        .names = make[[]u8](16),
+        .types = make[[]u8](16),
+    };
+    let errs: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[SpStmt](prog.*.stmts)) {
+        let st: SpStmt = get[SpStmt](prog.*.stmts, i);
+        errs = errs + fss_check_surface_stmt(&env, st, file);
+        i = i + 1;
+    }
+    return errs;
+}
+
+// ── surface → FNode pool lowering ───────────────────────────────────────────
+
+fn fss_push(pool: *ArrayList[FNode], n: FNode) i32 {
+    push[FNode](pool.*, n);
+    return len[FNode](pool.*) - 1;
+}
+
+fn fss_blank(code: i32, line: i32) FNode {
+    return FNode{
+        .code = code, .line = line, .text = "", .ty = "",
+        .a = 0, .b = 0, .c = 0, .flag = 0, .flag2 = 0,
+        .kids = make[i32](2), .kids2 = make[i32](2),
+        .names = make[[]u8](2), .names2 = make[[]u8](2), .types = make[[]u8](2),
+    };
+}
+
+fn fss_trit_lit_text(v: i32) []u8 {
+    if (v == -1) { return "T"; }
+    if (v == 1)  { return "+1"; }
+    if (v == 0)  { return "0"; }
+    return _zag_i64_to_str(v as i64);
+}
+
+fn fss_f32_text(v: f32) []u8 {
+    let whole: i32 = v as i32;
+    let frac: f32 = v - whole as f32;
+    if (frac < 0.0) {
+        frac = 0.0 - frac;
+        whole = 0 - whole;
+    }
+    if (frac > 0.0001) {
+        let scaled: i32 = (frac * 1000.0) as i32;
+        let s: []u8 = _zag_i64_to_str(whole as i64);
+        s = _zag_str_concat(s, ".");
+        return _zag_str_concat(s, _zag_i64_to_str(scaled as i64));
+    }
+    return _zag_i64_to_str(whole as i64);
+}
+
+fn fss_mk_ident(pool: *ArrayList[FNode], name: []u8) i32 {
+    let n: FNode = fss_blank(15, 0);
+    n.text = name;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_trit(pool: *ArrayList[FNode], text: []u8) i32 {
+    let n: FNode = fss_blank(11, 0);
+    n.text = text;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_int(pool: *ArrayList[FNode], text: []u8) i32 {
+    let n: FNode = fss_blank(12, 0);
+    n.text = text;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_float(pool: *ArrayList[FNode], text: []u8) i32 {
+    let n: FNode = fss_blank(13, 0);
+    n.text = text;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_cast(pool: *ArrayList[FNode], expr: i32, target: []u8) i32 {
+    let n: FNode = fss_blank(19, 0);
+    n.a = expr;
+    n.text = target;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_call(pool: *ArrayList[FNode], callee: i32, args: ArrayList[i32]) i32 {
+    let n: FNode = fss_blank(18, 0);
+    n.a = callee;
+    n.kids = args;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_let(pool: *ArrayList[FNode], name: []u8, dty: []u8, expr: i32) i32 {
+    let n: FNode = fss_blank(2, 0);
+    n.text = name;
+    n.ty = dty;
+    n.a = expr;
+    n.flag = 1;
+    n.flag2 = 1;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_estmt(pool: *ArrayList[FNode], expr: i32) i32 {
+    let n: FNode = fss_blank(8, 0);
+    n.a = expr;
+    return fss_push(pool, n);
+}
+
+fn fss_mk_raw(pool: *ArrayList[FNode], body: ArrayList[i32]) i32 {
+    let n: FNode = fss_blank(6, 0);
+    n.kids = body;
+    return fss_push(pool, n);
+}
+
+fn fss_push_f32_arg(pool: *ArrayList[FNode], args: *ArrayList[i32], v: f32) void {
+    push[i32](args, fss_mk_float(pool, fss_f32_text(v)));
+}
+
+fn fss_raw_call_node(pool: *ArrayList[FNode], rc: SpRawCall) i32 {
+    let args: ArrayList[i32] = make[i32](6);
+    let ai: i32 = 0;
+    while (ai < len[f32](rc.args)) {
+        fss_push_f32_arg(pool, &args, get[f32](rc.args, ai));
+        ai = ai + 1;
+    }
+    return fss_mk_call(pool, fss_mk_ident(pool, rc.name), args);
+}
+
+fn fss_mat3_ret_ty(op: []u8) []u8 {
+    if (@strEq(op, "mat3_apply") == 1) { return "TritTriple"; }
+    return "Mat3";
+}
+
+fn fss_mat3_call_node(pool: *ArrayList[FNode], st: SpStmt) i32 {
+    let args: ArrayList[i32] = make[i32](4);
+    if (st.op_argc >= 1) { push[i32](&args, fss_mk_ident(pool, st.op_a)); }
+    if (st.op_argc >= 2) { push[i32](&args, fss_mk_ident(pool, st.op_b)); }
+    if (st.op_argc >= 3) { push[i32](&args, fss_mk_ident(pool, st.op_c)); }
+    if (st.op_argc >= 4) { push[i32](&args, fss_mk_ident(pool, st.op_d)); }
+    return fss_mk_call(pool, fss_mk_ident(pool, st.op_name), args);
+}
+
+fn fss_stmt_to_node(pool: *ArrayList[FNode], st: SpStmt) i32 {
+    if (st.kind == spk_trit_bind()) {
+        return fss_mk_let(pool, st.name, "trit",
+            fss_mk_trit(pool, fss_trit_lit_text(st.trit_lit)));
+    }
+    if (st.kind == spk_wave_bind()) {
+        let args: ArrayList[i32] = make[i32](1);
+        return fss_mk_let(pool, st.name, "Wave",
+            fss_mk_call(pool, fss_mk_ident(pool, "wave_default"), args));
+    }
+    if (st.kind == spk_p32_bind()) {
+        return fss_mk_let(pool, st.name, "p32",
+            fss_mk_cast(pool, fss_mk_float(pool, fss_f32_text(st.num_f32)), "p32"));
+    }
+    if (st.kind == spk_sat_bind()) {
+        return fss_mk_let(pool, st.name, "sat_i16",
+            fss_mk_cast(pool, fss_mk_int(pool, _zag_i64_to_str(st.trit_lit as i64)), "sat_i16"));
+    }
+    if (st.kind == spk_trit_op()) {
+        let args: ArrayList[i32] = make[i32](2);
+        push[i32](&args, fss_mk_ident(pool, st.op_a));
+        if (@strEq(st.op_name, "trit_neg") == 0) {
+            push[i32](&args, fss_mk_ident(pool, st.op_b));
+        }
+        return fss_mk_let(pool, st.op_dst, "trit",
+            fss_mk_call(pool, fss_mk_ident(pool, st.op_name), args));
+    }
+    if (st.kind == spk_mat3_op()) {
+        return fss_mk_let(pool, st.op_dst, fss_mat3_ret_ty(st.op_name),
+            fss_mat3_call_node(pool, st));
+    }
+    if (st.kind == spk_raw_block()) {
+        let body: ArrayList[i32] = make[i32](8);
+        let ci: i32 = 0;
+        while (ci < len[SpRawCall](st.raws)) {
+            let rc: SpRawCall = get[SpRawCall](st.raws, ci);
+            push[i32](&body, fss_mk_estmt(pool, fss_raw_call_node(pool, rc)));
+            ci = ci + 1;
+        }
+        return fss_mk_raw(pool, body);
+    }
+    return fss_mk_estmt(pool, fss_mk_ident(pool, ""));
+}
+
+fn fss_prog_to_main_fn(pool: *ArrayList[FNode], prog: *SpProgram) i32 {
+    let body: ArrayList[i32] = make[i32](20);
+    let i: i32 = 0;
+    while (i < len[SpStmt](prog.*.stmts)) {
+        push[i32](&body, fss_stmt_to_node(pool, get[SpStmt](prog.*.stmts, i)));
+        i = i + 1;
+    }
+    let n: FNode = fss_blank(1, 1);
+    n.text = "main";
+    n.ty = "i32";
+    n.kids = body;
+    return fss_push(pool, n);
+}
+
+// Extra binding checks (mixed posit+integer, raw arity) + AST sema on lowered main.
+fn fsema_surface_ast(prog: *SpProgram, file: []u8) i32 {
+    let pool: ArrayList[FNode] = make[FNode](64);
+    let decls: ArrayList[i32] = make[i32](2);
+    push[i32](&decls, fss_prog_to_main_fn(&pool, prog));
+    return fsema_check_pool(&pool, decls, file);
+}
+
+fn fsema_surface_check(prog: *SpProgram, file: []u8) i32 {
+    let extra: i32 = fss_surface_extra_validate(prog, file);
+    let ast: i32 = fsema_surface_ast(prog, file);
+    return extra + ast;
+}

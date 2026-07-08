@@ -1,0 +1,61 @@
+// flash/stdlib/photonic.zag — high-level photonic API for Flash programs.
+//
+// Wraps flash_to_zag spatial routing and zag-spatial HardwareManager seating.
+//
+//   @import("flash/stdlib/photonic.zag")
+
+@import("../compiler/flash_to_zag.zag")
+@import("../../zag-spatial/hardware_manager.zag")
+@import("photon.zag")
+
+struct PhotonicSession {
+    mgr:    HardwareManager,
+    route:  RouteCtx,
+    seated: i32,
+}
+
+fn photonic_open(width: i32, height: i32, depth: i32, stripe_width: i32) PhotonicSession {
+    let mgr: HardwareManager = manager_new(width, height, depth, stripe_width);
+    return PhotonicSession{
+        .mgr    = mgr,
+        .route  = route_ctx_new(),
+        .seated = 0,
+    };
+}
+
+fn photonic_close(sess: *PhotonicSession) void {
+    manager_free(&sess.*.mgr);
+    sess.*.seated = 0;
+}
+
+fn photonic_seat(sess: *PhotonicSession, cx: i32, cy: i32, cz: i32, rot: RotationState) i32 {
+    let ok: i32 = seat_nano_block(&sess.*.mgr, chamber_coord(cx, cy, cz), rot);
+    if (ok == 1) { sess.*.seated = sess.*.seated + 1; }
+    return ok;
+}
+
+fn photonic_seat_grid(sess: *PhotonicSession, count: i32) void {
+    let w: i32 = sess.*.mgr.lattice.dims.width;
+    if (w < 1) { w = 1; }
+    let i: i32 = 0;
+    while (i < count) {
+        let cx: i32 = i % w;
+        let cy: i32 = (i / w) % sess.*.mgr.lattice.dims.height;
+        let rot: RotationState = RotationState.R0;
+        if ((i % 2) == 1) { rot = RotationState.R90; }
+        photonic_seat(sess, cx, cy, 0, rot);
+        i = i + 1;
+    }
+}
+
+fn photonic_route_wave(sess: *PhotonicSession, w: Wave) PathSegment {
+    return lower_wave(&sess.*.mgr, &sess.*.route, w);
+}
+
+fn photonic_route_beam(sess: *PhotonicSession, b: Beam) PathSegment {
+    return lower_beam(&sess.*.mgr, &sess.*.route, b);
+}
+
+fn photonic_route_phase(sess: *PhotonicSession, p: Phase) PathSegment {
+    return lower_phase(&sess.*.mgr, &sess.*.route, p);
+}

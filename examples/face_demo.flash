@@ -1,0 +1,89 @@
+// examples/face_demo.flash — vgpu v6 showcase: filled outline font faces,
+// dash-over-outline unification, and dirty-rect damage tracking.
+//
+// Faces: glyph skeletons expanded to closed outline contours and filled in
+// one normalized pass — here with a linear gradient paint (impossible via the
+// stroke API, which is solid-only). Dashes: routed through the same outline
+// builder as solid strokes, so translucent dashes are seam-free and every
+// dash end takes a real cap. Damage: the framebuffer records a dirty rect of
+// actual writes; a small late edit damages only its own box, not the frame.
+
+@import("../flash/driver/vgpu.flash")
+
+fn main() i32 {
+    let fb: SoftFb = softgpu_new(480, 300);
+
+    // background gradient
+    let bg: VPath = vg_path_new();
+    vg_move_to(&bg, 0.0, 0.0);
+    vg_line_to(&bg, 480.0, 0.0);
+    vg_line_to(&bg, 480.0, 300.0);
+    vg_line_to(&bg, 0.0, 300.0);
+    vg_close(&bg);
+    vg_fill_linear(&fb, &bg, 0.0, 0.0, 0.0, 300.0, 14, 16, 34, 255, 40, 28, 66, 255);
+
+    // ── filled faces: gradient headline (amber → cyan across the text) ──────
+    let head: VgPaint = vg_paint_base(1, 255, 176, 32, 255);
+    head.r2 = 32;
+    head.g2 = 200;
+    head.b2 = 255;
+    head.a2 = 255;
+    head.gx0 = 40.0;
+    head.gy0 = 0.0;
+    head.gx1 = 440.0;
+    head.gy1 = 0.0;
+    vg_text_face(&fb, 40.0, 40.0, "FLASH FACES", 44.0, 9.0, &head);
+
+    // solid face vs stroked skeleton, same size — flat vs round terminals
+    vg_text_face_solid(&fb, 40.0, 110.0, "FILLED", 26.0, 6.0, 240, 240, 250, 255);
+    vg_text_vec(&fb, 250.0, 110.0, "STROKED", 26.0, 6.0, 150, 150, 175, 255);
+
+    // ── unified dashes: translucent dashed ring, round caps, no seams ───────
+    let ring: VPath = vg_path_new();
+    vg_circle(&ring, 110.0, 218.0, 44.0);
+    vg_stroke_dash_ex(&fb, &ring, 9.0, 17.0, 12.0, vg_cap_round(), vg_join_round(), 255, 176, 32, 150);
+
+    // compat entry (butt caps): dashed separator line
+    let sep: VPath = vg_path_new();
+    vg_move_to(&sep, 190.0, 170.0);
+    vg_line_to(&sep, 450.0, 170.0);
+    vg_stroke_dash(&fb, &sep, 3.0, 10.0, 7.0, 120, 120, 160, 255);
+
+    // dashed rounded rect with square caps — dash phase rides through the
+    // corner arcs as joins, caps appear only at real dash ends
+    let card: VPath = vg_path_new();
+    vg_rounded_rect(&card, 205.0, 190.0, 240.0, 84.0, 16.0);
+    vg_stroke_dash_ex(&fb, &card, 5.0, 22.0, 10.0, vg_cap_square(), vg_join_bevel(), 32, 200, 255, 210);
+    vg_text_face_solid(&fb, 232.0, 216.0, "UNIFIED DASH", 17.0, 4.0, 240, 240, 250, 255);
+
+    // ── dirty-rect damage: a small late edit marks only its own box ─────────
+    softgpu_damage_on(&fb);
+    let badge: VPath = vg_path_new();
+    vg_circle(&badge, 420.0, 40.0, 17.0);
+    vg_fill(&fb, &badge, 255, 90, 90, 255);
+    vg_text_face_solid(&fb, 411.0, 33.0, "9", 15.0, 4.0, 255, 255, 255, 255);
+
+    _zag_print("damage_valid=");
+    _zag_println(_zag_i64_to_str(softgpu_damage_valid(&fb) as i64));
+    _zag_print("damage=");
+    _zag_print(_zag_i64_to_str(fb.dmg_x0 as i64));
+    _zag_print(",");
+    _zag_print(_zag_i64_to_str(fb.dmg_y0 as i64));
+    _zag_print(",");
+    _zag_print(_zag_i64_to_str(fb.dmg_x1 as i64));
+    _zag_print(",");
+    _zag_println(_zag_i64_to_str(fb.dmg_y1 as i64));
+    _zag_print("damage_checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum_region(&fb, fb.dmg_x0, fb.dmg_y0, fb.dmg_x1, fb.dmg_y1) as i64));
+
+    let out: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/face_demo.ppm" };
+    let rc: i32 = softgpu_present(out, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL face present");
+        return 1;
+    }
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("face_demo: ok");
+    return 0;
+}

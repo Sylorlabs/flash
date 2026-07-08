@@ -1,0 +1,148 @@
+// trit.zag — core balanced-ternary trit type for the Photonic Engine
+//
+// Hardware encoding: Base-3 digits {-1, 0, +1} (T, 0, 1).
+// No binary AND/OR — all logic lowers to phase-shift ops in the Active Lattice PCM matrix.
+//
+//   @import("ternary/trit.zag") as trit
+//   let t: trit.Trit = trit.pos();
+//   let raw: i8 = trit.to_i8(t);          // +1
+//   let ok: bool = trit.is_valid_i8(raw); // true
+
+// ── semantic enum (preferred at API boundaries) ──────────────────────────────
+
+enum Trit {
+    Neg,   // −1  (T / minus trit)
+    Zero,  //  0
+    Pos,   // +1  (1 / plus trit)
+}
+
+// ── numeric wire values (i8 representation) ──────────────────────────────────
+
+fn trit_neg_val() i8 { return 0 - 1; }
+fn trit_zero_val() i8 { return 0; }
+fn trit_pos_val() i8 { return 1; }
+fn trit_count() i32 { return 3; }
+
+error { InvalidTrit, InvalidTritIndex }
+
+// ── constructors ─────────────────────────────────────────────────────────────
+
+fn neg() Trit {
+    return Trit.Neg;
+}
+
+fn zero() Trit {
+    return Trit.Zero;
+}
+
+fn pos() Trit {
+    return Trit.Pos;
+}
+
+fn from_i8(v: i8) !Trit {
+    if (v == trit_neg_val()) { return Trit.Neg; }
+    if (v == trit_zero_val()) { return Trit.Zero; }
+    if (v == trit_pos_val()) { return Trit.Pos; }
+    return error.InvalidTrit;
+}
+
+fn from_index(idx: i32) !Trit {
+    if (idx == 0) { return Trit.Neg; }
+    if (idx == 1) { return Trit.Zero; }
+    if (idx == 2) { return Trit.Pos; }
+    return error.InvalidTritIndex;
+}
+
+fn try_i8(v: i8) ?Trit {
+    if (v == trit_neg_val()) { return Trit.Neg; }
+    if (v == trit_zero_val()) { return Trit.Zero; }
+    if (v == trit_pos_val()) { return Trit.Pos; }
+    return null;
+}
+
+// ── conversions ─────────────────────────────────────────────────────────────
+
+fn to_i8(t: Trit) i8 {
+    return switch (t) {
+        .Neg => trit_neg_val(),
+        .Zero => trit_zero_val(),
+        .Pos => trit_pos_val(),
+    };
+}
+
+fn to_index(t: Trit) i32 {
+    return switch (t) {
+        .Neg => 0,
+        .Zero => 1,
+        .Pos => 2,
+    };
+}
+
+fn index_to_i8(idx: i32) i8 {
+    return switch (idx) {
+        0 => trit_neg_val(),
+        1 => trit_zero_val(),
+        2 => trit_pos_val(),
+        else => trit_zero_val(),
+    };
+}
+
+fn i8_to_index(v: i8) i32 {
+    if (v == trit_neg_val()) { return 0; }
+    if (v == trit_zero_val()) { return 1; }
+    return 2;
+}
+
+// ── validators ────────────────────────────────────────────────────────────────
+
+fn is_valid_i8(v: i8) bool {
+    return v == trit_neg_val() || v == trit_zero_val() || v == trit_pos_val();
+}
+
+fn is_valid_index(idx: i32) bool {
+    return idx >= 0 && idx < trit_count();
+}
+
+fn clamp_i8(v: i8) i8 {
+    if (v < trit_neg_val()) { return trit_neg_val(); }
+    if (v > trit_pos_val()) { return trit_pos_val(); }
+    return v;
+}
+
+// ── display helpers ───────────────────────────────────────────────────────────
+
+fn symbol(t: Trit) []u8 {
+    return switch (t) {
+        .Neg => "T",
+        .Zero => "0",
+        .Pos => "1",
+    };
+}
+
+fn symbol_i8(v: i8) []u8 {
+    if (v == trit_neg_val()) { return "T"; }
+    if (v == trit_pos_val()) { return "1"; }
+    return "0";
+}
+
+// ── enum methods ─────────────────────────────────────────────────────────────
+
+fn (self: Trit) negate() Trit {
+    return switch (self) {
+        .Neg => Trit.Pos,
+        .Zero => Trit.Zero,
+        .Pos => Trit.Neg,
+    };
+}
+
+fn (self: Trit) is_negative() bool {
+    return self == Trit.Neg;
+}
+
+fn (self: Trit) is_zero() bool {
+    return self == Trit.Zero;
+}
+
+fn (self: Trit) is_positive() bool {
+    return self == Trit.Pos;
+}

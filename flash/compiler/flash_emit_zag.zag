@@ -1,0 +1,709 @@
+// flash/compiler/flash_emit_zag.zag — full Flash AST → Zag source emitter.
+//
+// This is the general-purpose lowering used on the road to self-hosting:
+// Flash's full language (fn/struct/enum/if/while/switch/let/assign, generic
+// calls, slices, struct literals) emits near-identity Zag, while Flash-native
+// constructs lower to runtime shims:
+//   trit literals  →  trit(-1|0|1)
+//   trit/wave/...  →  Trit/Wave/Beam/Phase runtime types (flash_slim.zag)
+//   raw { }        →  _flash_raw_* extern calls (photonic_rt.zag)
+//
+// Type checking of the emitted program is delegated to znc for now; the Flash
+// sema (flash_sema.zag) tightens over time as self-hosted sources grow.
+
+@import("flash_ast.zag")
+@import("../toolchain/zag-poc/std/list.zag")
+@import("../toolchain/zag-poc/std/rt.zag")
+
+struct FezCtx {
+    out:     *ArrayList[u8],
+    raw_n:   i32,
+    has_raw: i32,
+}
+
+struct FezResult {
+    src:     ArrayList[u8],
+    has_raw: i32,
+}
+
+fn fez_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) {
+        push[u8](out, s[i]);
+        i = i + 1;
+    }
+}
+
+fn fez_indent(out: *ArrayList[u8], depth: i32) void {
+    let i: i32 = 0;
+    while (i < depth) {
+        fez_app(out, "    ");
+        i = i + 1;
+    }
+}
+
+// Balanced-ternary unit width for t<N> names (1..40 lowers on binary hosts),
+// or 0 when `ty` is not a t-unit.
+fn fez_t_width(ty: []u8) i32 {
+    if (ty.len < 2) { return 0; }
+    if ((ty[0] as i32) != 116) { return 0; }
+    let w: i32 = 0;
+    let i: i32 = 1;
+    while (i < ty.len) {
+        let c: i32 = ty[i] as i32;
+        if (c < 48 || c > 57) { return 0; }
+        w = w * 10 + (c - 48);
+        if (w > 127) { return 0; }
+        i = i + 1;
+    }
+    return w;
+}
+
+fn fez_type(ty: []u8) []u8 {
+    if (@strEq(ty, "trit"))  { return "Trit"; }
+    if (@strEq(ty, "wave"))  { return "Wave"; }
+    if (@strEq(ty, "beam"))  { return "Beam"; }
+    if (@strEq(ty, "phase")) { return "Phase"; }
+    // native t-units: binary-host embedding is a plain machine integer —
+    // t-units promise range semantics (±(3^w−1)/2), never base-2 wraparound,
+    // so no masking code exists to emit. t1..t40 are exact in i64.
+    let tw: i32 = fez_t_width(ty);
+    if (tw >= 1 && tw <= 40) { return "i64"; }
+    return ty;
+}
+
+fn fez_trit_lit(text: []u8) []u8 {
+    if (@strEq(text, "T"))  { return "trit(-1)"; }
+    if (@strEq(text, "+1")) { return "trit(1)"; }
+    if (@strEq(text, "-1")) { return "trit(-1)"; }
+    if (@strEq(text, "0"))  { return "trit(0)"; }
+    if (@strEq(text, "1"))  { return "trit(1)"; }
+    return _zag_str_concat(_zag_str_concat("trit(", text), ")");
+}
+
+fn fez_targs_str(targs: ArrayList[[]u8]) []u8 {
+    let s: []u8 = "[";
+    let i: i32 = 0;
+    while (i < len[[]u8](targs)) {
+        if (i > 0) { s = _zag_str_concat(s, ", "); }
+        s = _zag_str_concat(s, fez_type(get[[]u8](targs, i)));
+        i = i + 1;
+    }
+    return _zag_str_concat(s, "]");
+}
+
+fn fez_node_as_bin(n: *FlashNode) Bin {
+    switch (n.*) {
+        .bin => |b| { return b; }
+    }
+    return Bin{ .op = "+", .l = n, .r = n };
+}
+
+fn fez_node_as_un(n: *FlashNode) Un {
+    switch (n.*) {
+        .un => |u| { return u; }
+    }
+    return Un{ .op = "-", .e = n };
+}
+
+fn fez_node_as_call(n: *FlashNode) Call {
+    switch (n.*) {
+        .call => |c| { return c; }
+    }
+    return Call{ .callee = n, .args = make[*FlashNode](1), .targs = make[[]u8](1) };
+}
+
+fn fez_node_as_cast(n: *FlashNode) Cast {
+    switch (n.*) {
+        .cast_ => |c| { return c; }
+    }
+    return Cast{ .expr = n, .target = "" };
+}
+
+fn fez_node_as_field(n: *FlashNode) Field {
+    switch (n.*) {
+        .fld => |f| { return f; }
+    }
+    return Field{ .base = n, .fname = "" };
+}
+
+fn fez_node_as_index(n: *FlashNode) Index {
+    switch (n.*) {
+        .idx => |x| { return x; }
+    }
+    return Index{ .base = n, .idx = n };
+}
+
+fn fez_node_as_slice(n: *FlashNode) SliceExpr {
+    switch (n.*) {
+        .slice_ => |s| { return s; }
+    }
+    return SliceExpr{ .base = n, .lo = n, .hi = n, .has_hi = 0 };
+}
+
+fn fez_node_as_slit(n: *FlashNode) StructLit {
+    switch (n.*) {
+        .slit_ => |s| { return s; }
+    }
+    return StructLit{ .sname = "", .fields = make[FieldInit](1), .targs = make[[]u8](1) };
+}
+
+fn fez_node_as_switch(n: *FlashNode) Switch {
+    switch (n.*) {
+        .switch_ => |s| { return s; }
+    }
+    return Switch{ .subject = n, .arms = make[SwitchArm](1), .els_body = make[*FlashNode](1), .has_els = 0 };
+}
+
+fn fez_node_as_let(n: *FlashNode) Let {
+    switch (n.*) {
+        .let_ => |l| { return l; }
+    }
+    return Let{ .name = "", .dty = "", .has_dty = 0, .has_init = 0, .expr = n };
+}
+
+fn fez_node_as_return(n: *FlashNode) Return {
+    switch (n.*) {
+        .ret => |r| { return r; }
+    }
+    return Return{ .has_expr = 0, .expr = n };
+}
+
+fn fez_node_as_if(n: *FlashNode) If {
+    switch (n.*) {
+        .if_ => |x| { return x; }
+    }
+    return If{ .cond = n, .then_body = make[*FlashNode](1), .els_body = make[*FlashNode](1), .has_els = 0, .cap = "", .has_cap = 0 };
+}
+
+fn fez_node_as_union(n: *FlashNode) UnionDecl {
+    switch (n.*) {
+        .union_d => |u| { return u; }
+    }
+    return UnionDecl{ .name = "", .fields = make[Param](1) };
+}
+
+fn fez_node_as_while(n: *FlashNode) While {
+    switch (n.*) {
+        .while_ => |w| { return w; }
+    }
+    return While{ .cond = n, .body = make[*FlashNode](1) };
+}
+
+fn fez_node_as_raw(n: *FlashNode) RawBlock {
+    switch (n.*) {
+        .raw_ => |r| { return r; }
+    }
+    return RawBlock{ .body = make[*FlashNode](1) };
+}
+
+fn fez_node_as_assign(n: *FlashNode) Assign {
+    switch (n.*) {
+        .assign => |a| { return a; }
+    }
+    return Assign{ .target = n, .expr = n };
+}
+
+fn fez_node_as_estmt(n: *FlashNode) ExprStmt {
+    switch (n.*) {
+        .estmt => |e| { return e; }
+    }
+    return ExprStmt{ .expr = n };
+}
+
+fn fez_node_text(n: *FlashNode) []u8 {
+    switch (n.*) {
+        .trit_ => |t| { return t.text; }
+        .ilit  => |x| { return x.text; }
+        .flit  => |x| { return x.text; }
+        .slit  => |s| { return s.text; }
+        .id    => |d| { return d.name; }
+    }
+    return "";
+}
+
+// ── expressions ───────────────────────────────────────────────────────────────
+
+fn fez_expr(n: *FlashNode) []u8 {
+    let code: i32 = flash_node_code(n);
+    if (code == 11) { return fez_trit_lit(fez_node_text(n)); }
+    if (code == 12) { return fez_node_text(n); }
+    if (code == 13) { return fez_node_text(n); }
+    if (code == 14) { return fez_node_text(n); }
+    if (code == 15) { return fez_node_text(n); }
+    if (code == 16) {
+        let b: Bin = fez_node_as_bin(n);
+        let s: []u8 = _zag_str_concat("(", fez_expr(b.l));
+        s = _zag_str_concat(s, " ");
+        s = _zag_str_concat(s, b.op);
+        s = _zag_str_concat(s, " ");
+        s = _zag_str_concat(s, fez_expr(b.r));
+        return _zag_str_concat(s, ")");
+    }
+    if (code == 17) {
+        let u: Un = fez_node_as_un(n);
+        if (@strEq(u.op, "-")) {
+            let inner_code: i32 = flash_node_code(u.e);
+            if (inner_code == 12 || inner_code == 13) {
+                return _zag_str_concat("-", fez_node_text(u.e));
+            }
+            let s: []u8 = _zag_str_concat("(0 - ", fez_expr(u.e));
+            return _zag_str_concat(s, ")");
+        }
+        if (@strEq(u.op, "!")) {
+            let s: []u8 = _zag_str_concat("!(", fez_expr(u.e));
+            return _zag_str_concat(s, ")");
+        }
+        if (@strEq(u.op, "&")) {
+            return _zag_str_concat("&", fez_expr(u.e));
+        }
+        if (@strEq(u.op, "try")) {
+            return _zag_str_concat("try ", fez_expr(u.e));
+        }
+        return fez_expr(u.e);
+    }
+    if (code == 18) {
+        let c: Call = fez_node_as_call(n);
+        let s: []u8 = fez_expr(c.callee);
+        if (len[[]u8](c.targs) > 0) {
+            s = _zag_str_concat(s, fez_targs_str(c.targs));
+        }
+        s = _zag_str_concat(s, "(");
+        let i: i32 = 0;
+        while (i < len[*FlashNode](c.args)) {
+            if (i > 0) { s = _zag_str_concat(s, ", "); }
+            s = _zag_str_concat(s, fez_expr(get[*FlashNode](c.args, i)));
+            i = i + 1;
+        }
+        return _zag_str_concat(s, ")");
+    }
+    if (code == 19) {
+        let c: Cast = fez_node_as_cast(n);
+        let s: []u8 = _zag_str_concat("(", fez_expr(c.expr));
+        s = _zag_str_concat(s, ") as ");
+        return _zag_str_concat(s, fez_type(c.target));
+    }
+    if (code == 20) {
+        let f: Field = fez_node_as_field(n);
+        let s: []u8 = _zag_str_concat(fez_expr(f.base), ".");
+        return _zag_str_concat(s, f.fname);
+    }
+    if (code == 21) {
+        let x: Index = fez_node_as_index(n);
+        let s: []u8 = _zag_str_concat(fez_expr(x.base), "[");
+        s = _zag_str_concat(s, fez_expr(x.idx));
+        return _zag_str_concat(s, "]");
+    }
+    if (code == 26) {
+        let sl: SliceExpr = fez_node_as_slice(n);
+        let s: []u8 = _zag_str_concat(fez_expr(sl.base), "[");
+        s = _zag_str_concat(s, fez_expr(sl.lo));
+        s = _zag_str_concat(s, "..");
+        if (sl.has_hi == 1) {
+            s = _zag_str_concat(s, fez_expr(sl.hi));
+        }
+        return _zag_str_concat(s, "]");
+    }
+    if (code == 22) {
+        let sl: StructLit = fez_node_as_slit(n);
+        let s: []u8 = sl.sname;
+        if (len[[]u8](sl.targs) > 0) {
+            s = _zag_str_concat(s, fez_targs_str(sl.targs));
+        }
+        s = _zag_str_concat(s, "{");
+        let i: i32 = 0;
+        while (i < len[FieldInit](sl.fields)) {
+            if (i > 0) { s = _zag_str_concat(s, ","); }
+            let fi: FieldInit = get[FieldInit](sl.fields, i);
+            s = _zag_str_concat(s, " .");
+            s = _zag_str_concat(s, fi.name);
+            s = _zag_str_concat(s, " = ");
+            s = _zag_str_concat(s, fez_expr(fi.val));
+            i = i + 1;
+        }
+        return _zag_str_concat(s, " }");
+    }
+    if (code == 9) {
+        return fez_switch_expr(fez_node_as_switch(n));
+    }
+    if (code == 23) { return "wave_default()"; }
+    if (code == 24) { return "beam_default()"; }
+    if (code == 25) { return "phase_default()"; }
+    return "0";
+}
+
+// Switch in expression position: arms must be single expressions.
+fn fez_arm_expr(body: ArrayList[*FlashNode]) []u8 {
+    if (len[*FlashNode](body) < 1) { return "0"; }
+    let n: *FlashNode = get[*FlashNode](body, 0);
+    if (flash_node_code(n) == 8) {
+        let e: ExprStmt = fez_node_as_estmt(n);
+        return fez_expr(e.expr);
+    }
+    return fez_expr(n);
+}
+
+fn fez_switch_expr(sw: Switch) []u8 {
+    let s: []u8 = _zag_str_concat("switch (", fez_expr(sw.subject));
+    s = _zag_str_concat(s, ") {");
+    let ai: i32 = 0;
+    while (ai < len[SwitchArm](sw.arms)) {
+        let arm: SwitchArm = get[SwitchArm](sw.arms, ai);
+        let ti: i32 = 0;
+        while (ti < len[[]u8](arm.tags)) {
+            if (ti > 0) { s = _zag_str_concat(s, ","); }
+            s = _zag_str_concat(s, " .");
+            s = _zag_str_concat(s, get[[]u8](arm.tags, ti));
+            ti = ti + 1;
+        }
+        s = _zag_str_concat(s, " => ");
+        if (arm.has_cap == 1) {
+            s = _zag_str_concat(s, "|");
+            s = _zag_str_concat(s, arm.cap);
+            s = _zag_str_concat(s, "| ");
+        }
+        s = _zag_str_concat(s, fez_arm_expr(arm.body));
+        s = _zag_str_concat(s, ",");
+        ai = ai + 1;
+    }
+    if (sw.has_els == 1) {
+        s = _zag_str_concat(s, " else => ");
+        s = _zag_str_concat(s, fez_arm_expr(sw.els_body));
+        s = _zag_str_concat(s, ",");
+    }
+    return _zag_str_concat(s, " }");
+}
+
+// ── raw { } lowering ─────────────────────────────────────────────────────────
+
+fn fez_raw_extern_name(callee: []u8) []u8 {
+    if (@strEq(callee, "fire_shield"))     { return "_flash_raw_fire_shield"; }
+    if (@strEq(callee, "inject_phase"))    { return "_flash_raw_inject_phase"; }
+    if (@strEq(callee, "set_laser_mw"))    { return "_flash_raw_set_laser_mw"; }
+    if (@strEq(callee, "target_voxel"))    { return "_flash_raw_target_voxel"; }
+    if (@strEq(callee, "manual_polarity")) { return "_flash_raw_set_polarity"; }
+    return callee;
+}
+
+fn fez_raw_call(ctx: *FezCtx, depth: i32, c: Call) void {
+    let callee: []u8 = fez_node_text(c.callee);
+    let ext: []u8 = fez_raw_extern_name(callee);
+    fez_indent(ctx.*.out, depth);
+    fez_app(ctx.*.out, "let _fraw_");
+    fez_app(ctx.*.out, _zag_i64_to_str(ctx.*.raw_n as i64));
+    ctx.*.raw_n = ctx.*.raw_n + 1;
+    fez_app(ctx.*.out, ": i32 = ");
+    fez_app(ctx.*.out, ext);
+    fez_app(ctx.*.out, "(");
+    let i: i32 = 0;
+    while (i < len[*FlashNode](c.args)) {
+        if (i > 0) { fez_app(ctx.*.out, ", "); }
+        fez_app(ctx.*.out, fez_expr(get[*FlashNode](c.args, i)));
+        i = i + 1;
+    }
+    fez_app(ctx.*.out, ");\n");
+}
+
+fn fez_raw_block(ctx: *FezCtx, depth: i32, rb: RawBlock) void {
+    ctx.*.has_raw = 1;
+    fez_indent(ctx.*.out, depth);
+    fez_app(ctx.*.out, "let _fraw_enter_");
+    fez_app(ctx.*.out, _zag_i64_to_str(ctx.*.raw_n as i64));
+    ctx.*.raw_n = ctx.*.raw_n + 1;
+    fez_app(ctx.*.out, ": i32 = _flash_raw_mode_enter();\n");
+    let i: i32 = 0;
+    while (i < len[*FlashNode](rb.body)) {
+        let n: *FlashNode = get[*FlashNode](rb.body, i);
+        let code: i32 = flash_node_code(n);
+        if (code == 18) {
+            fez_raw_call(ctx, depth, fez_node_as_call(n));
+        } else if (code == 8) {
+            let e: ExprStmt = fez_node_as_estmt(n);
+            if (flash_node_code(e.expr) == 18) {
+                fez_raw_call(ctx, depth, fez_node_as_call(e.expr));
+            }
+        }
+        i = i + 1;
+    }
+    fez_indent(ctx.*.out, depth);
+    fez_app(ctx.*.out, "let _fraw_exit_");
+    fez_app(ctx.*.out, _zag_i64_to_str(ctx.*.raw_n as i64));
+    ctx.*.raw_n = ctx.*.raw_n + 1;
+    fez_app(ctx.*.out, ": i32 = _flash_raw_mode_exit();\n");
+}
+
+// ── statements ───────────────────────────────────────────────────────────────
+
+fn fez_let_fallback_ty(l: Let) []u8 {
+    if (l.has_init == 0) { return "i32"; }
+    let code: i32 = flash_node_code(l.expr);
+    if (code == 11) { return "Trit"; }
+    if (code == 13) { return "f32"; }
+    if (code == 14) { return "[]u8"; }
+    return "i32";
+}
+
+fn fez_stmt_let(ctx: *FezCtx, depth: i32, l: Let) void {
+    fez_indent(ctx.*.out, depth);
+    fez_app(ctx.*.out, "let ");
+    fez_app(ctx.*.out, l.name);
+    fez_app(ctx.*.out, ": ");
+    if (l.has_dty == 1) {
+        fez_app(ctx.*.out, fez_type(l.dty));
+    } else {
+        fez_app(ctx.*.out, fez_let_fallback_ty(l));
+    }
+    if (l.has_init == 1) {
+        fez_app(ctx.*.out, " = ");
+        fez_app(ctx.*.out, fez_expr(l.expr));
+    }
+    fez_app(ctx.*.out, ";\n");
+}
+
+fn fez_stmts(ctx: *FezCtx, depth: i32, body: ArrayList[*FlashNode]) void {
+    let i: i32 = 0;
+    while (i < len[*FlashNode](body)) {
+        fez_stmt(ctx, depth, get[*FlashNode](body, i));
+        i = i + 1;
+    }
+}
+
+// Emits "if (cond) { ... }" starting at the current position (indent already
+// written by the caller), so else-if chains stay on one line.
+fn fez_if_chain(ctx: *FezCtx, depth: i32, x: If) void {
+    fez_app(ctx.*.out, "if (");
+    fez_app(ctx.*.out, fez_expr(x.cond));
+    fez_app(ctx.*.out, ") ");
+    if (x.has_cap == 1) {
+        fez_app(ctx.*.out, "|");
+        fez_app(ctx.*.out, x.cap);
+        fez_app(ctx.*.out, "| ");
+    }
+    fez_app(ctx.*.out, "{\n");
+    fez_stmts(ctx, depth + 1, x.then_body);
+    fez_indent(ctx.*.out, depth);
+    fez_app(ctx.*.out, "}");
+    if (x.has_els == 1) {
+        fez_app(ctx.*.out, " else ");
+        if (len[*FlashNode](x.els_body) == 1
+            && flash_node_code(get[*FlashNode](x.els_body, 0)) == 4) {
+            fez_if_chain(ctx, depth, fez_node_as_if(get[*FlashNode](x.els_body, 0)));
+            return;
+        }
+        fez_app(ctx.*.out, "{\n");
+        fez_stmts(ctx, depth + 1, x.els_body);
+        fez_indent(ctx.*.out, depth);
+        fez_app(ctx.*.out, "}\n");
+        return;
+    }
+    fez_app(ctx.*.out, "\n");
+}
+
+fn fez_switch_stmt(ctx: *FezCtx, depth: i32, sw: Switch) void {
+    fez_indent(ctx.*.out, depth);
+    fez_app(ctx.*.out, "switch (");
+    fez_app(ctx.*.out, fez_expr(sw.subject));
+    fez_app(ctx.*.out, ") {\n");
+    let ai: i32 = 0;
+    while (ai < len[SwitchArm](sw.arms)) {
+        let arm: SwitchArm = get[SwitchArm](sw.arms, ai);
+        fez_indent(ctx.*.out, depth + 1);
+        let ti: i32 = 0;
+        while (ti < len[[]u8](arm.tags)) {
+            if (ti > 0) { fez_app(ctx.*.out, ", "); }
+            fez_app(ctx.*.out, ".");
+            fez_app(ctx.*.out, get[[]u8](arm.tags, ti));
+            ti = ti + 1;
+        }
+        fez_app(ctx.*.out, " => ");
+        if (arm.has_cap == 1) {
+            fez_app(ctx.*.out, "|");
+            fez_app(ctx.*.out, arm.cap);
+            fez_app(ctx.*.out, "| ");
+        }
+        fez_app(ctx.*.out, "{\n");
+        fez_stmts(ctx, depth + 2, arm.body);
+        fez_indent(ctx.*.out, depth + 1);
+        fez_app(ctx.*.out, "}\n");
+        ai = ai + 1;
+    }
+    if (sw.has_els == 1) {
+        fez_indent(ctx.*.out, depth + 1);
+        fez_app(ctx.*.out, "else => {\n");
+        fez_stmts(ctx, depth + 2, sw.els_body);
+        fez_indent(ctx.*.out, depth + 1);
+        fez_app(ctx.*.out, "}\n");
+    }
+    fez_indent(ctx.*.out, depth);
+    fez_app(ctx.*.out, "}\n");
+}
+
+fn fez_stmt(ctx: *FezCtx, depth: i32, n: *FlashNode) void {
+    let code: i32 = flash_node_code(n);
+    if (code == 2) {
+        fez_stmt_let(ctx, depth, fez_node_as_let(n));
+        return;
+    }
+    if (code == 3) {
+        let r: Return = fez_node_as_return(n);
+        fez_indent(ctx.*.out, depth);
+        if (r.has_expr == 1) {
+            fez_app(ctx.*.out, "return ");
+            fez_app(ctx.*.out, fez_expr(r.expr));
+            fez_app(ctx.*.out, ";\n");
+        } else {
+            fez_app(ctx.*.out, "return;\n");
+        }
+        return;
+    }
+    if (code == 4) {
+        fez_indent(ctx.*.out, depth);
+        fez_if_chain(ctx, depth, fez_node_as_if(n));
+        return;
+    }
+    if (code == 5) {
+        let w: While = fez_node_as_while(n);
+        fez_indent(ctx.*.out, depth);
+        fez_app(ctx.*.out, "while (");
+        fez_app(ctx.*.out, fez_expr(w.cond));
+        fez_app(ctx.*.out, ") {\n");
+        fez_stmts(ctx, depth + 1, w.body);
+        fez_indent(ctx.*.out, depth);
+        fez_app(ctx.*.out, "}\n");
+        return;
+    }
+    if (code == 6) {
+        fez_raw_block(ctx, depth, fez_node_as_raw(n));
+        return;
+    }
+    if (code == 7) {
+        let a: Assign = fez_node_as_assign(n);
+        fez_indent(ctx.*.out, depth);
+        fez_app(ctx.*.out, fez_expr(a.target));
+        fez_app(ctx.*.out, " = ");
+        fez_app(ctx.*.out, fez_expr(a.expr));
+        fez_app(ctx.*.out, ";\n");
+        return;
+    }
+    if (code == 8) {
+        let e: ExprStmt = fez_node_as_estmt(n);
+        fez_indent(ctx.*.out, depth);
+        fez_app(ctx.*.out, fez_expr(e.expr));
+        fez_app(ctx.*.out, ";\n");
+        return;
+    }
+    if (code == 9) {
+        fez_switch_stmt(ctx, depth, fez_node_as_switch(n));
+        return;
+    }
+}
+
+// ── declarations ─────────────────────────────────────────────────────────────
+
+fn fez_fn_decl(ctx: *FezCtx, f: FnDecl) void {
+    fez_app(ctx.*.out, "fn ");
+    fez_app(ctx.*.out, f.name);
+    if (len[[]u8](f.tparams) > 0) {
+        fez_app(ctx.*.out, fez_targs_str(f.tparams));
+    }
+    fez_app(ctx.*.out, "(");
+    let i: i32 = 0;
+    while (i < len[Param](f.params)) {
+        if (i > 0) { fez_app(ctx.*.out, ", "); }
+        let p: Param = get[Param](f.params, i);
+        fez_app(ctx.*.out, p.name);
+        fez_app(ctx.*.out, ": ");
+        fez_app(ctx.*.out, fez_type(p.pty));
+        i = i + 1;
+    }
+    fez_app(ctx.*.out, ") ");
+    fez_app(ctx.*.out, fez_type(f.ret));
+    fez_app(ctx.*.out, " {\n");
+    fez_stmts(ctx, 1, f.body);
+    fez_app(ctx.*.out, "}\n\n");
+}
+
+fn fez_struct_decl(ctx: *FezCtx, s: StructDecl) void {
+    fez_app(ctx.*.out, "struct ");
+    fez_app(ctx.*.out, s.name);
+    if (len[[]u8](s.tparams) > 0) {
+        fez_app(ctx.*.out, fez_targs_str(s.tparams));
+    }
+    fez_app(ctx.*.out, " {\n");
+    let i: i32 = 0;
+    while (i < len[Param](s.fields)) {
+        let p: Param = get[Param](s.fields, i);
+        fez_app(ctx.*.out, "    ");
+        fez_app(ctx.*.out, p.name);
+        fez_app(ctx.*.out, ": ");
+        fez_app(ctx.*.out, fez_type(p.pty));
+        fez_app(ctx.*.out, ",\n");
+        i = i + 1;
+    }
+    fez_app(ctx.*.out, "}\n\n");
+}
+
+fn fez_enum_decl(ctx: *FezCtx, e: EnumDecl) void {
+    fez_app(ctx.*.out, "enum ");
+    fez_app(ctx.*.out, e.name);
+    fez_app(ctx.*.out, " {\n    ");
+    let i: i32 = 0;
+    while (i < len[[]u8](e.members)) {
+        if (i > 0) { fez_app(ctx.*.out, ", "); }
+        fez_app(ctx.*.out, get[[]u8](e.members, i));
+        i = i + 1;
+    }
+    fez_app(ctx.*.out, ",\n}\n\n");
+}
+
+fn fez_union_decl(ctx: *FezCtx, u: UnionDecl) void {
+    fez_app(ctx.*.out, "union ");
+    fez_app(ctx.*.out, u.name);
+    fez_app(ctx.*.out, " {\n");
+    let i: i32 = 0;
+    while (i < len[Param](u.fields)) {
+        let p: Param = get[Param](u.fields, i);
+        fez_app(ctx.*.out, "    ");
+        fez_app(ctx.*.out, p.name);
+        fez_app(ctx.*.out, ": ");
+        fez_app(ctx.*.out, fez_type(p.pty));
+        fez_app(ctx.*.out, ",\n");
+        i = i + 1;
+    }
+    fez_app(ctx.*.out, "}\n\n");
+}
+
+fn fez_import_decl(ctx: *FezCtx, imp: Import) void {
+    fez_app(ctx.*.out, "@import(\"");
+    fez_app(ctx.*.out, imp.path);
+    fez_app(ctx.*.out, "\")");
+    if (imp.has_alias == 1) {
+        fez_app(ctx.*.out, " as ");
+        fez_app(ctx.*.out, imp.alias);
+    }
+    fez_app(ctx.*.out, "\n");
+}
+
+fn fez_decl(ctx: *FezCtx, d: *FlashNode) void {
+    switch (d.*) {
+        .fn_decl => |f| { fez_fn_decl(ctx, f); }
+        .struct_ => |s| { fez_struct_decl(ctx, s); }
+        .enum_   => |e| { fez_enum_decl(ctx, e); }
+        .union_d => |u| { fez_union_decl(ctx, u); }
+        .import_ => |imp| { fez_import_decl(ctx, imp); }
+        else => { }
+    }
+}
+
+// ── public API ───────────────────────────────────────────────────────────────
+
+fn fez_emit_program(decls: ArrayList[*FlashNode]) FezResult {
+    let src: ArrayList[u8] = make[u8](4096);
+    let ctx: FezCtx = FezCtx{ .out = &src, .raw_n = 0, .has_raw = 0 };
+    let i: i32 = 0;
+    while (i < len[*FlashNode](decls)) {
+        fez_decl(&ctx, get[*FlashNode](decls, i));
+        i = i + 1;
+    }
+    return FezResult{ .src = src, .has_raw = ctx.has_raw };
+}

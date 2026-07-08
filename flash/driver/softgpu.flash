@@ -1,0 +1,465 @@
+// flash/driver/softgpu.flash.zag — software graphics-compute fallback driver.
+//
+// Flash targets ternary systems with no GPU driver stack. Until native
+// drivers exist for the real hardware, this driver provides general
+// graphical compute on the CPU, written in full-language Flash:
+//
+//   framebuffer — RGB24 in main memory (ArrayList[u8])
+//   raster ops  — clear, pixel, fill_rect, line (Bresenham), trit_pixel
+//   compute     — softgpu_dispatch(fb, kernel): per-pixel CPU kernels,
+//                 including a balanced-ternary interference kernel
+//   present     — device abstraction: kind 0 = portable PPM (P6) file,
+//                 kind 1 = raw blit to /dev/fb0 (best effort, BGRX 32bpp);
+//                 future native ternary/photonic display drivers register
+//                 as new device kinds behind the same softgpu_present().
+//
+// Trit color mapping follows manifest polarization: -1 (H) → cool cyan,
+// 0 (split) → dark neutral, +1 (V) → warm amber.
+//
+// No imports here on purpose: ArrayList and the _zag_* runtime come from the
+// shim header (rt.zag + flash_slim.zag) that every compiled Flash program
+// carries, so this driver splices cleanly into any program via
+// @import("<path>/softgpu.flash").
+
+struct SoftFb {
+    w:       i32,
+    h:       i32,
+    pix:     ArrayList[u8],
+    clip_on: i32,
+    clip_x0: i32,
+    clip_y0: i32,
+    clip_x1: i32,
+    clip_y1: i32,
+    mask_on: i32,
+    mask:    ArrayList[u8],
+    acc_on:  i32,
+    acc:     ArrayList[u8],
+    dmg_on:  i32,   // dirty-rect damage tracking enabled
+    dmg_x0:  i32,   // damage bounding box; empty when dmg_x1 < dmg_x0
+    dmg_y0:  i32,
+    dmg_x1:  i32,
+    dmg_y1:  i32,
+}
+
+struct SoftGpuDevice {
+    kind: i32,      // 0 = PPM file, 1 = /dev/fb0 raw blit
+    path: []u8,     // output path (file kind) or device node
+}
+
+fn softgpu_kernel_gradient() i32     { return 0; }
+fn softgpu_kernel_ternary() i32      { return 1; }
+fn softgpu_kernel_checker() i32      { return 2; }
+
+fn softgpu_new(w: i32, h: i32) SoftFb {
+    let n: i32 = w * h * 3;
+    let pix: ArrayList[u8] = make[u8](n);
+    let i: i32 = 0;
+    while (i < n) {
+        push[u8](&pix, 0);
+        i = i + 1;
+    }
+    return SoftFb{
+        .w = w, .h = h, .pix = pix,
+        .clip_on = 0, .clip_x0 = 0, .clip_y0 = 0, .clip_x1 = 0, .clip_y1 = 0,
+        .mask_on = 0, .mask = make[u8](0),
+        .acc_on = 0, .acc = make[u8](0),
+        .dmg_on = 0, .dmg_x0 = 0, .dmg_y0 = 0, .dmg_x1 = -1, .dmg_y1 = -1,
+    };
+}
+
+// ── dirty-rect damage tracking ───────────────────────────────────────────────
+//
+// When enabled, every actual pixel write extends a bounding box. A presenter
+// (or a future ternary display driver) can then re-scan only the damaged
+// region instead of the whole framebuffer.
+
+fn softgpu_damage_reset(fb: *SoftFb) void {
+    fb.*.dmg_x0 = fb.*.w;
+    fb.*.dmg_y0 = fb.*.h;
+    fb.*.dmg_x1 = -1;
+    fb.*.dmg_y1 = -1;
+}
+
+fn softgpu_damage_on(fb: *SoftFb) void {
+    fb.*.dmg_on = 1;
+    softgpu_damage_reset(fb);
+}
+
+fn softgpu_damage_off(fb: *SoftFb) void {
+    fb.*.dmg_on = 0;
+}
+
+// 1 when at least one pixel was written since the last reset.
+fn softgpu_damage_valid(fb: *SoftFb) i32 {
+    if (fb.*.dmg_x1 < fb.*.dmg_x0) { return 0; }
+    return 1;
+}
+
+fn softgpu_damage_mark(fb: *SoftFb, x: i32, y: i32) void {
+    if (x < fb.*.dmg_x0) { fb.*.dmg_x0 = x; }
+    if (y < fb.*.dmg_y0) { fb.*.dmg_y0 = y; }
+    if (x > fb.*.dmg_x1) { fb.*.dmg_x1 = x; }
+    if (y > fb.*.dmg_y1) { fb.*.dmg_y1 = y; }
+}
+
+// Mark a whole rect dirty at once (bulk writers: clear, blur, blits).
+fn softgpu_damage_mark_rect(fb: *SoftFb, x0: i32, y0: i32, x1: i32, y1: i32) void {
+    if (fb.*.dmg_on == 0) { return; }
+    softgpu_damage_mark(fb, x0, y0);
+    softgpu_damage_mark(fb, x1, y1);
+}
+
+fn softgpu_set_clip(fb: *SoftFb, x: i32, y: i32, w: i32, h: i32) void {
+    fb.*.clip_on = 1;
+    fb.*.clip_x0 = x;
+    fb.*.clip_y0 = y;
+    fb.*.clip_x1 = x + w - 1;
+    fb.*.clip_y1 = y + h - 1;
+}
+
+fn softgpu_clear_clip(fb: *SoftFb) void {
+    fb.*.clip_on = 0;
+    fb.*.mask_on = 0;
+}
+
+fn softgpu_clip_test(fb: *SoftFb, x: i32, y: i32) i32 {
+    if (fb.*.clip_on == 1) {
+        if (x < fb.*.clip_x0 || x > fb.*.clip_x1 || y < fb.*.clip_y0 || y > fb.*.clip_y1) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+fn softgpu_clear(fb: *SoftFb, r: i32, g: i32, b: i32) void {
+    let n: i32 = fb.*.w * fb.*.h;
+    let i: i32 = 0;
+    while (i < n) {
+        set[u8](&fb.*.pix, i * 3, r as u8);
+        set[u8](&fb.*.pix, i * 3 + 1, g as u8);
+        set[u8](&fb.*.pix, i * 3 + 2, b as u8);
+        i = i + 1;
+    }
+    softgpu_damage_mark_rect(fb, 0, 0, fb.*.w - 1, fb.*.h - 1);
+}
+
+fn softgpu_pixel(fb: *SoftFb, x: i32, y: i32, r: i32, g: i32, b: i32) void {
+    if (x < 0 || y < 0 || x >= fb.*.w || y >= fb.*.h) { return; }
+    if (softgpu_clip_test(fb, x, y) == 0) { return; }
+    let o: i32 = (y * fb.*.w + x) * 3;
+    set[u8](&fb.*.pix, o, r as u8);
+    set[u8](&fb.*.pix, o + 1, g as u8);
+    set[u8](&fb.*.pix, o + 2, b as u8);
+    if (fb.*.acc_on == 1) {
+        set[u8](&fb.*.acc, y * fb.*.w + x, 255);
+    }
+    if (fb.*.dmg_on == 1) {
+        softgpu_damage_mark(fb, x, y);
+    }
+}
+
+// Balanced-trit → polarization color (H / split / V).
+fn softgpu_trit_pixel(fb: *SoftFb, x: i32, y: i32, t: i32) void {
+    if (t == 1) {
+        softgpu_pixel(fb, x, y, 255, 176, 32);
+        return;
+    }
+    if (t == -1) {
+        softgpu_pixel(fb, x, y, 32, 200, 255);
+        return;
+    }
+    softgpu_pixel(fb, x, y, 24, 24, 32);
+}
+
+fn softgpu_fill_rect(fb: *SoftFb, x0: i32, y0: i32, w: i32, h: i32, r: i32, g: i32, b: i32) void {
+    let y: i32 = y0;
+    while (y < y0 + h) {
+        let x: i32 = x0;
+        while (x < x0 + w) {
+            softgpu_pixel(fb, x, y, r, g, b);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+fn softgpu_abs(v: i32) i32 {
+    if (v < 0) { return 0 - v; }
+    return v;
+}
+
+fn softgpu_line(fb: *SoftFb, x0: i32, y0: i32, x1: i32, y1: i32, r: i32, g: i32, b: i32) void {
+    let dx: i32 = softgpu_abs(x1 - x0);
+    let dy: i32 = 0 - softgpu_abs(y1 - y0);
+    let sx: i32 = -1;
+    if (x0 < x1) { sx = 1; }
+    let sy: i32 = -1;
+    if (y0 < y1) { sy = 1; }
+    let err: i32 = dx + dy;
+    let x: i32 = x0;
+    let y: i32 = y0;
+    let go: i32 = 1;
+    while (go == 1) {
+        softgpu_pixel(fb, x, y, r, g, b);
+        if (x == x1 && y == y1) {
+            go = 0;
+        } else {
+            let e2: i32 = 2 * err;
+            if (e2 >= dy) {
+                err = err + dy;
+                x = x + sx;
+            }
+            if (e2 <= dx) {
+                err = err + dx;
+                y = y + sy;
+            }
+        }
+    }
+}
+
+// ── compute kernels ──────────────────────────────────────────────────────────
+
+// Balanced-ternary digit of v (least significant balanced-trit).
+fn softgpu_bal3(v: i32) i32 {
+    let r: i32 = v % 3;
+    if (r > 1) { return r - 3; }
+    if (r < -1) { return r + 3; }
+    return r;
+}
+
+fn softgpu_kernel_px(kernel: i32, x: i32, y: i32, w: i32, h: i32, fb: *SoftFb) void {
+    if (kernel == 0) {
+        softgpu_pixel(fb, x, y, (x * 255) / w, (y * 255) / h, 96);
+        return;
+    }
+    if (kernel == 1) {
+        // Ternary interference: sum of the balanced-trit digits of the two
+        // axes — the CPU stand-in for two crossed trit lanes.
+        let ta: i32 = softgpu_bal3(x / 4);
+        let tb: i32 = softgpu_bal3(y / 4);
+        let s: i32 = softgpu_bal3(ta + tb);
+        softgpu_trit_pixel(fb, x, y, s);
+        return;
+    }
+    if (kernel == 2) {
+        let cell: i32 = ((x / 8) + (y / 8)) % 2;
+        if (cell == 1) {
+            softgpu_pixel(fb, x, y, 230, 230, 230);
+        } else {
+            softgpu_pixel(fb, x, y, 40, 40, 40);
+        }
+        return;
+    }
+}
+
+// Dispatch a per-pixel kernel over the whole framebuffer (CPU compute).
+fn softgpu_dispatch(fb: *SoftFb, kernel: i32) void {
+    let y: i32 = 0;
+    while (y < fb.*.h) {
+        let x: i32 = 0;
+        while (x < fb.*.w) {
+            softgpu_kernel_px(kernel, x, y, fb.*.w, fb.*.h, fb);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+// GPU dispatch stub: log the route name, then fall back to the CPU rasterizer
+// until the Vulkan/DRM backend is wired. Real GPU execution will replace the
+// softgpu_dispatch call below.
+fn softgpu_dispatch_gpu(fb: *SoftFb, kernel: i32, route: []u8) void {
+    _zag_print("gpu-dispatch: ");
+    _zag_println(route);
+    softgpu_dispatch(fb, kernel);
+}
+
+// ── bitmap text (5×7 glyphs, 1980s-style) ────────────────────────────────────
+//
+// Each glyph is 35 cells (7 rows × 5 cols), encoded as a '0'/'1' string.
+// Covers A-Z, 0-9, space, and the punctuation a period UI needs.
+
+fn softgpu_glyph(c: i32) []u8 {
+    if (c == 'A') { return "01110100011000111111100011000110001"; }
+    if (c == 'B') { return "11110100011000111110100011000111110"; }
+    if (c == 'C') { return "01110100011000010000100001000101110"; }
+    if (c == 'D') { return "11100100101000110001100011001011100"; }
+    if (c == 'E') { return "11111100001000011110100001000011111"; }
+    if (c == 'F') { return "11111100001000011110100001000010000"; }
+    if (c == 'G') { return "01110100011000010111100011000101111"; }
+    if (c == 'H') { return "10001100011000111111100011000110001"; }
+    if (c == 'I') { return "01110001000010000100001000010001110"; }
+    if (c == 'J') { return "00111000100001000010000101001001100"; }
+    if (c == 'K') { return "10001100101010011000101001001010001"; }
+    if (c == 'L') { return "10000100001000010000100001000011111"; }
+    if (c == 'M') { return "10001110111010110101100011000110001"; }
+    if (c == 'N') { return "10001110011010110011100011000110001"; }
+    if (c == 'O') { return "01110100011000110001100011000101110"; }
+    if (c == 'P') { return "11110100011000111110100001000010000"; }
+    if (c == 'Q') { return "01110100011000110001101011001001101"; }
+    if (c == 'R') { return "11110100011000111110101001001010001"; }
+    if (c == 'S') { return "01111100001000001110000010000111110"; }
+    if (c == 'T') { return "11111001000010000100001000010000100"; }
+    if (c == 'U') { return "10001100011000110001100011000101110"; }
+    if (c == 'V') { return "10001100011000110001100010101000100"; }
+    if (c == 'W') { return "10001100011000110101101011101110001"; }
+    if (c == 'X') { return "10001100010101000100010101000110001"; }
+    if (c == 'Y') { return "10001100010101000100001000010000100"; }
+    if (c == 'Z') { return "11111000010001000100010001000011111"; }
+    if (c == '0') { return "01110100011001110101110011000101110"; }
+    if (c == '1') { return "00100011000010000100001000010001110"; }
+    if (c == '2') { return "01110100010000100110010001000011111"; }
+    if (c == '3') { return "11111000100010000010000011000101110"; }
+    if (c == '4') { return "00010001100101010010111110001000010"; }
+    if (c == '5') { return "11111100001111000001000011000101110"; }
+    if (c == '6') { return "00110010001000011110100011000101110"; }
+    if (c == '7') { return "11111000010001000100010001000010000"; }
+    if (c == '8') { return "01110100011000101110100011000101110"; }
+    if (c == '9') { return "01110100011000101111000010001001100"; }
+    if (c == '-') { return "00000000000000011111000000000000000"; }
+    if (c == '+') { return "00000001000010011111001000010000000"; }
+    if (c == '.') { return "00000000000000000000000000110001100"; }
+    if (c == ':') { return "00000011000110000000011000110000000"; }
+    if (c == '=') { return "00000000001111100000111110000000000"; }
+    if (c == '/') { return "00001000010001000100010001000010000"; }
+    return "00000000000000000000000000000000000";
+}
+
+fn softgpu_char(fb: *SoftFb, x: i32, y: i32, c: i32, r: i32, g: i32, b: i32) void {
+    let bits: []u8 = softgpu_glyph(c);
+    let row: i32 = 0;
+    while (row < 7) {
+        let col: i32 = 0;
+        while (col < 5) {
+            if (bits[row * 5 + col] == '1') {
+                softgpu_pixel(fb, x + col, y + row, r, g, b);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+}
+
+fn softgpu_text(fb: *SoftFb, x: i32, y: i32, s: []u8, r: i32, g: i32, b: i32) void {
+    let i: i32 = 0;
+    while (i < s.len) {
+        softgpu_char(fb, x + i * 6, y, s[i] as i32, r, g, b);
+        i = i + 1;
+    }
+}
+
+// 50% checkerboard dither fill — the classic 1-bit desktop pattern.
+fn softgpu_dither_rect(fb: *SoftFb, x0: i32, y0: i32, w: i32, h: i32, r: i32, g: i32, b: i32) void {
+    let y: i32 = y0;
+    while (y < y0 + h) {
+        let x: i32 = x0;
+        while (x < x0 + w) {
+            if (((x + y) % 2) == 0) {
+                softgpu_pixel(fb, x, y, r, g, b);
+            }
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+fn softgpu_frame_rect(fb: *SoftFb, x0: i32, y0: i32, w: i32, h: i32, r: i32, g: i32, b: i32) void {
+    softgpu_line(fb, x0, y0, x0 + w - 1, y0, r, g, b);
+    softgpu_line(fb, x0, y0 + h - 1, x0 + w - 1, y0 + h - 1, r, g, b);
+    softgpu_line(fb, x0, y0, x0, y0 + h - 1, r, g, b);
+    softgpu_line(fb, x0 + w - 1, y0, x0 + w - 1, y0 + h - 1, r, g, b);
+}
+
+// ── present: device abstraction ──────────────────────────────────────────────
+
+fn softgpu_detect(out_path: []u8) SoftGpuDevice {
+    if (_zag_file_exists("/dev/fb0") == 1) {
+        return SoftGpuDevice{ .kind = 1, .path = "/dev/fb0" };
+    }
+    return SoftGpuDevice{ .kind = 0, .path = out_path };
+}
+
+fn softgpu_i32_text(v: i32) []u8 {
+    return _zag_i64_to_str(v as i64);
+}
+
+fn softgpu_present_ppm(fb: *SoftFb, path: []u8) i32 {
+    let out: ArrayList[u8] = make[u8](fb.*.w * fb.*.h * 3 + 32);
+    let hdr: []u8 = _zag_str_concat("P6\n", softgpu_i32_text(fb.*.w));
+    hdr = _zag_str_concat(hdr, " ");
+    hdr = _zag_str_concat(hdr, softgpu_i32_text(fb.*.h));
+    hdr = _zag_str_concat(hdr, "\n255\n");
+    let i: i32 = 0;
+    while (i < hdr.len) {
+        push[u8](&out, hdr[i]);
+        i = i + 1;
+    }
+    let n: i32 = fb.*.w * fb.*.h * 3;
+    let j: i32 = 0;
+    while (j < n) {
+        push[u8](&out, get[u8](fb.*.pix, j));
+        j = j + 1;
+    }
+    return _zag_write_file(path, out.data[0..out.len]);
+}
+
+// Best-effort raw blit: BGRX 32bpp at the device's native stride is assumed
+// to match the framebuffer width. Real ternary/photonic display drivers
+// replace this path.
+fn softgpu_present_fbdev(fb: *SoftFb, path: []u8) i32 {
+    let n: i32 = fb.*.w * fb.*.h;
+    let out: ArrayList[u8] = make[u8](n * 4);
+    let i: i32 = 0;
+    while (i < n) {
+        push[u8](&out, get[u8](fb.*.pix, i * 3 + 2));
+        push[u8](&out, get[u8](fb.*.pix, i * 3 + 1));
+        push[u8](&out, get[u8](fb.*.pix, i * 3));
+        push[u8](&out, 0);
+        i = i + 1;
+    }
+    return _zag_write_file(path, out.data[0..out.len]);
+}
+
+fn softgpu_present(dev: SoftGpuDevice, fb: *SoftFb) i32 {
+    if (dev.kind == 1) {
+        let rc: i32 = softgpu_present_fbdev(fb, dev.path);
+        if (rc == 0) { return 0; }
+        // device blit failed — fall through to nothing; caller may retry
+        // with a file device.
+        return rc;
+    }
+    return softgpu_present_ppm(fb, dev.path);
+}
+
+// Deterministic content hash for tests (kept within i32 range at every step).
+fn softgpu_checksum(fb: *SoftFb) i32 {
+    let acc: i32 = 7;
+    let n: i32 = fb.*.w * fb.*.h * 3;
+    let i: i32 = 0;
+    while (i < n) {
+        acc = (acc * 131 + (get[u8](fb.*.pix, i) as i32)) % 15485863;
+        i = i + 1;
+    }
+    return acc;
+}
+
+// Region variant of the content hash — lets a test pin partial-redraw output
+// (e.g. exactly the damage box) without hashing the whole frame.
+fn softgpu_checksum_region(fb: *SoftFb, x0: i32, y0: i32, x1: i32, y1: i32) i32 {
+    let acc: i32 = 7;
+    let y: i32 = y0;
+    while (y <= y1) {
+        let x: i32 = x0;
+        while (x <= x1) {
+            if (x >= 0 && y >= 0 && x < fb.*.w && y < fb.*.h) {
+                let o: i32 = (y * fb.*.w + x) * 3;
+                acc = (acc * 131 + (get[u8](fb.*.pix, o) as i32)) % 15485863;
+                acc = (acc * 131 + (get[u8](fb.*.pix, o + 1) as i32)) % 15485863;
+                acc = (acc * 131 + (get[u8](fb.*.pix, o + 2) as i32)) % 15485863;
+            }
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    return acc;
+}

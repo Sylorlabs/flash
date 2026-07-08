@@ -1,0 +1,8 @@
+// harsh_group_scope.flash — must fail stage-1 --check (let escapes group scope).
+
+fn main() i32 {
+    group {
+        let inner: i32 = 42;
+    }
+    return inner;
+}

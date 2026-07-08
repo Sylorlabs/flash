@@ -1,0 +1,181 @@
+// chamber_sim.zag — 8×8×8 Active Lattice voxel chamber (software model)
+//
+// Each voxel stores balanced-ternary polarization (−1, 0, +1) plus wave registers
+// that round-trip the hardware u64 word layout documented in pipeline.zag.
+//
+// Wire-level balanced-ternary polarization (−1, 0, +1) only — no trit.zag import
+// (avoids enum-method / cross-module linkage issues under znc).
+
+@import("../toolchain/zag-poc/std/rt.zag")
+
+fn CHAMBER_EDGE() i32 { return 8; }
+fn SIM_TRIT_NEG() i8 { return 0 - 1; }
+fn SIM_TRIT_ZERO() i8 { return 0; }
+fn SIM_TRIT_POS() i8 { return 1; }
+fn CHAMBER_VOLUME() i32 { return 512; }
+fn HW_POL_OFF() i32 { return 0; }
+fn HW_POL_VERT() i32 { return 1; }
+fn HW_POL_HORZ() i32 { return 2; }
+fn PHASE_SCALE() f32 { return 0.0000958738; }   // 2π / 65536
+fn TOMBSTONE() u64 { return 18446744073709551615; }
+
+struct VoxelCell {
+    amp:     f32,
+    phase:   f32,
+    pol:     i8,    // balanced ternary wire: −1, 0, +1
+    payload: u64,
+}
+
+struct ChamberGrid {
+    cells: *VoxelCell,
+    edge:  i32,
+    ready: i32,
+}
+
+fn chamber_neutral() VoxelCell {
+    return VoxelCell{
+        .amp     = 0.0,
+        .phase   = 0.0,
+        .pol     = SIM_TRIT_ZERO(),
+        .payload = 0,
+    };
+}
+
+fn sim_voxel_in_bounds(edge: i32, x: i32, y: i32, z: i32) bool {
+    return x >= 0 && x < edge && y >= 0 && y < edge && z >= 0 && z < edge;
+}
+
+fn voxel_linear_index(edge: i32, x: i32, y: i32, z: i32) i32 {
+    return z * edge * edge + y * edge + x;
+}
+
+fn pol_hw_tag(pol: i8) i32 {
+    if (pol == SIM_TRIT_POS()) { return HW_POL_VERT(); }
+    if (pol == SIM_TRIT_NEG()) { return HW_POL_HORZ(); }
+    return HW_POL_OFF();
+}
+
+fn pol_from_hw_tag(tag: i32) i8 {
+    if (tag == HW_POL_VERT()) { return SIM_TRIT_POS(); }
+    if (tag == HW_POL_HORZ()) { return SIM_TRIT_NEG(); }
+    return SIM_TRIT_ZERO();
+}
+
+fn encode_voxel_word(cell: VoxelCell) u64 {
+    let payload: u64 = cell.payload & 4294967295;
+    let phase_u: u64 = ((cell.phase / PHASE_SCALE()) as u64) & 65535;
+    let amp_u: u64 = ((cell.amp * 255.0) as u64) & 255;
+    let pol_u: u64 = (pol_hw_tag(cell.pol) as u64) & 3;
+    let word: u64 = payload
+        + phase_u * 4294967296
+        + amp_u * 281474976710656
+        + pol_u * 72370055770099328;
+    return word;
+}
+
+fn decode_voxel_word(raw: u64) VoxelCell {
+    let payload: u64 = raw & 4294967295;
+    let phase_u: u64 = (raw / 4294967296) & 65535;
+    let amp_u: u64   = (raw / 281474976710656) & 255;
+    let pol_u: u64   = (raw / 72370055770099328) & 3;
+    return VoxelCell{
+        .amp     = (amp_u as f32) / 255.0,
+        .phase   = (phase_u as f32) * PHASE_SCALE(),
+        .pol     = pol_from_hw_tag(pol_u as i32),
+        .payload = payload,
+    };
+}
+
+fn chamber_init(g: *ChamberGrid) void {
+    if (g.*.ready == 1) { return; }
+    let edge: i32 = CHAMBER_EDGE();
+    let count: i32 = CHAMBER_VOLUME();
+    let raw: *i8 = _zag_malloc(count * @sizeOf[VoxelCell]());
+    let cells: *VoxelCell = raw as *VoxelCell;
+    let i: i32 = 0;
+    while (i < count) {
+        cells[i] = chamber_neutral();
+        i = i + 1;
+    }
+    g.*.cells = cells;
+    g.*.edge = edge;
+    g.*.ready = 1;
+}
+
+fn chamber_reset(g: *ChamberGrid) void {
+    if (g.*.ready == 0) { return; }
+    let count: i32 = CHAMBER_VOLUME();
+    let i: i32 = 0;
+    while (i < count) {
+        g.*.cells[i] = chamber_neutral();
+        i = i + 1;
+    }
+}
+
+fn chamber_get(g: ChamberGrid, x: i32, y: i32, z: i32) ?VoxelCell {
+    if (g.ready == 0) { return null; }
+    if (!sim_voxel_in_bounds(g.edge, x, y, z)) { return null; }
+    let idx: i32 = voxel_linear_index(g.edge, x, y, z);
+    return g.cells[idx];
+}
+
+fn chamber_get_mut(g: *ChamberGrid, x: i32, y: i32, z: i32) ?*VoxelCell {
+    if (g.*.ready == 0) { return null; }
+    if (!sim_voxel_in_bounds(g.*.edge, x, y, z)) { return null; }
+    let idx: i32 = voxel_linear_index(g.*.edge, x, y, z);
+    return &g.*.cells[idx];
+}
+
+fn chamber_set_phase(g: *ChamberGrid, x: i32, y: i32, z: i32, phase: f32) i32 {
+    if (chamber_get_mut(g, x, y, z)) |cell| {
+        cell.*.phase = phase;
+        return 1;
+    }
+    return 0;
+}
+
+fn chamber_set_polarity_tag(g: *ChamberGrid, x: i32, y: i32, z: i32, tag: i32) i32 {
+    if (chamber_get_mut(g, x, y, z)) |cell| {
+        cell.*.pol = pol_from_hw_tag(tag);
+        return 1;
+    }
+    return 0;
+}
+
+fn chamber_fire_shield(g: *ChamberGrid, x: i32, y: i32, z: i32, mw: f32) i32 {
+    if (chamber_get_mut(g, x, y, z)) |cell| {
+        let amp: f32 = mw / 1000.0;
+        if (amp > 1.0) {
+            cell.*.amp = 1.0;
+        } else {
+            cell.*.amp = amp;
+        }
+        cell.*.pol = SIM_TRIT_NEG();
+        cell.*.payload = 0;
+        return 1;
+    }
+    return 0;
+}
+
+fn chamber_write_payload(g: *ChamberGrid, x: i32, y: i32, z: i32, byte: u8, amp: f32) i32 {
+    if (chamber_get_mut(g, x, y, z)) |cell| {
+        cell.*.payload = byte as u64;
+        cell.*.amp = amp;
+        cell.*.pol = SIM_TRIT_POS();
+        return 1;
+    }
+    return 0;
+}
+
+fn chamber_read_word(g: ChamberGrid, x: i32, y: i32, z: i32) u64 {
+    if (chamber_get(g, x, y, z)) |cell| {
+        return encode_voxel_word(cell);
+    }
+    return TOMBSTONE();
+}
+
+fn pol_symbol(pol: i8) []u8 {
+    if (pol == SIM_TRIT_NEG()) { return "T"; }
+    if (pol == SIM_TRIT_POS()) { return "1"; }
+    return "0";
+}

@@ -1,0 +1,83 @@
+// matrix_test.zag — smoke test for optical matrix intersection unit
+//
+// Usage (from flash project root):
+//   flash/toolchain/flashz flash/runtime/matrix_test.zag -o matrix_test
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("matrix_rt.zag")
+
+fn print_trit(label: []u8, t: Trit) void {
+    _zag_print(label);
+    _zag_print(": idx=");
+    print_i32(to_index(t));
+    _zag_println("");
+}
+
+fn expect_trit(actual: Trit, expected: Trit, label: []u8) void {
+    if (actual != expected) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" got idx=");
+        print_i32(to_index(actual));
+        _zag_print(" want idx=");
+        print_i32(to_index(expected));
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn main() i32 {
+    _zag_println("matrix_test: optical Mat3 intersection");
+
+    let id: Mat3 = mat3_identity();
+    let input: TritTriple = TritTriple{
+        .x = Trit.Pos,
+        .y = Trit.Neg,
+        .z = Trit.Zero,
+    };
+
+    let identity_out: TritTriple = mat3_apply_trit(id, input);
+    _zag_println("identity transform:");
+    print_trit("  x", identity_out.x);
+    print_trit("  y", identity_out.y);
+    print_trit("  z", identity_out.z);
+
+    expect_trit(identity_out.x, Trit.Pos, "identity.x");
+    expect_trit(identity_out.y, Trit.Neg, "identity.y");
+    expect_trit(identity_out.z, Trit.Zero, "identity.z");
+
+    let rot: Mat3 = mat3_rotation_xy_90();
+    let pos_x: TritTriple = TritTriple{
+        .x = Trit.Pos,
+        .y = Trit.Zero,
+        .z = Trit.Zero,
+    };
+    let rot_out: TritTriple = mat3_apply_trit(rot, pos_x);
+
+    _zag_println("rotation(+X -> +Y):");
+    print_trit("  x", rot_out.x);
+    print_trit("  y", rot_out.y);
+    print_trit("  z", rot_out.z);
+
+    expect_trit(rot_out.x, Trit.Zero, "rot.x");
+    expect_trit(rot_out.y, Trit.Pos, "rot.y");
+    expect_trit(rot_out.z, Trit.Zero, "rot.z");
+
+    let w_a: Wave = from_trit(1.0, 193414489000.0, 1);
+    let w_b: Wave = from_trit(1.0, 193414489000.0, 0 - 1);
+    let hit: Wave = optical_intersect(w_a, w_b);
+    print_i32((hit.amplitude * 1000.0) as i32);
+    print_i32(hit.phase.trit_wire as i32);
+
+    let manifest: CoordinateManifest = manifest_new("matrix_test", "0.1.0");
+    let route_ctx: MatRouteCtx = mat_route_ctx_new(&manifest);
+    mat3_route(&route_ctx, rot, pos_x);
+    print_i32(len[PathSegment](manifest.segments));
+
+    let composed: Mat3 = mat3_mul(rot, id);
+    let composed_out: TritTriple = mat3_apply_trit(composed, pos_x);
+    expect_trit(composed_out.y, Trit.Pos, "mul(rot,id).y");
+
+    _zag_println("matrix_test: ok");
+    return 0;
+}

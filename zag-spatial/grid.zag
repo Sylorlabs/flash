@@ -1,0 +1,259 @@
+// grid.zag — Photonic lattice chamber coordinates and Square Nano voxel mapping
+//
+// Hardware model:
+//   • Waffle lattice of 3 cm × 3 cm optical chambers (X/Y plane, stacked in Z)
+//   • Each chamber hosts one Square Nano glass block
+//   • Vertical lasers rise from the chamber floor; horizontal lasers enter via walls
+//   • Native balanced ternary storage: -1, 0, +1 per voxel (polarization-encoded)
+//
+//   @import("grid.zag")
+//   let g: LatticeGrid = lattice_new(4, 4, 1);
+//   let c: ChamberCoord = chamber_coord(1, 2, 0);
+//   set_chamber_rotation(&g, c, RotationState.R90);
+
+@import("../flash/toolchain/zag-poc/std/rt.zag")
+
+// ── lattice constants (3 cm chambers, 8³ nano voxels) ───────────────────────
+
+fn CHAMBER_SIZE_MM() i32 { return 30; }
+fn NANO_VOXELS_EDGE() i32 { return 8; }
+fn TRIT_NEG() i32 { return -1; }
+fn TRIT_ZERO() i32 { return 0; }
+fn TRIT_POS() i32 { return 1; }
+
+// ── rotation / laser enums ──────────────────────────────────────────────────
+
+enum RotationState {
+    R0,
+    R90,
+    R180,
+    R270,
+}
+
+enum LaserAxis {
+    Vertical,      // floor → ceiling within chamber
+    HorizontalX,   // wall laser along X
+    HorizontalY,   // wall laser along Y
+}
+
+enum GridTrit {
+    Neg,
+    Zero,
+    Pos,
+}
+
+// ── coordinate structs ──────────────────────────────────────────────────────
+
+struct ChamberCoord {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+struct VoxelLocal {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+struct VoxelGlobal {
+    chamber: ChamberCoord,
+    local:   VoxelLocal,
+}
+
+struct ChamberDims {
+    width:  i32,   // chambers along X
+    height: i32,   // chambers along Y
+    depth:  i32,   // chambers along Z (stack height)
+}
+
+struct ChamberCell {
+    coord:    ChamberCoord,
+    rotation: RotationState,
+    occupied: i32,   // 1 when a Square Nano block is seated
+}
+
+struct LatticeGrid {
+    cells: *ChamberCell,
+    dims:  ChamberDims,
+    count: i32,
+}
+
+// ── trit helpers ────────────────────────────────────────────────────────────
+
+fn grid_trit_from_i32(v: i32) GridTrit @realtime {
+    if (v < 0) { return GridTrit.Neg; }
+    if (v > 0) { return GridTrit.Pos; }
+    return GridTrit.Zero;
+}
+
+fn grid_trit_to_i32(t: GridTrit) i32 @realtime {
+    if (t == GridTrit.Neg)  { return TRIT_NEG(); }
+    if (t == GridTrit.Pos)  { return TRIT_POS(); }
+    return TRIT_ZERO();
+}
+
+fn grid_trit_valid(v: i32) bool @realtime {
+    return v == TRIT_NEG() || v == TRIT_ZERO() || v == TRIT_POS();
+}
+
+// ── rotation helpers ────────────────────────────────────────────────────────
+
+fn rotation_to_deg(r: RotationState) i32 @realtime {
+    if (r == RotationState.R90)  { return 90; }
+    if (r == RotationState.R180) { return 180; }
+    if (r == RotationState.R270) { return 270; }
+    return 0;
+}
+
+fn rotation_from_deg(deg: i32) RotationState @realtime {
+    if (deg == 90)  { return RotationState.R90; }
+    if (deg == 180) { return RotationState.R180; }
+    if (deg == 270) { return RotationState.R270; }
+    return RotationState.R0;
+}
+
+fn rotation_next(r: RotationState) RotationState @realtime {
+    if (r == RotationState.R0)   { return RotationState.R90; }
+    if (r == RotationState.R90)  { return RotationState.R180; }
+    if (r == RotationState.R180) { return RotationState.R270; }
+    return RotationState.R0;
+}
+
+// ── coordinate constructors ─────────────────────────────────────────────────
+
+fn chamber_coord(x: i32, y: i32, z: i32) ChamberCoord @realtime {
+    return ChamberCoord{ .x = x, .y = y, .z = z };
+}
+
+fn voxel_local(x: i32, y: i32, z: i32) VoxelLocal @realtime {
+    return VoxelLocal{ .x = x, .y = y, .z = z };
+}
+
+fn chamber_in_bounds(dims: ChamberDims, c: ChamberCoord) bool @realtime {
+    return c.x >= 0 && c.x < dims.width
+        && c.y >= 0 && c.y < dims.height
+        && c.z >= 0 && c.z < dims.depth;
+}
+
+fn voxel_in_bounds(v: VoxelLocal) bool @realtime {
+    let e: i32 = NANO_VOXELS_EDGE();
+    return v.x >= 0 && v.x < e && v.y >= 0 && v.y < e && v.z >= 0 && v.z < e;
+}
+
+fn chamber_linear_index(dims: ChamberDims, c: ChamberCoord) i32 @realtime {
+    return c.z * dims.width * dims.height + c.y * dims.width + c.x;
+}
+
+fn chamber_from_linear(dims: ChamberDims, idx: i32) ChamberCoord @realtime {
+    let plane: i32 = dims.width * dims.height;
+    let z: i32 = idx / plane;
+    let rem: i32 = idx - z * plane;
+    let y: i32 = rem / dims.width;
+    let x: i32 = rem - y * dims.width;
+    return ChamberCoord{ .x = x, .y = y, .z = z };
+}
+
+// ── lattice lifecycle ───────────────────────────────────────────────────────
+
+fn lattice_new(width: i32, height: i32, depth: i32) LatticeGrid {
+    let w: i32 = width;
+    let h: i32 = height;
+    let d: i32 = depth;
+    if (w < 1) { w = 1; }
+    if (h < 1) { h = 1; }
+    if (d < 1) { d = 1; }
+    let count: i32 = w * h * d;
+    let raw: *i8 = _zag_malloc(count * @sizeOf[ChamberCell]());
+    let cells: *ChamberCell = raw as *ChamberCell;
+    let i: i32 = 0;
+    while (i < count) {
+        let c: ChamberCoord = chamber_from_linear(ChamberDims{ .width = w, .height = h, .depth = d }, i);
+        cells[i] = ChamberCell{
+            .coord    = c,
+            .rotation = RotationState.R0,
+            .occupied = 0,
+        };
+        i = i + 1;
+    }
+    return LatticeGrid{
+        .cells = cells,
+        .dims  = ChamberDims{ .width = w, .height = h, .depth = d },
+        .count = count,
+    };
+}
+
+fn lattice_free(g: *LatticeGrid) void {
+    _zag_free(g.*.cells as *i8);
+    g.*.cells = null as *ChamberCell;
+    g.*.count = 0;
+}
+
+fn lattice_get(g: LatticeGrid, c: ChamberCoord) ?ChamberCell @realtime {
+    if (!chamber_in_bounds(g.dims, c)) { return null; }
+    let idx: i32 = chamber_linear_index(g.dims, c);
+    return g.cells[idx];
+}
+
+fn lattice_get_mut(g: *LatticeGrid, c: ChamberCoord) ?*ChamberCell {
+    if (!chamber_in_bounds(g.*.dims, c)) { return null; }
+    let idx: i32 = chamber_linear_index(g.*.dims, c);
+    return &g.*.cells[idx];
+}
+
+fn set_chamber_rotation(g: *LatticeGrid, c: ChamberCoord, rot: RotationState) i32 {
+    if (lattice_get_mut(g, c)) |cell| {
+        cell.*.rotation = rot;
+        return 1;
+    }
+    return 0;
+}
+
+fn set_chamber_occupied(g: *LatticeGrid, c: ChamberCoord, occupied: i32) i32 {
+    if (lattice_get_mut(g, c)) |cell| {
+        cell.*.occupied = occupied;
+        return 1;
+    }
+    return 0;
+}
+
+// Global voxel address: chamber index * edge³ + local linear offset.
+fn voxel_global_linear(g: LatticeGrid, v: VoxelGlobal) i32 @realtime {
+    let edge: i32 = NANO_VOXELS_EDGE();
+    let cidx: i32 = chamber_linear_index(g.dims, v.chamber);
+    let local: i32 = v.local.z * edge * edge + v.local.y * edge + v.local.x;
+    return cidx * edge * edge * edge + local;
+}
+
+fn voxel_global_from_linear(g: LatticeGrid, linear: i32) VoxelGlobal @realtime {
+    let edge: i32 = NANO_VOXELS_EDGE();
+    let voxels_per_chamber: i32 = edge * edge * edge;
+    let cidx: i32 = linear / voxels_per_chamber;
+    let rem: i32 = linear - cidx * voxels_per_chamber;
+    let lz: i32 = rem / (edge * edge);
+    let rem2: i32 = rem - lz * edge * edge;
+    let ly: i32 = rem2 / edge;
+    let lx: i32 = rem2 - ly * edge;
+    return VoxelGlobal{
+        .chamber = chamber_from_linear(g.dims, cidx),
+        .local   = voxel_local(lx, ly, lz),
+    };
+}
+
+// Millimetre offset of a voxel centre inside the lattice (origin = chamber 0,0,0 corner).
+fn voxel_mm_offset(g: LatticeGrid, v: VoxelGlobal) ChamberCoord @realtime {
+    let chamber_mm: i32 = CHAMBER_SIZE_MM();
+    let edge: i32 = NANO_VOXELS_EDGE();
+    let voxel_mm: i32 = chamber_mm / edge;
+    return ChamberCoord{
+        .x = v.chamber.x * chamber_mm + v.local.x * voxel_mm,
+        .y = v.chamber.y * chamber_mm + v.local.y * voxel_mm,
+        .z = v.chamber.z * chamber_mm + v.local.z * voxel_mm,
+    };
+}
+
+// Total voxel capacity across all occupied chambers.
+fn lattice_voxel_capacity(g: LatticeGrid) i32 @realtime {
+    let edge: i32 = NANO_VOXELS_EDGE();
+    return g.count * edge * edge * edge;
+}

@@ -1,0 +1,163 @@
+// selfhost/lib/manifest.flash — Flash port of flash/compiler/manifest.zag (real symbols; the slim shim
+// header keeps the Zag originals out of shim compilations, so no staging).
+// Generated port: keep behavior identical to the Zag original.
+
+
+struct Coord {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+// One routed segment: from → to with laser parameters + PCM lattice metadata.
+struct PathSegment {
+    from: Coord,
+    to: Coord,
+    laser_power_mw: f32,
+    polarization: i32,   // -1 = H, 0 = split, +1 = V
+    op_tag: []u8,       // e.g. "trit_add", "wave", "beam"
+    pcm_row: i32,
+    pcm_col: i32,
+    phase_a_rad: f32,
+    phase_b_rad: f32,
+    phase_result_rad: f32,
+    lattice_op: i32,
+}
+
+// Full coordinate manifest emitted by the Flash → Zag pipeline.
+struct CoordinateManifest {
+    name: []u8,
+    version: []u8,
+    segments: ArrayList[PathSegment],
+    peak_power_mw: f32,
+    dominant_pol: i32,
+}
+
+fn coord(x: f32, y: f32, z: f32) Coord {
+    return Coord{ .x = x, .y = y, .z = z };
+}
+
+fn path_segment_new(
+    from: Coord,
+    to: Coord,
+    laser_power_mw: f32,
+    polarization: i32,
+    op_tag: []u8,
+) PathSegment {
+    return PathSegment{
+        .from = from,
+        .to = to,
+        .laser_power_mw = laser_power_mw,
+        .polarization = polarization,
+        .op_tag = op_tag,
+        .pcm_row = 0,
+        .pcm_col = 0,
+        .phase_a_rad = 0.0,
+        .phase_b_rad = 0.0,
+        .phase_result_rad = 0.0,
+        .lattice_op = 0,
+    };
+}
+
+fn manifest_new(name: []u8, version: []u8) CoordinateManifest {
+    return CoordinateManifest{
+        .name = name,
+        .version = version,
+        .segments = make[PathSegment](8),
+        .peak_power_mw = 0.0,
+        .dominant_pol = 0,
+    };
+}
+
+fn manifest_push_seg(m: *CoordinateManifest, seg: PathSegment) void {
+    push[PathSegment](&m.*.segments, seg);
+    if (seg.laser_power_mw > m.*.peak_power_mw) {
+        m.*.peak_power_mw = seg.laser_power_mw;
+    }
+}
+
+fn manifest_set_pol(m: *CoordinateManifest, pol: i32) void {
+    m.*.dominant_pol = pol;
+}
+
+// Serialize manifest to a human-readable routing table (for znc bootstrap).
+fn manifest_write(m: *CoordinateManifest) []u8 {
+    let out: ArrayList[u8] = make[u8](256);
+    manifest_app(&out, "# flash coordinate manifest\n");
+    manifest_app(&out, "name = \"");
+    manifest_app(&out, m.*.name);
+    manifest_app(&out, "\"\n");
+    manifest_app(&out, "version = \"");
+    manifest_app(&out, m.*.version);
+    manifest_app(&out, "\"\n");
+    manifest_app(&out, "peak_power_mw = ");
+    manifest_app_f32(&out, m.*.peak_power_mw);
+    manifest_app(&out, "\n");
+    manifest_app(&out, "dominant_pol = ");
+    manifest_app_i32(&out, m.*.dominant_pol);
+    manifest_app(&out, "\n");
+    manifest_app(&out, "[paths]\n");
+    let i: i32 = 0;
+    let n: i32 = len[PathSegment](m.*.segments);
+    while (i < n) {
+        let s: PathSegment = get[PathSegment](m.*.segments, i);
+        manifest_app(&out, "segment ");
+        manifest_app_i32(&out, i);
+        manifest_app(&out, " { op = \"");
+        manifest_app(&out, s.op_tag);
+        manifest_app(&out, "\", from = (");
+        manifest_app_f32(&out, s.from.x);
+        manifest_app(&out, ", ");
+        manifest_app_f32(&out, s.from.y);
+        manifest_app(&out, ", ");
+        manifest_app_f32(&out, s.from.z);
+        manifest_app(&out, "), to = (");
+        manifest_app_f32(&out, s.to.x);
+        manifest_app(&out, ", ");
+        manifest_app_f32(&out, s.to.y);
+        manifest_app(&out, ", ");
+        manifest_app_f32(&out, s.to.z);
+        manifest_app(&out, "), power_mw = ");
+        manifest_app_f32(&out, s.laser_power_mw);
+        manifest_app(&out, ", pol = ");
+        manifest_app_i32(&out, s.polarization);
+        manifest_app(&out, ", pcm_row = ");
+        manifest_app_i32(&out, s.pcm_row);
+        manifest_app(&out, ", pcm_col = ");
+        manifest_app_i32(&out, s.pcm_col);
+        manifest_app(&out, ", phase_a_rad = ");
+        manifest_app_phase_rad(&out, s.phase_a_rad);
+        manifest_app(&out, ", phase_b_rad = ");
+        manifest_app_phase_rad(&out, s.phase_b_rad);
+        manifest_app(&out, ", phase_result_rad = ");
+        manifest_app_phase_rad(&out, s.phase_result_rad);
+        manifest_app(&out, ", lattice_op = ");
+        manifest_app_i32(&out, s.lattice_op);
+        manifest_app(&out, " }\n");
+        i = i + 1;
+    }
+    return out.data[0..out.len];
+}
+
+fn manifest_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) { push[u8](out, s[i]); i = i + 1; }
+}
+
+fn manifest_app_i32(out: *ArrayList[u8], v: i32) void {
+    let s: []u8 = _zag_i64_to_str(v as i64);
+    manifest_app(out, s);
+}
+
+fn manifest_app_f32(out: *ArrayList[u8], v: f32) void {
+    // Fixed-point milliwatts-style encoding: multiply by 1000, print as int.
+    let scaled: i32 = (v * 1000.0) as i32;
+    manifest_app_i32(out, scaled);
+    manifest_app(out, "m");
+}
+
+fn manifest_app_phase_rad(out: *ArrayList[u8], v: f32) void {
+    let scaled: i32 = (v * 1000000.0) as i32;
+    manifest_app_i32(out, scaled);
+    manifest_app(out, "u");
+}

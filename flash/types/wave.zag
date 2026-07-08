@@ -1,0 +1,73 @@
+// wave.zag — primitive optical wave descriptor for Flash photonic simulation
+//
+// Represents a monochromatic scalar wave: E = amplitude * cos(ωt + φ).
+// Pairs with phase.zag for lattice cell binding.
+
+@import("phase.zag") as phase
+
+struct Wave {
+    amplitude: f32,
+    frequency_hz: f32,
+    wavelength_m: f32,
+    phase: phase.Phase,
+    polarization: i32,
+}
+
+fn wave_make(amplitude: f32, frequency_hz: f32, phase_rad: f32) Wave {
+    let c: f32 = 299792458.0;
+    let wl: f32 = c / frequency_hz;
+    let ph: phase.Phase = phase.from_radians(phase_rad);
+    return Wave{
+        .amplitude = amplitude,
+        .frequency_hz = frequency_hz,
+        .wavelength_m = wl,
+        .phase = ph,
+        .polarization = 0,
+    };
+}
+
+fn from_trit(amplitude: f32, frequency_hz: f32, trit_val: i8) Wave {
+    let ph: phase.Phase = phase.from_trit(trit_val);
+    let c: f32 = 299792458.0;
+    let wl: f32 = c / frequency_hz;
+    return Wave{
+        .amplitude = amplitude,
+        .frequency_hz = frequency_hz,
+        .wavelength_m = wl,
+        .phase = ph,
+        .polarization = 0,
+    };
+}
+
+fn intensity(w: Wave) f32 {
+    return w.amplitude * w.amplitude;
+}
+
+fn phase_shift(w: Wave, delta_rad: f32) Wave {
+    let ph: phase.Phase = phase.shift(w.phase, delta_rad);
+    return Wave{
+        .amplitude = w.amplitude,
+        .frequency_hz = w.frequency_hz,
+        .wavelength_m = w.wavelength_m,
+        .phase = ph,
+        .polarization = w.polarization,
+    };
+}
+
+fn clamp_unit_amp(v: f32) f32 {
+    if (v > 1.0) { return 1.0; }
+    return v;
+}
+
+fn superpose(a: Wave, b: Wave) Wave {
+    let amp: f32 = a.amplitude + b.amplitude;
+    let clamped: f32 = clamp_unit_amp(amp);
+    let ph: phase.Phase = phase.from_radians(a.phase.radians + b.phase.radians);
+    return Wave{
+        .amplitude = clamped,
+        .frequency_hz = a.frequency_hz,
+        .wavelength_m = a.wavelength_m,
+        .phase = ph,
+        .polarization = a.polarization,
+    };
+}

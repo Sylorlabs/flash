@@ -1,0 +1,63 @@
+// flash/types/numeric/fixed.zag — Q-format fixed-point metadata + fixed_M_N generator.
+
+@import("numeric_common.zag") as common
+
+fn fixed_canonical_count() i32 { return 3; }
+
+fn fixed_total_bits(int_bits: i32, frac_bits: i32) i32 {
+    return int_bits + frac_bits;
+}
+
+fn fixed_descriptor(name: []u8, int_bits: i32, frac_bits: i32) common.TypeDescriptor {
+    let total: i32 = fixed_total_bits(int_bits, frac_bits);
+    return common.TypeDescriptor{
+        .name = name,
+        .kind = common.KIND_FIXED(),
+        .width = total,
+        .signed = 1,
+        .min_val = common.num_signed_min(total),
+        .max_val = common.num_signed_max(total),
+        .trit_encoding_bits = common.num_trit_encoding_bits(total),
+        .storage_bytes = common.num_storage_bytes(total, 1),
+        .es = 0,
+        .useed = 0,
+        .nbits = total,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = int_bits,
+        .frac_bits = frac_bits,
+        .moduli_count = 0,
+    };
+}
+
+fn fixed_descriptor_8_8() common.TypeDescriptor {
+    return fixed_descriptor("fixed_8_8", 8, 8);
+}
+
+fn fixed_descriptor_16_16() common.TypeDescriptor {
+    return fixed_descriptor("fixed_16_16", 16, 16);
+}
+
+fn fixed_descriptor_32_32() common.TypeDescriptor {
+    return fixed_descriptor("fixed_32_32", 32, 32);
+}
+
+// Generator for arbitrary fixed_M_N pairs (M integer bits, N fractional bits).
+fn fixed_make(int_bits: i32, frac_bits: i32) common.TypeDescriptor {
+    return fixed_descriptor("", int_bits, frac_bits);
+}
+
+fn fixed_descriptor_at(idx: i32) common.TypeDescriptor {
+    if (idx == 0) { return fixed_descriptor_8_8(); }
+    if (idx == 1) { return fixed_descriptor_16_16(); }
+    if (idx == 2) { return fixed_descriptor_32_32(); }
+    return common.td_empty();
+}
+
+fn fixed_lookup(name: []u8) ?common.TypeDescriptor {
+    if (@strEq(name, "fixed_8_8"))   { return fixed_descriptor_8_8(); }
+    if (@strEq(name, "fixed_16_16")) { return fixed_descriptor_16_16(); }
+    if (@strEq(name, "fixed_32_32")) { return fixed_descriptor_32_32(); }
+    return null;
+}

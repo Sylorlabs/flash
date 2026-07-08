@@ -1,0 +1,130 @@
+// harsh_matrix.zag — 3×3 optical matrix multiply property adversarial tests.
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/runtime/matrix_rt.zag")
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn trit_at(idx: i32) Trit {
+    if (idx == 0) { return Trit.Neg; }
+    if (idx == 1) { return Trit.Zero; }
+    return Trit.Pos;
+}
+
+fn triple_at(ix: i32, iy: i32, iz: i32) TritTriple {
+    return TritTriple{ .x = trit_at(ix), .y = trit_at(iy), .z = trit_at(iz) };
+}
+
+fn triple_eq(a: TritTriple, b: TritTriple) i32 {
+    if (a.x != b.x) { return 0; }
+    if (a.y != b.y) { return 0; }
+    if (a.z != b.z) { return 0; }
+    return 1;
+}
+
+fn triple_axis(axis: i32, val: i32) TritTriple {
+    let t: Trit = trit_at(val);
+    if (axis == 0) {
+        return TritTriple{ .x = t, .y = Trit.Zero, .z = Trit.Zero };
+    }
+    if (axis == 1) {
+        return TritTriple{ .x = Trit.Zero, .y = t, .z = Trit.Zero };
+    }
+    return TritTriple{ .x = Trit.Zero, .y = Trit.Zero, .z = t };
+}
+
+fn test_identity_axis_triples() void {
+    let id: Mat3 = mat3_identity();
+    let axis: i32 = 0;
+    while (axis < 3) {
+        let val: i32 = 0;
+        while (val < 3) {
+            let v: TritTriple = triple_axis(axis, val);
+            let out: TritTriple = mat3_apply_trit(id, v);
+            if (triple_eq(v, out) == 0) { test_fail("identity_axis"); }
+            val = val + 1;
+        }
+        axis = axis + 1;
+    }
+    test_pass("identity_axis_triples");
+}
+
+fn test_mul_identity() void {
+    let id: Mat3 = mat3_identity();
+    let rot: Mat3 = mat3_rotation_xy_90();
+    let left: Mat3 = mat3_mul(rot, id);
+    let right: Mat3 = mat3_mul(id, rot);
+    if (mat3_near(left, rot, 0.001) == 0) { test_fail("mul_left_identity"); }
+    if (mat3_near(right, rot, 0.001) == 0) { test_fail("mul_right_identity"); }
+    test_pass("mul_identity");
+}
+
+fn test_rotation_xy_90() void {
+    let rot: Mat3 = mat3_rotation_xy_90();
+    let pos_x: TritTriple = TritTriple{ .x = Trit.Pos, .y = Trit.Zero, .z = Trit.Zero };
+    let out: TritTriple = mat3_apply_trit(rot, pos_x);
+    if (out.x != Trit.Zero) { test_fail("rot_x"); }
+    if (out.y != Trit.Pos) { test_fail("rot_y"); }
+    if (out.z != Trit.Zero) { test_fail("rot_z"); }
+    test_pass("rotation_xy_90");
+}
+
+fn test_optical_intersect() void {
+    let w_pos: Wave = from_trit(1.0, MATRIX_FREQ_HZ(), 1);
+    let w_neg: Wave = from_trit(1.0, MATRIX_FREQ_HZ(), 0 - 1);
+    let w_zero: Wave = from_trit(1.0, MATRIX_FREQ_HZ(), 0);
+
+    let cancel: Wave = optical_intersect(w_pos, w_neg);
+    if (wave_to_trit(cancel) != Trit.Zero) { test_fail("intersect_cancel"); }
+
+    let reinforce: Wave = optical_intersect(w_pos, w_pos);
+    if (wave_to_trit(reinforce) != Trit.Pos) { test_fail("intersect_reinforce"); }
+
+    let zero_zero: Wave = optical_intersect(w_zero, w_zero);
+    if (wave_to_trit(zero_zero) != Trit.Zero) { test_fail("intersect_zero"); }
+    test_pass("optical_intersect");
+}
+
+fn test_route_segment_count() void {
+    let rot: Mat3 = mat3_rotation_xy_90();
+    let input: TritTriple = TritTriple{ .x = Trit.Pos, .y = Trit.Neg, .z = Trit.Zero };
+    let manifest: CoordinateManifest = manifest_new("harsh_matrix", "0.1.0");
+    let ctx: MatRouteCtx = mat_route_ctx_new(&manifest);
+    mat3_route(&ctx, rot, input);
+    if (len[PathSegment](manifest.segments) != 9) { test_fail("route_segments"); }
+    test_pass("route_segments");
+}
+
+fn test_composition_sample() void {
+    let rot: Mat3 = mat3_rotation_xy_90();
+    let id: Mat3 = mat3_identity();
+    let composed: Mat3 = mat3_mul(rot, id);
+    let pos_x: TritTriple = TritTriple{ .x = Trit.Pos, .y = Trit.Zero, .z = Trit.Zero };
+    let direct: TritTriple = mat3_apply_trit(rot, pos_x);
+    let via_mul: TritTriple = mat3_apply_trit(composed, pos_x);
+    if (triple_eq(direct, via_mul) == 0) { test_fail("composition_sample"); }
+    test_pass("composition_sample");
+}
+
+fn main() i32 {
+    _zag_println("harsh_matrix: running");
+
+    test_identity_axis_triples();
+    test_mul_identity();
+    test_rotation_xy_90();
+    test_optical_intersect();
+    test_route_segment_count();
+    test_composition_sample();
+
+    _zag_println("harsh_matrix: ok");
+    return 0;
+}

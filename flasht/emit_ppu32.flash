@@ -1,0 +1,114 @@
+// flasht/emit_ppu32.flash — CoordinateManifest / FIMG → PPU32 text assembly (.ppu32).
+//
+// Lowers manifest path segments to human-readable PPU32 mnemonics using
+// flasht/isa/ppu32.flash class names and micro-unit operands.
+
+@import("../flasht/isa/ppu32.flash")
+
+fn ppu32_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) { push[u8](out, s[i]); i = i + 1; }
+}
+
+fn ppu32_app_i32(out: *ArrayList[u8], v: i32) void {
+    ppu32_app(out, _zag_i64_to_str(v as i64));
+}
+
+fn ppu32_path_from_src(src_path: []u8) []u8 {
+    let stem: []u8 = flash_path_stem(src_path);
+    let dir: []u8 = flash_path_dir(src_path);
+    let base: []u8 = _zag_str_concat(stem, ".ppu32");
+    if (@strEq(dir, ".") == 1) { return base; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), base);
+}
+
+fn ppu32_emit_pcm_shift(out: *ArrayList[u8], idx: i32, s: PathSegment) void {
+    ppu32_app(out, "insn ");
+    ppu32_app_i32(out, idx);
+    ppu32_app(out, " PcmPhaseShift row=");
+    ppu32_app_i32(out, s.pcm_row);
+    ppu32_app(out, " col=");
+    ppu32_app_i32(out, s.pcm_col);
+    ppu32_app(out, " phase_a=");
+    ppu32_app_i32(out, ppu32_phase_to_micro(s.phase_a_rad));
+    ppu32_app(out, " phase_b=");
+    ppu32_app_i32(out, ppu32_phase_to_micro(s.phase_b_rad));
+    ppu32_app(out, " result=");
+    ppu32_app_i32(out, ppu32_phase_to_micro(s.phase_result_rad));
+    ppu32_app(out, " lattice_op=");
+    ppu32_app_i32(out, s.lattice_op);
+    ppu32_app(out, " tag=\"");
+    ppu32_app(out, s.op_tag);
+    ppu32_app(out, "\"\n");
+}
+
+fn ppu32_emit_lattice_route(out: *ArrayList[u8], idx: i32, s: PathSegment) void {
+    ppu32_app(out, "insn ");
+    ppu32_app_i32(out, idx);
+    ppu32_app(out, " LatticeRoute from_x=");
+    ppu32_app_i32(out, ppu32_mm_to_micro(s.from.x));
+    ppu32_app(out, " from_y=");
+    ppu32_app_i32(out, ppu32_mm_to_micro(s.from.y));
+    ppu32_app(out, " from_z=");
+    ppu32_app_i32(out, ppu32_mm_to_micro(s.from.z));
+    ppu32_app(out, " to_x=");
+    ppu32_app_i32(out, ppu32_mm_to_micro(s.to.x));
+    ppu32_app(out, " to_y=");
+    ppu32_app_i32(out, ppu32_mm_to_micro(s.to.y));
+    ppu32_app(out, " to_z=");
+    ppu32_app_i32(out, ppu32_mm_to_micro(s.to.z));
+    ppu32_app(out, " power=");
+    ppu32_app_i32(out, (s.laser_power_mw * 1000.0) as i32);
+    ppu32_app(out, " pol=");
+    ppu32_app_i32(out, s.polarization);
+    ppu32_app(out, " tag=\"");
+    ppu32_app(out, s.op_tag);
+    ppu32_app(out, "\"\n");
+}
+
+fn ppu32_from_manifest(m: *CoordinateManifest, target: []u8) []u8 {
+    let out: ArrayList[u8] = make[u8](2048);
+    ppu32_app(&out, "# ppu32 assembly v1\n");
+    ppu32_app(&out, "target = \"");
+    ppu32_app(&out, target);
+    ppu32_app(&out, "\"\n");
+    ppu32_app(&out, "name = \"");
+    ppu32_app(&out, m.*.name);
+    ppu32_app(&out, "\"\n");
+    ppu32_app(&out, "format = \"ppu32-v1\"\n");
+    ppu32_app(&out, "[insns]\n");
+
+    let insn: i32 = 0;
+    let i: i32 = 0;
+    let n: i32 = len[PathSegment](m.*.segments);
+    while (i < n) {
+        let s: PathSegment = get[PathSegment](m.*.segments, i);
+        if (s.lattice_op != 0) {
+            ppu32_emit_pcm_shift(&out, insn, s);
+            insn = insn + 1;
+        }
+        ppu32_emit_lattice_route(&out, insn, s);
+        insn = insn + 1;
+        i = i + 1;
+    }
+    return out.data[0..out.len];
+}
+
+fn ppu32_from_fimg_text(fimg_text: []u8, target: []u8, name: []u8) []u8 {
+    let out: ArrayList[u8] = make[u8](2048);
+    ppu32_app(&out, "# ppu32 assembly v1\n");
+    ppu32_app(&out, "target = \"");
+    ppu32_app(&out, target);
+    ppu32_app(&out, "\"\n");
+    ppu32_app(&out, "name = \"");
+    ppu32_app(&out, name);
+    ppu32_app(&out, "\"\n");
+    ppu32_app(&out, "format = \"ppu32-v1\"\n");
+    ppu32_app(&out, "[insns]\n");
+    // FIMG handoff: manifest [paths] segments are replayed by the qemu loader
+    // via the companion .fimg; this stub keeps the text container valid.
+    if (flash_str_index_of(fimg_text, "[paths]") >= 0) {
+        ppu32_app(&out, "# lowered from fimg manifest [paths]\n");
+    }
+    return out.data[0..out.len];
+}

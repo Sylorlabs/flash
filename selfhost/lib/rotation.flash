@@ -1,0 +1,112 @@
+// selfhost/lib/rotation.flash — Flash port of zag-spatial/rotation.zag (real symbols; the slim shim
+// header keeps the Zag originals out of shim compilations, so no staging).
+// Generated port: keep behavior identical to the Zag original.
+
+@import("grid.flash")
+
+struct OrientationMarkers {
+    wall_pos_x: i32,   // trit at +X wall probe
+    wall_pos_y: i32,   // trit at +Y wall probe
+    floor:      i32,   // trit at floor probe
+    ceiling:    i32,   // trit at ceiling probe
+}
+
+fn marker_signature(m: OrientationMarkers) i32 {
+    let s: i32 = 0;
+    if (m.wall_pos_x > 0) { s = s + 1; }
+    if (m.wall_pos_y > 0) { s = s + 2; }
+    if (m.floor > 0)      { s = s + 4; }
+    if (m.ceiling > 0)    { s = s + 8; }
+    return s;
+}
+
+fn expected_signature(rot: RotationState) i32 {
+    if (rot == RotationState.R90)  { return 6; }
+    if (rot == RotationState.R180) { return 10; }
+    if (rot == RotationState.R270) { return 9; }
+    return 5;   // R0: floor + wall+X
+}
+
+fn detect_rotation_from_markers(m: OrientationMarkers) RotationState {
+    let sig: i32 = marker_signature(m);
+    if (sig == expected_signature(RotationState.R90))  { return RotationState.R90; }
+    if (sig == expected_signature(RotationState.R180)) { return RotationState.R180; }
+    if (sig == expected_signature(RotationState.R270)) { return RotationState.R270; }
+    return RotationState.R0;
+}
+
+fn rotation_mismatch(m: OrientationMarkers, expected: RotationState) i32 {
+    let observed: RotationState = detect_rotation_from_markers(m);
+    if (observed == expected) { return 0; }
+    return 1;
+}
+
+// ── local voxel remapping (Z-up, clockwise XY rotation) ─────────────────────
+
+fn remap_voxel_local(v: VoxelLocal, rot: RotationState) VoxelLocal {
+    let e: i32 = NANO_VOXELS_EDGE();
+    let max_i: i32 = e - 1;
+    if (rot == RotationState.R90) {
+        return voxel_local(v.y, max_i - v.x, v.z);
+    }
+    if (rot == RotationState.R180) {
+        return voxel_local(max_i - v.x, max_i - v.y, v.z);
+    }
+    if (rot == RotationState.R270) {
+        return voxel_local(max_i - v.y, v.x, v.z);
+    }
+    return v;
+}
+
+fn inverse_remap_voxel_local(v: VoxelLocal, rot: RotationState) VoxelLocal {
+    return remap_voxel_local(v, invert_rotation(rot));
+}
+
+fn invert_rotation(rot: RotationState) RotationState {
+    if (rot == RotationState.R90)  { return RotationState.R270; }
+    if (rot == RotationState.R270) { return RotationState.R90; }
+    if (rot == RotationState.R180) { return RotationState.R180; }
+    return RotationState.R0;
+}
+
+// ── laser axis remapping ──────────────────────────────────────────────────────
+//
+// Vertical (floor-up) is invariant under Z-axis block rotation.
+// Horizontal wall axes rotate with the block.
+
+fn remap_laser_axis(axis: LaserAxis, rot: RotationState) LaserAxis {
+    if (axis == LaserAxis.Vertical) { return LaserAxis.Vertical; }
+    if (rot == RotationState.R0 || rot == RotationState.R180) {
+        return axis;
+    }
+    if (axis == LaserAxis.HorizontalX) { return LaserAxis.HorizontalY; }
+    if (axis == LaserAxis.HorizontalY) { return LaserAxis.HorizontalX; }
+    return axis;
+}
+
+// Remap a laser path coordinate along the active axis (0..edge-1).
+fn remap_path_coord(coord: i32, axis: LaserAxis, rot: RotationState) i32 {
+    let e: i32 = NANO_VOXELS_EDGE();
+    let max_i: i32 = e - 1;
+    if (axis == LaserAxis.Vertical) { return coord; }
+    if (rot == RotationState.R90 || rot == RotationState.R180) {
+        return max_i - coord;
+    }
+    return coord;
+}
+
+// Full global voxel remap: apply chamber rotation to a logical address.
+fn remap_voxel_global(v: VoxelGlobal, rot: RotationState) VoxelGlobal {
+    return VoxelGlobal{
+        .chamber = v.chamber,
+        .local   = remap_voxel_local(v.local, rot),
+    };
+}
+
+// Compose two rotations (apply b after a).
+fn compose_rotation(a: RotationState, b: RotationState) RotationState {
+    let deg_a: i32 = rotation_to_deg(a);
+    let deg_b: i32 = rotation_to_deg(b);
+    let sum: i32 = (deg_a + deg_b) % 360;
+    return rotation_from_deg(sum);
+}

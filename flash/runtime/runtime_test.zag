@@ -1,0 +1,100 @@
+// runtime_test.zag — smoke test for Flash photonic runtime (chamber + raw externs).
+//
+// Build:
+//   flash/toolchain/flashz flash/runtime/runtime_test.zag -o runtime_test
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("photonic_rt.zag")
+
+fn expect_i32(actual: i32, expected: i32, label: []u8) void {
+    if (actual != expected) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" got ");
+        print_i32(actual);
+        _zag_print(" want ");
+        print_i32(expected);
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn i8_wire(v: i8) i32 {
+    let x: i32 = v as i32;
+    if (x == 255) { return 0 - 1; }
+    return x;
+}
+
+fn expect_i8(actual: i8, expected: i8, label: []u8) void {
+    expect_i32(i8_wire(actual), i8_wire(expected), label);
+}
+
+fn expect_phase_near(actual: f32, expected: f32, label: []u8) void {
+    let delta: f32 = actual - expected;
+    if (delta < 0.0) { delta = 0.0 - delta; }
+    if (delta > 0.01) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" phase delta ");
+        print_i32((delta * 1000.0) as i32);
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn main() i32 {
+    _zag_println("runtime_test: photonic chamber driver");
+
+    let entered: i32 = _flash_raw_mode_enter();
+    expect_i32(entered, 1, "raw_mode_enter");
+
+    let x: i32 = 2;
+    let y: i32 = 3;
+    let z: i32 = 4;
+
+    let tgt: i32 = _flash_raw_target_voxel(x, y, z);
+    expect_i32(tgt, 1, "target_voxel");
+
+    let laser: i32 = _flash_raw_set_laser_mw(1, 0, 1250.0);
+    expect_i32(laser, 1, "set_laser_mw");
+
+    let phase_rad: f32 = 1.5708;
+    let phased: i32 = _flash_raw_inject_phase(x, y, z, phase_rad);
+    expect_i32(phased, 1, "inject_phase");
+
+    if (runtime_voxel_at(x, y, z)) |cell| {
+        expect_phase_near(cell.phase, phase_rad, "inject_phase_readback");
+    } else {
+        _zag_println("FAIL inject_phase_readback missing voxel");
+        _zag_exit(1);
+    }
+
+    let pol_tag: i32 = 1; // HW_POL_VERT → +1 wire
+    let pol_set: i32 = _flash_raw_set_polarity(x, y, z, pol_tag);
+    expect_i32(pol_set, 1, "manual_polarity");
+
+    if (runtime_voxel_at(x, y, z)) |cell2| {
+        expect_i8(cell2.pol, 1, "manual_polarity_readback");
+    } else {
+        _zag_println("FAIL manual_polarity_readback missing voxel");
+        _zag_exit(1);
+    }
+
+    let fired: i32 = _flash_raw_fire_shield(x, y, z, 750.0);
+    expect_i32(fired, 1, "fire_shield");
+
+    if (runtime_voxel_at(x, y, z)) |cell3| {
+        expect_i8(cell3.pol, 0 - 1, "fire_shield_polarity");
+        let amp_milli: i32 = (cell3.amp * 1000.0) as i32;
+        expect_i32(amp_milli, 750, "fire_shield_amp");
+    } else {
+        _zag_println("FAIL fire_shield_readback missing voxel");
+        _zag_exit(1);
+    }
+
+    let exited: i32 = _flash_raw_mode_exit();
+    expect_i32(exited, 1, "raw_mode_exit");
+
+    _zag_println("runtime_test: ok");
+    return 0;
+}

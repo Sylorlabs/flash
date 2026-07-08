@@ -1,0 +1,111 @@
+// flash/wave/interference.zag — horizontal beam collision logic
+//
+// Chamber-wall lasers fire horizontally into vertical streams.  Wave collision
+// is modeled with balanced-ternary superposition:
+//
+//   shield(v, beam)      — horizontal beam attenuates vertical stream
+//   partition(pipe, y)   — erect a horizontal interference wall at depth y
+//   collide(a, b)        — pair-wise wave collision
+//   merge_waves(samples) — n-ary superposition with ternary quantization
+//
+// DEPENDENCY: flash/types/wave_types.zag, flash/wave/pipeline.zag
+
+@import("../types/wave_types.zag")
+@import("../types/wave.zag") as optic
+@import("pipeline.zag")
+
+error { PartitionFail, BeamTooWeak }
+
+// ── phase helpers ─────────────────────────────────────────────────────────────
+
+fn wrap_phase(rad: f32) f32 {
+    let two_pi: f32 = 6.283185307;
+    let p: f32 = rad;
+    while (p >= two_pi) { p = p - two_pi; }
+    while (p < 0.0) { p = p + two_pi; }
+    return p;
+}
+
+fn phase_delta(a: f32, b: f32) f32 {
+    let d: f32 = wrap_phase(a - b);
+    if (d > 3.141592654) { return 6.283185307 - d; }
+    return d;
+}
+
+// ── collision primitives ──────────────────────────────────────────────────────
+
+fn collide(a: WaveSample, b: WaveSample) WaveSample {
+    // Delegate superposition to optic.Wave, then re-attach voxel payload + polarity.
+    let wa: optic.Wave = sample_to_wave(a);
+    let wb: optic.Wave = sample_to_wave(b);
+    let merged: optic.Wave = optic.superpose(wa, wb);
+    let pol: i8 = ternary_add(a.pol, b.pol);
+    let payload: u64 = b.payload;
+    if (a.pol == POL_VERT()) { payload = a.payload; }
+    return WaveSample{
+        .amp     = merged.amplitude,
+        .phase   = merged.phase.radians,
+        .pol     = pol,
+        .payload = payload,
+    };
+}
+
+fn merge_waves(samples: []WaveSample) WaveSample {
+    if (samples.len == 0) { return wave_neutral(); }
+    let acc: WaveSample = samples[0];
+    let i: i32 = 1;
+    while (i < samples.len) {
+        acc = collide(acc, samples[i]);
+        i = i + 1;
+    }
+    return acc;
+}
+
+fn shield(v_stream: WaveSample, h_beam: HorizontalBeam) WaveSample {
+    // Horizontal beam drains vertical polarity toward neutral.
+    let coupling: f32 = h_beam.power / 1000.0;   // normalize mW to coupling factor
+    if (coupling > 1.0) { coupling = 1.0; }
+    let drained: f32 = v_stream.amp * (1.0 - coupling);
+    let pol: i8 = v_stream.pol;
+    if (coupling >= 0.5) { pol = POL_OFF(); }
+    let payload: u64 = 0;
+    if (drained > 0.1) { payload = v_stream.payload; }
+    return WaveSample{
+        .amp     = drained,
+        .phase   = wrap_phase(v_stream.phase + h_beam.phase),
+        .pol     = pol,
+        .payload = payload,
+    };
+}
+
+fn partition(pipe: *VerticalPipeline, wall_y: i32, beam: HorizontalBeam) !CollisionResult {
+    if (beam.power < 1.0) { return error.BeamTooWeak; }
+    // Horizontal partition at depth wall_y: stream above continues, below is isolated.
+    let below: WaveSample = try read_voxel(pipe.*, voxel(pipe.*.column, wall_y - 1, pipe.*.head_z));
+    let shielded: WaveSample = shield(below, beam);
+    return CollisionResult{
+        .out      = shielded,
+        .absorbed = (shielded.amp < 0.01) as i32,
+        .split    = 1,
+    };
+}
+
+fn collide_beam(sample: WaveSample, beam: HorizontalBeam) CollisionResult {
+    let horz: WaveSample = wave_horizontal(beam.power / 1000.0, beam.phase);
+    let out: WaveSample = collide(sample, horz);
+    let absorbed: i32 = (out.pol == POL_OFF() && sample.pol == POL_VERT()) as i32;
+    return CollisionResult{ .out = out, .absorbed = absorbed, .split = 0 };
+}
+
+fn reflect_horizontal(sample: WaveSample, wall: i32) WaveSample {
+    // Wall bounce inverts horizontal polarity component.
+    let pol: i8 = sample.pol;
+    if (sample.pol == POL_HORZ()) { pol = POL_VERT(); }
+    let phase_shift: f32 = (wall as f32) * 0.785398163;   // π/4 per wall index
+    return WaveSample{
+        .amp     = sample.amp,
+        .phase   = wrap_phase(sample.phase + phase_shift),
+        .pol     = pol,
+        .payload = sample.payload,
+    };
+}

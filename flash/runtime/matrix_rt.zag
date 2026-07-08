@@ -1,0 +1,148 @@
+// matrix_rt.zag — optical matrix intersection unit (3×3, unrolled hot path)
+//
+// Matrix transforms route through wave collisions at lattice intersections.
+// Hot-path multiply and apply are fully unrolled — no software loops.
+//
+//   @import("runtime/matrix_rt.zag")
+//   let id: Mat3 = mat3_identity();
+//   let out: TritTriple = mat3_apply_trit(rot, input);
+
+@import("../ternary/trit.zag")
+@import("../types/wave.zag")
+@import("../types/mat3.zag")
+@import("../compiler/manifest.zag")
+
+fn MATRIX_FREQ_HZ() f32 { return 193414489000.0; }
+
+struct TritTriple {
+    x: Trit,
+    y: Trit,
+    z: Trit,
+}
+
+struct MatRouteCtx {
+    pos: Coord,
+    depth: i32,
+    base_power_mw: f32,
+    out: *CoordinateManifest,
+}
+
+fn trit_to_f32(t: Trit) f32 @realtime {
+    return to_i8(t) as f32;
+}
+
+fn abs_f32(v: f32) f32 @realtime {
+    if (v < 0.0) { return 0.0 - v; }
+    return v;
+}
+
+fn mrt_clamp_unit_amp(v: f32) f32 @realtime {
+    if (v > 1.0) { return 1.0; }
+    return v;
+}
+
+fn f32_to_trit_i8(v: f32) i8 @realtime {
+    if (v < -0.5) { return 0 - 1; }
+    if (v > 0.5) { return 1; }
+    return 0;
+}
+
+fn f32_to_trit(v: f32) Trit @realtime {
+    let wire: i8 = f32_to_trit_i8(v);
+    if (wire == 0 - 1) { return Trit.Neg; }
+    if (wire == 1) { return Trit.Pos; }
+    return Trit.Zero;
+}
+
+fn wave_to_trit(w: Wave) Trit @realtime {
+    if (w.amplitude < 0.15) { return Trit.Zero; }
+    if (w.phase.trit_wire == 0 - 1) { return Trit.Neg; }
+    if (w.phase.trit_wire == 1) { return Trit.Pos; }
+    return Trit.Zero;
+}
+
+fn wave_from_trit_scaled(t: Trit, scale: f32) Wave @realtime {
+    let tv: f32 = trit_to_f32(t);
+    let contrib: f32 = tv * scale;
+    let amp: f32 = mrt_clamp_unit_amp(abs_f32(contrib));
+    let tw: i8 = f32_to_trit_i8(contrib);
+    return from_trit(amp, MATRIX_FREQ_HZ(), tw);
+}
+
+// Wave collision at an optical intersection — balanced superposition.
+fn optical_intersect(a: Wave, b: Wave) Wave @realtime {
+    let va: f32 = a.amplitude * (a.phase.trit_wire as f32);
+    let vb: f32 = b.amplitude * (b.phase.trit_wire as f32);
+    let sum: f32 = va + vb;
+    let amp: f32 = mrt_clamp_unit_amp(abs_f32(sum));
+    let tw: i8 = f32_to_trit_i8(sum);
+    return from_trit(amp, a.frequency_hz, tw);
+}
+
+// Map a trit vector through row-wise optical intersections.
+fn mat3_apply_trit(m: Mat3, v: TritTriple) TritTriple @realtime {
+    let wx0: Wave = wave_from_trit_scaled(v.x, m.m00);
+    let wx1: Wave = wave_from_trit_scaled(v.y, m.m01);
+    let wx2: Wave = wave_from_trit_scaled(v.z, m.m02);
+    let ox: Wave = optical_intersect(optical_intersect(wx0, wx1), wx2);
+
+    let wy0: Wave = wave_from_trit_scaled(v.x, m.m10);
+    let wy1: Wave = wave_from_trit_scaled(v.y, m.m11);
+    let wy2: Wave = wave_from_trit_scaled(v.z, m.m12);
+    let oy: Wave = optical_intersect(optical_intersect(wy0, wy1), wy2);
+
+    let wz0: Wave = wave_from_trit_scaled(v.x, m.m20);
+    let wz1: Wave = wave_from_trit_scaled(v.y, m.m21);
+    let wz2: Wave = wave_from_trit_scaled(v.z, m.m22);
+    let oz: Wave = optical_intersect(optical_intersect(wz0, wz1), wz2);
+
+    return TritTriple{
+        .x = wave_to_trit(ox),
+        .y = wave_to_trit(oy),
+        .z = wave_to_trit(oz),
+    };
+}
+
+fn mat_route_ctx_new(out: *CoordinateManifest) MatRouteCtx {
+    return MatRouteCtx{
+        .pos = coord(0.0, 0.0, 0.0),
+        .depth = 0,
+        .base_power_mw = 1.0,
+        .out = out,
+    };
+}
+
+fn mat3_route_term(
+    ctx: *MatRouteCtx,
+    row: i32,
+    col: i32,
+    weight: f32,
+    tr: Trit,
+    op_tag: []u8,
+) void {
+    let from: Coord = ctx.*.pos;
+    let dx: f32 = col as f32;
+    let dy: f32 = row as f32;
+    let dz: f32 = ctx.*.depth as f32;
+    let to_coord: Coord = coord(from.x + dx, from.y + dy, from.z + dz);
+    ctx.*.pos = to_coord;
+    ctx.*.depth = ctx.*.depth + 1;
+    let pol: i32 = to_i8(tr) as i32;
+    let power: f32 = abs_f32(ctx.*.base_power_mw * weight);
+    let seg: PathSegment = path_segment_new(from, to_coord, power, pol, op_tag);
+    manifest_push_seg(ctx.*.out, seg);
+}
+
+// Emit nine unrolled path segments — one per matrix element optical lane.
+fn mat3_route(ctx: *MatRouteCtx, m: Mat3, input: TritTriple) void {
+    mat3_route_term(ctx, 0, 0, m.m00, input.x, "mat3_r0c0");
+    mat3_route_term(ctx, 0, 1, m.m01, input.y, "mat3_r0c1");
+    mat3_route_term(ctx, 0, 2, m.m02, input.z, "mat3_r0c2");
+    mat3_route_term(ctx, 1, 0, m.m10, input.x, "mat3_r1c0");
+    mat3_route_term(ctx, 1, 1, m.m11, input.y, "mat3_r1c1");
+    mat3_route_term(ctx, 1, 2, m.m12, input.z, "mat3_r1c2");
+    mat3_route_term(ctx, 2, 0, m.m20, input.x, "mat3_r2c0");
+    mat3_route_term(ctx, 2, 1, m.m21, input.y, "mat3_r2c1");
+    mat3_route_term(ctx, 2, 2, m.m22, input.z, "mat3_r2c2");
+}
+

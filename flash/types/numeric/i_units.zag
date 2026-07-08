@@ -1,0 +1,75 @@
+// flash/types/numeric/i_units.zag — signed integer unit metadata (i1..i127).
+
+@import("numeric_common.zag") as common
+
+fn i_unit_count() i32 { return 127; }
+
+fn i_unit_valid(width: i32) i32 {
+    if (width < 1 || width > 127) { return 0; }
+    return 1;
+}
+
+fn i_unit_signed(width: i32) i32 { return 1; }
+
+fn i_unit_width(width: i32) i32 { return width; }
+
+fn i_unit_min(width: i32) i64 {
+    return common.num_signed_min(width);
+}
+
+fn i_unit_max(width: i32) i64 {
+    return common.num_signed_max(width);
+}
+
+fn i_unit_trit_encoding_bits(width: i32) i32 {
+    return common.num_trit_encoding_bits(width);
+}
+
+fn i_unit_storage_bytes(width: i32) i32 {
+    return common.num_storage_bytes(width, 1);
+}
+
+fn i_unit_descriptor(width: i32) common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "",
+        .kind = common.KIND_SIGNED_INT(),
+        .width = width,
+        .signed = 1,
+        .min_val = i_unit_min(width),
+        .max_val = i_unit_max(width),
+        .trit_encoding_bits = i_unit_trit_encoding_bits(width),
+        .storage_bytes = i_unit_storage_bytes(width),
+        .es = 0,
+        .useed = 0,
+        .nbits = width,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = width,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn i_unit_descriptor_named(name: []u8, width: i32) common.TypeDescriptor {
+    let d: common.TypeDescriptor = i_unit_descriptor(width);
+    return common.TypeDescriptor{
+        .name = name,
+        .kind = d.kind,
+        .width = d.width,
+        .signed = d.signed,
+        .min_val = d.min_val,
+        .max_val = d.max_val,
+        .trit_encoding_bits = d.trit_encoding_bits,
+        .storage_bytes = d.storage_bytes,
+        .es = d.es,
+        .useed = d.useed,
+        .nbits = d.nbits,
+        .exponent_bits = d.exponent_bits,
+        .mantissa_bits = d.mantissa_bits,
+        .ieee_binary = d.ieee_binary,
+        .int_bits = d.int_bits,
+        .frac_bits = d.frac_bits,
+        .moduli_count = d.moduli_count,
+    };
+}

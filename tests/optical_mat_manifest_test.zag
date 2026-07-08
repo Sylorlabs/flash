@@ -1,0 +1,52 @@
+// tests/optical_mat_manifest_test.zag — direct manifest lowering smoke test.
+
+@import("../flash/toolchain/zag-poc/std/rt.zag")
+@import("../flash/compiler/parse.zag")
+@import("../flash/compiler/codegen.zag")
+@import("../flash/compiler/manifest.zag")
+
+fn omt_count_substr(hay: []u8, needle: []u8) i32 {
+    if (needle.len < 1 || hay.len < needle.len) { return 0; }
+    let count: i32 = 0;
+    let i: i32 = 0;
+    while (i <= hay.len - needle.len) {
+        let j: i32 = 0;
+        let ok: i32 = 1;
+        while (j < needle.len) {
+            if (hay[i + j] != needle[j]) { ok = 0; }
+            j = j + 1;
+        }
+        if (ok == 1) {
+            count = count + 1;
+            i = i + needle.len;
+        } else {
+            i = i + 1;
+        }
+    }
+    return count;
+}
+
+fn main() i32 {
+    _zag_println("optical_mat_manifest_test: start");
+
+    let src: []u8 = "program optical_mat\n\ntrit vx = +1\ntrit vy = 0\ntrit vz = 0\n\noptical mat3_identity() = id\noptical mat3_rotation_xy_90() = rot\noptical mat3_mul(rot, id) = composed\nlet mat3_apply(composed, vx, vy, vz) = result\n";
+    let parse_res: FlashParseResult = flash_parse(src, "optical_mat.flash");
+    if (parse_res.err != 0) {
+        _zag_println("optical_mat_manifest_test FAIL: parse error");
+        return 1;
+    }
+    let prog: FlashProgram = parse_res.prog;
+    let manifest: CoordinateManifest = flash_codegen_manifest(&prog);
+    let text: []u8 = manifest_write(&manifest);
+
+    let mat3_hits: i32 = omt_count_substr(text, "op = \"mat3_r");
+    print_i32(mat3_hits);
+
+    if (mat3_hits != 9) {
+        _zag_println("optical_mat_manifest_test FAIL: expected 9 mat3_route segments");
+        return 1;
+    }
+
+    _zag_println("optical_mat_manifest_test: ok");
+    return 0;
+}

@@ -1,0 +1,72 @@
+// examples/widen_demo.flash.zag — widened full-language subset demo.
+//
+// Exercises the constructs added for stage-1 completeness: union decls,
+// switch with captures over unions, method declarations (mangled to
+// Type_name), generic functions, optionals (?T / null / orelse), and
+// if-captures.
+
+union Shape {
+    circle: i32,
+    square: i32,
+}
+
+struct Counter {
+    hits: i32,
+}
+
+fn (c: Counter) doubled() i32 {
+    return c.hits * 2;
+}
+
+fn first_or[T](l: ArrayList[T], fallback: T) T {
+    if (len[T](l) < 1) { return fallback; }
+    return get[T](l, 0);
+}
+
+fn maybe_val(flag: i32) ?i32 {
+    if (flag == 1) { return 41; }
+    return null;
+}
+
+fn shape_area(s: Shape) i32 {
+    switch (s) {
+        .circle => |r| { return 3 * r * r; }
+        .square => |w| { return w * w; }
+    }
+    return 0;
+}
+
+fn main() i32 {
+    let c: Counter = Counter{ .hits = 2 };
+    _zag_print("doubled=");
+    _zag_println(_zag_i64_to_str(Counter_doubled(c) as i64));
+
+    let xs: ArrayList[i32] = make[i32](4);
+    push[i32](&xs, 9);
+    _zag_print("first=");
+    _zag_println(_zag_i64_to_str(first_or[i32](xs, -1) as i64));
+
+    let v: i32 = maybe_val(1) orelse 7;
+    let w: i32 = maybe_val(0) orelse 7;
+    _zag_print("opt=");
+    _zag_print(_zag_i64_to_str(v as i64));
+    _zag_print(",");
+    _zag_println(_zag_i64_to_str(w as i64));
+
+    if (maybe_val(1)) |x| {
+        _zag_print("cap=");
+        _zag_println(_zag_i64_to_str(x as i64));
+    } else {
+        _zag_println("cap=none");
+    }
+
+    let s: Shape = Shape{ .circle = 3 };
+    _zag_print("area=");
+    _zag_println(_zag_i64_to_str(shape_area(s) as i64));
+    let q: Shape = Shape{ .square = 4 };
+    _zag_print("area2=");
+    _zag_println(_zag_i64_to_str(shape_area(q) as i64));
+
+    _zag_println("widen_demo: ok");
+    return 0;
+}

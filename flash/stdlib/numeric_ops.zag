@@ -1,0 +1,59 @@
+// flash/stdlib/numeric_ops.zag — cross-family numeric conversions for Flash stdlib.
+//
+// Bridges balanced-ternary lanes, posit regime bits, and float amplitudes used
+// by photonic lowering (flash_codegen.zag) and runtime wave carriers.
+
+@import("trit.zag")
+
+struct TritLanes {
+    lane0: i32,
+    lane1: i32,
+    lane2: i32,
+    lane3: i32,
+    count: i32,
+}
+
+fn balanced_trit_digit(v: i32) i32 {
+    let r: i32 = v % 3;
+    if (r > 1) { return r - 3; }
+    if (r < -1) { return r + 3; }
+    return r;
+}
+
+// Map a stdlib Trit wire value to a signed i32 lane (-1, 0, +1).
+fn trit_to_i32(t: Trit) i32 {
+    return t.val;
+}
+
+// Decompose posit storage bits into balanced-ternary lanes (least lane first).
+fn posit_to_trit_lanes(bits: i32) TritLanes {
+    let rem: i32 = bits;
+    let lane: i32 = 0;
+    let l0: i32 = 0;
+    let l1: i32 = 0;
+    let l2: i32 = 0;
+    let l3: i32 = 0;
+    let guard: i32 = 0;
+    while (rem != 0 && guard < 8) {
+        let digit: i32 = balanced_trit_digit(rem);
+        if (lane == 0) { l0 = digit; }
+        if (lane == 1) { l1 = digit; }
+        if (lane == 2) { l2 = digit; }
+        if (lane == 3) { l3 = digit; }
+        rem = (rem - digit) / 3;
+        lane = lane + 1;
+        guard = guard + 1;
+    }
+    if (lane == 0) {
+        return TritLanes{ .lane0 = 0, .lane1 = 0, .lane2 = 0, .lane3 = 0, .count = 1 };
+    }
+    return TritLanes{ .lane0 = l0, .lane1 = l1, .lane2 = l2, .lane3 = l3, .count = lane };
+}
+
+// Normalize a float family scalar into a unit wave amplitude [0, 1].
+fn fp_to_amplitude(v: f32) f32 {
+    let a: f32 = v;
+    if (a < 0.0) { a = 0.0 - a; }
+    if (a > 1.0) { return 1.0; }
+    return a;
+}

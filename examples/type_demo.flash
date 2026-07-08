@@ -1,0 +1,80 @@
+// examples/type_demo.flash.zag — vgpu v5 showcase: vector text + miter joins.
+//
+// The single-stroke vector font at cascading sizes and weights (all AA,
+// all from one glyph set), a full character-set specimen, and the three
+// join styles side by side including miter spikes on a starburst.
+
+@import("../flash/driver/vgpu.flash")
+
+fn zig(fb: *SoftFb, x: f32, y: f32, join: i32) void {
+    let z: VPath = vg_path_new();
+    vg_move_to(&z, x, y + 26.0);
+    vg_line_to(&z, x + 22.0, y);
+    vg_line_to(&z, x + 44.0, y + 26.0);
+    vg_line_to(&z, x + 66.0, y);
+    vg_stroke_ex(fb, &z, 10.0, vg_cap_butt(), join, 150, 110, 235, 255);
+}
+
+fn main() i32 {
+    let fb: SoftFb = softgpu_new(480, 320);
+
+    let bg: VPath = vg_path_new();
+    vg_move_to(&bg, 0.0, 0.0);
+    vg_line_to(&bg, 480.0, 0.0);
+    vg_line_to(&bg, 480.0, 320.0);
+    vg_line_to(&bg, 0.0, 320.0);
+    vg_close(&bg);
+    vg_fill_linear(&fb, &bg, 0.0, 0.0, 0.0, 320.0, 15, 17, 36, 255, 45, 31, 72, 255);
+
+    // cascading sizes — one glyph set, any scale
+    vg_text_vec(&fb, 24.0, 20.0, "FLASH", 52.0, 9.0, 255, 176, 32, 255);
+    vg_text_vec(&fb, 24.0, 88.0, "VECTOR TYPE", 26.0, 4.2, 240, 240, 250, 255);
+    vg_text_vec(&fb, 24.0, 126.0, "SCALES TO ANY SIZE", 15.0, 2.4, 170, 170, 200, 255);
+    vg_text_vec(&fb, 24.0, 150.0, "AND ANY WEIGHT", 9.0, 1.4, 140, 140, 170, 255);
+
+    // weights at one size
+    vg_text_vec(&fb, 300.0, 20.0, "LIGHT", 20.0, 1.6, 240, 240, 250, 255);
+    vg_text_vec(&fb, 300.0, 50.0, "REGULAR", 20.0, 2.8, 240, 240, 250, 255);
+    vg_text_vec(&fb, 300.0, 80.0, "BOLD", 20.0, 4.6, 240, 240, 250, 255);
+    vg_text_vec(&fb, 300.0, 110.0, "BLACK", 20.0, 6.4, 240, 240, 250, 255);
+
+    // specimen
+    vg_text_vec(&fb, 24.0, 176.0, "ABCDEFGHIJKLM", 14.0, 2.0, 120, 220, 255, 255);
+    vg_text_vec(&fb, 24.0, 200.0, "NOPQRSTUVWXYZ", 14.0, 2.0, 120, 220, 255, 255);
+    vg_text_vec(&fb, 24.0, 224.0, "0123456789 -+=:./", 14.0, 2.0, 120, 220, 255, 255);
+
+    // joins: bevel / round / miter
+    zig(&fb, 300.0, 150.0, vg_join_bevel());
+    zig(&fb, 300.0, 190.0, vg_join_round());
+    zig(&fb, 300.0, 230.0, vg_join_miter());
+    softgpu_text(&fb, 380, 158, "BEVEL", 150, 150, 175);
+    softgpu_text(&fb, 380, 198, "ROUND", 150, 150, 175);
+    softgpu_text(&fb, 380, 238, "MITER", 150, 150, 175);
+
+    // miter starburst
+    let arm: i32 = 0;
+    while (arm < 6) {
+        let ang: f32 = (arm as f32) * 1.0472;
+        let star: VPath = vg_path_new();
+        vg_move_to(&star, 0.0 - 26.0, 6.0);
+        vg_line_to(&star, 0.0, 0.0 - 8.0);
+        vg_line_to(&star, 26.0, 6.0);
+        let m: VgXf = vg_xf_mul(vg_xf_translate(120.0, 278.0), vg_xf_rotate(ang));
+        vg_path_transform(&star, m);
+        vg_stroke_ex(&fb, &star, 6.0, vg_cap_butt(), vg_join_miter(), 255, 176, 32, 235);
+        arm = arm + 1;
+    }
+    vg_text_vec(&fb, 190.0, 262.0, "TERNARY: -1 0 +1", 16.0, 2.6, 240, 240, 250, 255);
+    vg_text_vec(&fb, 190.0, 290.0, "ENGINE READY", 16.0, 2.6, 32, 200, 255, 255);
+
+    let out: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/type_demo.ppm" };
+    let rc: i32 = softgpu_present(out, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL type present");
+        return 1;
+    }
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("type_demo: ok");
+    return 0;
+}

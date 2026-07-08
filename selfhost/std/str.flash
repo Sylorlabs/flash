@@ -1,0 +1,122 @@
+// selfhost/std/str.flash.zag — Flash standard library seed: strings + paths.
+//
+// First piece of Flash's own stdlib: canonical string/path helpers shared by
+// the self-hosted toolchain (previously duplicated per file). Grows as the
+// Zag std layer shrinks. No imports: the shim runtime provides []u8 slices,
+// ArrayList, and _zag_* builtins.
+
+fn flash_str_ends_with(s: []u8, suf: []u8) i32 {
+    if (s.len < suf.len) { return 0; }
+    let off: i32 = s.len - suf.len;
+    let i: i32 = 0;
+    while (i < suf.len) {
+        if (s[off + i] != suf[i]) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn flash_str_index_of(hay: []u8, needle: []u8) i32 {
+    if (needle.len < 1 || hay.len < needle.len) { return -1; }
+    let i: i32 = 0;
+    while (i <= hay.len - needle.len) {
+        let j: i32 = 0;
+        let ok: i32 = 1;
+        while (j < needle.len) {
+            if (hay[i + j] != needle[j]) { ok = 0; }
+            j = j + 1;
+        }
+        if (ok == 1) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn flash_path_dir(path: []u8) []u8 {
+    let slash: i32 = -1;
+    let i: i32 = 0;
+    while (i < path.len) {
+        if (path[i] == '/') { slash = i; }
+        i = i + 1;
+    }
+    if (slash < 0) { return "."; }
+    return path[0..slash];
+}
+
+fn flash_path_join(dir: []u8, rel: []u8) []u8 {
+    if (rel.len > 0 && rel[0] == '/') { return rel; }
+    if (@strEq(dir, ".") == 1) { return rel; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), rel);
+}
+
+fn flash_path_push_component(stk: *ArrayList[[]u8], comp: []u8) void {
+    if (@strEq(comp, ".") == 1) { return; }
+    if (@strEq(comp, "..") == 1) {
+        if (len[[]u8](stk.*) > 0) { pop[[]u8](stk); }
+        return;
+    }
+    push[[]u8](stk, comp);
+}
+
+// Collapse . and .. so duplicate @import paths dedupe in f1_collect.
+fn flash_path_canonical(path: []u8) []u8 {
+    let stk: ArrayList[[]u8] = make[[]u8](16);
+    let start: i32 = 0;
+    let i: i32 = 0;
+    while (i <= path.len) {
+        if (i == path.len || path[i] == '/') {
+            if (i > start) {
+                flash_path_push_component(&stk, path[start..i]);
+            }
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+    let out: ArrayList[u8] = make[u8](path.len);
+    let j: i32 = 0;
+    let n: i32 = len[[]u8](stk);
+    while (j < n) {
+        if (j > 0) { push[u8](&out, '/'); }
+        let part: []u8 = get[[]u8](stk, j);
+        let k: i32 = 0;
+        while (k < part.len) { push[u8](&out, part[k]); k = k + 1; }
+        j = j + 1;
+    }
+    if (out.len < 1) { return "."; }
+    return out.data[0..out.len];
+}
+
+// Basename without the .flash.zag / final extension suffix.
+fn flash_path_stem(path: []u8) []u8 {
+    let slash: i32 = -1;
+    let i: i32 = 0;
+    while (i < path.len) {
+        if (path[i] == '/') { slash = i; }
+        i = i + 1;
+    }
+    let base: []u8 = path;
+    if (slash >= 0) { base = path[slash + 1..]; }
+    if (flash_str_ends_with(base, ".flash.zag") == 1) {
+        return base[0..base.len - 10];
+    }
+    if (flash_str_ends_with(base, ".flash") == 1) {
+        return base[0..base.len - 6];
+    }
+    let dot: i32 = -1;
+    let j: i32 = 0;
+    while (j < base.len) {
+        if (base[j] == '.') { dot = j; }
+        j = j + 1;
+    }
+    if (dot > 0) { return base[0..dot]; }
+    return base;
+}
+
+fn flash_list_has(list: *ArrayList[[]u8], s: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](list.*)) {
+        if (@strEq(get[[]u8](list.*, i), s) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}

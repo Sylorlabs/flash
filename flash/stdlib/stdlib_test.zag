@@ -1,0 +1,67 @@
+// flash/stdlib/stdlib_test.zag — integration smoke test for flash_std umbrella.
+//
+// Exercises the znc-compatible core (trit, photon, io, numeric_ops, photonic).
+// Extended qualified imports (tern, wave, numcat, photonic_rt) are present in
+// flash_std for flashc/SEMA but omitted here to keep native smoke lean.
+//
+// Build:
+//   flash/toolchain/flashz flash/stdlib/stdlib_test.zag -o flash/stdlib/stdlib_test.out
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("flash_std.zag")
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn main() i32 {
+    _zag_println("stdlib_test: flash_std integration");
+
+    // ── numeric_ops cross-family conversions ──────────────────────────────────
+    let t: Trit = trit(1);
+    if (trit_to_i32(t) != 1) { test_fail("trit_to_i32"); }
+    test_pass("trit_to_i32");
+
+    let lanes: TritLanes = posit_to_trit_lanes(7);
+    if (lanes.count < 1) { test_fail("posit_to_trit_lanes_count"); }
+    if (lanes.lane0 != 1) { test_fail("posit_to_trit_lanes_lane0"); }
+    test_pass("posit_to_trit_lanes");
+
+    let amp: f32 = fp_to_amplitude(-2.5);
+    if ((amp * 1000.0) as i32 != 1000) { test_fail("fp_to_amplitude"); }
+    test_pass("fp_to_amplitude");
+
+    // ── io formatters (smoke: must not trap) ──────────────────────────────────
+    print_trit(trit(-1));
+    print_wave(wave_default());
+    print_type_by_name("p32");
+    test_pass("io_print");
+
+    // ── numeric catalog (native t-family first; i32 in indexed table) ─────────
+    let t1_desc: TypeDescriptor = catalog_at(0);
+    if (t1_desc.width != 1 || t1_desc.max_val != 1) { test_fail("catalog_at_t1"); }
+    let i32_desc: TypeDescriptor = catalog_at(111);
+    if (i32_desc.width != 32) { test_fail("catalog_at_i32"); }
+    test_pass("catalog_lookup");
+
+    // ── photonic session + spatial routing ────────────────────────────────────
+    let sess: PhotonicSession = photonic_open(2, 2, 1, 2);
+    photonic_seat_grid(&sess, 4);
+    if (sess.seated != 4) { test_fail("photonic_seat_grid"); }
+
+    let seg_pwr: f32 = photonic_route_wave(&sess, wave_default()).laser_power_mw;
+    if (seg_pwr < 0.5) { test_fail("photonic_route_wave"); }
+    test_pass("photonic_route");
+
+    photonic_close(&sess);
+
+    _zag_println("stdlib_test: ok");
+    return 0;
+}

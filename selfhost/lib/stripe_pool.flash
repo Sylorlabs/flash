@@ -1,0 +1,219 @@
+// selfhost/lib/stripe_pool.flash — Flash port of zag-spatial/stripe_pool.zag (real symbols; the slim shim
+// header keeps the Zag originals out of shim compilations, so no staging).
+// Generated port: keep behavior identical to the Zag original.
+
+@import("grid.flash")
+@import("rotation.flash")
+
+struct StripeLane {
+    chamber: ChamberCoord,
+    lane_id: i32,   // 0..stripe_width-1 within one stripe cycle
+}
+
+struct PhysicalAddress {
+    chamber: ChamberCoord,
+    voxel:   VoxelLocal,
+    lane:    i32,
+    rot:     RotationState,
+}
+
+struct StripePool {
+    lanes:        *StripeLane,
+    lane_count:   i32,
+    stripe_width: i32,
+    total_bytes:  i32,
+    grid_dims:    ChamberDims,
+}
+
+// ── pool lifecycle ──────────────────────────────────────────────────────────
+
+fn pool_new(g: *LatticeGrid, stripe_width: i32) StripePool {
+    let w: i32 = stripe_width;
+    if (w < 1) { w = 1; }
+    // Collect occupied chambers in linear order for deterministic striping.
+    let occupied: ArrayList[ChamberCoord] = make[ChamberCoord](g.*.count);
+    let i: i32 = 0;
+    while (i < g.*.count) {
+        if (g.*.cells[i].occupied == 1) {
+            push[ChamberCoord](&occupied, g.*.cells[i].coord);
+        }
+        i = i + 1;
+    }
+    let lane_count: i32 = occupied.len * w;
+    let lanes: *StripeLane = null as *StripeLane;
+    if (lane_count > 0) {
+        let raw: *i8 = _zag_malloc(lane_count * @sizeOf[StripeLane]());
+        lanes = raw as *StripeLane;
+        let li: i32 = 0;
+        let ci: i32 = 0;
+        while (ci < occupied.len) {
+            let c: ChamberCoord = get[ChamberCoord](occupied, ci);
+            let lane: i32 = 0;
+            while (lane < w) {
+                lanes[li] = StripeLane{ .chamber = c, .lane_id = lane };
+                li = li + 1;
+                lane = lane + 1;
+            }
+            ci = ci + 1;
+        }
+    }
+    free[ChamberCoord](&occupied);
+    return StripePool{
+        .lanes        = lanes,
+        .lane_count   = lane_count,
+        .stripe_width = w,
+        .total_bytes  = 0,
+        .grid_dims    = g.*.dims,
+    };
+}
+
+fn pool_free(p: *StripePool) void {
+    if (p.*.lanes != null) {
+        _zag_free(p.*.lanes as *i8);
+    }
+    p.*.lanes = null as *StripeLane;
+    p.*.lane_count = 0;
+    p.*.total_bytes = 0;
+}
+
+fn pool_set_total_bytes(p: *StripePool, nbytes: i32) void {
+    if (nbytes < 0) { p.*.total_bytes = 0; return; }
+    p.*.total_bytes = nbytes;
+}
+
+fn pool_lane_count(p: StripePool) i32 {
+    return p.lane_count;
+}
+
+fn pool_capacity_bytes(p: StripePool) i32 {
+    if (p.lane_count == 0) { return 0; }
+    return p.lane_count * NANO_VOXELS_EDGE() * NANO_VOXELS_EDGE() * NANO_VOXELS_EDGE();
+}
+
+// ── address mapping ─────────────────────────────────────────────────────────
+
+fn logical_offset_in_range(p: StripePool, byte_offset: i32) i32 {
+    if (p.lane_count == 0) { return 0; }
+    if (byte_offset < 0) { return 0; }
+    if (byte_offset >= pool_capacity_bytes(p)) { return 0; }
+    return 1;
+}
+
+fn lane_at(p: StripePool, lane_index: i32) ?StripeLane {
+    if (lane_index < 0 || lane_index >= p.lane_count) { return null; }
+    return p.lanes[lane_index];
+}
+
+// Map a logical byte offset to a physical chamber voxel (pre-rotation frame).
+fn logical_to_physical(p: StripePool, g: LatticeGrid, byte_offset: i32) ?PhysicalAddress {
+    if (p.lane_count == 0) { return null; }
+    if (byte_offset < 0) { return null; }
+    let cap: i32 = pool_capacity_bytes(p);
+    if (byte_offset >= cap) { return null; }
+    let lane_idx: i32 = byte_offset % p.lane_count;
+    let cycle: i32 = byte_offset / p.lane_count;
+    if (lane_at(p, lane_idx)) |lane| {
+        let edge: i32 = NANO_VOXELS_EDGE();
+        let voxels_per_chamber: i32 = edge * edge * edge;
+        if (cycle >= voxels_per_chamber) { return null; }
+        let lz: i32 = cycle / (edge * edge);
+        let rem: i32 = cycle - lz * edge * edge;
+        let ly: i32 = rem / edge;
+        let lx: i32 = rem - ly * edge;
+        let local: VoxelLocal = voxel_local(lx, ly, lz);
+        let rot: RotationState = RotationState.R0;
+        if (lattice_get(g, lane.chamber)) |cell| {
+            rot = cell.rotation;
+        }
+        let mapped: VoxelLocal = remap_voxel_local(local, rot);
+        return PhysicalAddress{
+            .chamber = lane.chamber,
+            .voxel   = mapped,
+            .lane    = lane.lane_id,
+            .rot     = rot,
+        };
+    }
+    return null;
+}
+
+fn physical_to_logical(p: StripePool, addr: PhysicalAddress) i32 {
+    if (p.lane_count == 0) { return -1; }
+    let edge: i32 = NANO_VOXELS_EDGE();
+    let unmapped: VoxelLocal = inverse_remap_voxel_local(addr.voxel, addr.rot);
+    let cycle: i32 = unmapped.z * edge * edge + unmapped.y * edge + unmapped.x;
+    let i: i32 = 0;
+    while (i < p.lane_count) {
+        let lane: StripeLane = p.lanes[i];
+        if (lane.chamber.x == addr.chamber.x
+            && lane.chamber.y == addr.chamber.y
+            && lane.chamber.z == addr.chamber.z
+            && lane.lane_id == addr.lane) {
+            return cycle * p.lane_count + i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+// ── parallel striping write path ──────────────────────────────────────────────
+//
+// Writes one trit per lane for a single stripe cycle (parallel across chambers).
+
+struct StripeWriteResult {
+    bytes_written: i32,
+    cycles_used:   i32,
+}
+
+fn stripe_write_cycle(
+    p: *StripePool,
+    g: *LatticeGrid,
+    data: *i8,
+    data_len: i32,
+    base_offset: i32,
+    out_buf: *i8,
+    out_cap: i32,
+) StripeWriteResult {
+    let written: i32 = 0;
+    let cycles: i32 = 0;
+    if (p.*.lane_count == 0) {
+        return StripeWriteResult{ .bytes_written = 0, .cycles_used = 0 };
+    }
+    let i: i32 = 0;
+    let go: i32 = 1;
+    while (go == 1 && i < p.*.lane_count) {
+        let logical: i32 = base_offset + i;
+        if (logical >= data_len) {
+            go = 0;
+        } else if (logical_to_physical(p.*, g.*, logical)) |phys| {
+            let tv: i32 = data[logical] as i32;
+            if (!grid_trit_valid(tv)) { tv = TRIT_ZERO(); }
+            if (written < out_cap) {
+                out_buf[written] = tv as i8;
+                written = written + 1;
+            }
+            if (phys.lane < 0) { go = 0; }
+        } else {
+            go = 0;
+        }
+        if (go == 1) { i = i + 1; }
+    }
+    if (p.*.lane_count > 0) {
+        cycles = 1;
+    }
+    p.*.total_bytes = p.*.total_bytes + written;
+    return StripeWriteResult{ .bytes_written = written, .cycles_used = cycles };
+}
+
+// Return chamber coords participating in lane `lane_id` of the stripe group.
+fn chambers_in_lane_group(p: StripePool, lane_id: i32) ArrayList[ChamberCoord] {
+    let xs: ArrayList[ChamberCoord] = make[ChamberCoord](4);
+    let i: i32 = 0;
+    while (i < p.lane_count) {
+        let lane: StripeLane = p.lanes[i];
+        if (lane.lane_id == lane_id) {
+            push[ChamberCoord](&xs, lane.chamber);
+        }
+        i = i + 1;
+    }
+    return xs;
+}

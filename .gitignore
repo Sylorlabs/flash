@@ -1,0 +1,9 @@
+*.out
+*_shim.zag
+flash.manifest
+flashc.build.*
+examples/*.out
+tests/critic/*.out
+.test_bin/
+zag-spatial/*.zag.c
+zag-spatial/*.zag.out*.ppm

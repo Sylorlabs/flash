@@ -1,0 +1,9 @@
+// runtime_std.zag — umbrella import for Flash photonic runtime
+//
+//   @import("flash/runtime/runtime_std.zag") as rt
+//
+// Pulls in chamber simulation and the _flash_* driver implementations so wave
+// modules (raw.zag, pipeline.zag) resolve their extern symbols at link time.
+
+@import("chamber_sim.zag")
+@import("photonic_rt.zag")

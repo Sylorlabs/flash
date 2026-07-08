@@ -1,0 +1,861 @@
+// selfhost/fsema.flash.zag — stage-1 port of flash/compiler/flash_sema.zag.
+//
+// Type inference and effect checking over the flat FNode pool from fparse.flash.
+// Uses parallel ArrayList arrays instead of Zag StringMap (mono_mangled pattern).
+//
+// Full-language rules (pass 1 register, pass 2 check):
+//   • error-set decls (33): register members; validate error.Member refs
+//   • struct/union/enum decls (30/32/31): field/variant registration + duplicates
+//   • fn !ret: track fallible return; error return only in !ret fns
+//   • @realtime / @photonic on fn (names2 @-tokens): F0003 capability checks
+
+@import("fparse.flash")
+
+// ── minimal numeric family catalog (flash/types/numeric/catalog.zag subset) ───
+
+fn fs_family_none() i32     { return 0; }
+fn fs_family_integer() i32  { return 1; }
+fn fs_family_posit() i32    { return 2; }
+fn fs_family_float() i32    { return 4; }
+fn fs_family_trit() i32     { return 8; }
+fn fs_family_wave() i32     { return 16; }
+fn fs_family_beam() i32     { return 32; }
+fn fs_family_phase() i32    { return 64; }
+
+fn fs_starts_with(t: []u8, prefix: []u8) i32 {
+    if (t.len < prefix.len) { return 0; }
+    let i: i32 = 0;
+    while (i < prefix.len) {
+        if (t[i] != prefix[i]) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn fs_is_arb_int(t: []u8) i32 {
+    if (t.len < 2) { return 0; }
+    let c0: i32 = t[0] as i32;
+    if (c0 != 105 && c0 != 117) { return 0; }
+    let i: i32 = 1;
+    while (i < t.len) {
+        let c: i32 = t[i] as i32;
+        if (c < 48 || c > 57) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn fs_is_posit(t: []u8) i32 {
+    if (@strEq(t, "p8") == 1 || @strEq(t, "p16") == 1) { return 1; }
+    if (@strEq(t, "p32") == 1 || @strEq(t, "p64") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_integer(t: []u8) i32 {
+    if (fs_is_arb_int(t) == 1) { return 1; }
+    if (fs_starts_with(t, "sat_") == 1) { return 1; }
+    if (fs_starts_with(t, "fixed_") == 1) { return 1; }
+    if (@strEq(t, "u_any") == 1 || @strEq(t, "i_any") == 1) { return 1; }
+    if (@strEq(t, "u11") == 1) { return 1; }
+    if (fs_starts_with(t, "rns_") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_float(t: []u8) i32 {
+    if (@strEq(t, "f16") == 1 || @strEq(t, "f32") == 1 || @strEq(t, "f64") == 1) { return 1; }
+    if (@strEq(t, "f80") == 1 || @strEq(t, "f128") == 1) { return 1; }
+    if (@strEq(t, "bf16") == 1 || @strEq(t, "mx_fp8") == 1 || @strEq(t, "mx_fp4") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_trit_unit(t: []u8) i32 {
+    if (t.len < 2) { return 0; }
+    if ((t[0] as i32) != 116) { return 0; }
+    let i: i32 = 1;
+    while (i < t.len) {
+        let c: i32 = t[i] as i32;
+        if (c < 48 || c > 57) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn fs_is_trit(t: []u8) i32 {
+    if (@strEq(t, "trit") == 1 || @strEq(t, "Trit") == 1) { return 1; }
+    if (@strEq(t, "trit.Trit") == 1) { return 1; }
+    if (fs_is_trit_unit(t) == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_wave(t: []u8) i32 {
+    if (@strEq(t, "wave") == 1 || @strEq(t, "Wave") == 1) { return 1; }
+    if (@strEq(t, "wave.Wave") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_beam(t: []u8) i32 {
+    if (@strEq(t, "beam") == 1 || @strEq(t, "Beam") == 1) { return 1; }
+    if (@strEq(t, "beam.Beam") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_phase(t: []u8) i32 {
+    if (@strEq(t, "phase") == 1 || @strEq(t, "Phase") == 1) { return 1; }
+    if (@strEq(t, "phase.Phase") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_family_of(t: []u8) i32 {
+    if (fs_is_trit(t) == 1)    { return fs_family_trit(); }
+    if (fs_is_posit(t) == 1)   { return fs_family_posit(); }
+    if (fs_is_integer(t) == 1) { return fs_family_integer(); }
+    if (fs_is_float(t) == 1)   { return fs_family_float(); }
+    if (fs_is_wave(t) == 1)    { return fs_family_wave(); }
+    if (fs_is_beam(t) == 1)    { return fs_family_beam(); }
+    if (fs_is_phase(t) == 1)   { return fs_family_phase(); }
+    return fs_family_none();
+}
+
+fn fs_same_family(a: []u8, b: []u8) i32 {
+    let fa: i32 = fs_family_of(a);
+    let fb: i32 = fs_family_of(b);
+    if (fa == fs_family_none() || fb == fs_family_none()) { return 0; }
+    if (fa == fb) { return 1; }
+    return 0;
+}
+
+fn fs_binop_compatible(a: []u8, b: []u8) i32 {
+    if (fs_same_family(a, b) == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_mixed_posit_integer(a: []u8, b: []u8) i32 {
+    let fa: i32 = fs_family_of(a);
+    let fb: i32 = fs_family_of(b);
+    if (fa == fs_family_posit() && fb == fs_family_integer()) { return 1; }
+    if (fa == fs_family_integer() && fb == fs_family_posit()) { return 1; }
+    return 0;
+}
+
+fn fs_trit_bin_result() []u8 { return "Trit"; }
+
+fn fs_photonic_bin_result(lty: []u8, rty: []u8) []u8 {
+    if (fs_is_wave(lty) == 1 && fs_is_wave(rty) == 1) { return "Wave"; }
+    if (fs_is_beam(lty) == 1 && fs_is_beam(rty) == 1) { return "Beam"; }
+    if (fs_is_phase(lty) == 1 && fs_is_phase(rty) == 1) { return "Phase"; }
+    return "";
+}
+
+// ── effect bitmask ───────────────────────────────────────────────────────────
+
+fn fs_eff_alloc() i32    { return 1; }
+fn fs_eff_io() i32       { return 4; }
+fn fs_eff_photonic() i32 { return 32; }
+fn fs_eff_raw() i32      { return 64; }
+
+fn fs_eff_has_bit(v: i32, bit: i32) i32 {
+    if (v < bit) { return 0; }
+    let q: i32 = v / bit;
+    let half: i32 = q / 2;
+    if (half * 2 == q) { return 0; }
+    return 1;
+}
+
+fn fs_eff_bor(a: i32, b: i32) i32 {
+    let r: i32 = 0;
+    if (fs_eff_has_bit(a, 1) == 1 || fs_eff_has_bit(b, 1) == 1) { r = r + 1; }
+    if (fs_eff_has_bit(a, 2) == 1 || fs_eff_has_bit(b, 2) == 1) { r = r + 2; }
+    if (fs_eff_has_bit(a, 4) == 1 || fs_eff_has_bit(b, 4) == 1) { r = r + 4; }
+    if (fs_eff_has_bit(a, 32) == 1 || fs_eff_has_bit(b, 32) == 1) { r = r + 32; }
+    if (fs_eff_has_bit(a, 64) == 1 || fs_eff_has_bit(b, 64) == 1) { r = r + 64; }
+    return r;
+}
+
+fn fs_eff_intersects(a: i32, b: i32) i32 {
+    if (fs_eff_has_bit(a, 1) == 1 && fs_eff_has_bit(b, 1) == 1) { return 1; }
+    if (fs_eff_has_bit(a, 2) == 1 && fs_eff_has_bit(b, 2) == 1) { return 1; }
+    if (fs_eff_has_bit(a, 4) == 1 && fs_eff_has_bit(b, 4) == 1) { return 1; }
+    if (fs_eff_has_bit(a, 32) == 1 && fs_eff_has_bit(b, 32) == 1) { return 1; }
+    if (fs_eff_has_bit(a, 64) == 1 && fs_eff_has_bit(b, 64) == 1) { return 1; }
+    return 0;
+}
+
+struct FsTypeInfo { ty: []u8, eff: i32 }
+
+struct FsCtx {
+    pool: *ArrayList[FNode],
+    local_names: ArrayList[[]u8],
+    local_types: ArrayList[[]u8],
+    fn_eff_names: ArrayList[[]u8],
+    fn_eff_vals: ArrayList[i32],
+    mono_mangled: ArrayList[[]u8],
+    mono_resolved: ArrayList[[]u8],
+    err_members: ArrayList[[]u8],
+    type_names: ArrayList[[]u8],
+    type_fields: ArrayList[[]u8],
+    type_field_tys: ArrayList[[]u8],
+    fn_err_ret: i32,
+    errors: i32,
+    raw_depth: i32,
+    block_depth: i32,
+    scope_dead: ArrayList[[]u8],
+    file: []u8,
+}
+
+fn fs_at(ctx: *FsCtx, idx: i32) FNode {
+    return get[FNode](ctx.*.pool.*, idx);
+}
+
+fn fs_mono_register(ctx: *FsCtx, mangled: []u8, resolved: []u8) void {
+    push[[]u8](&ctx.*.mono_mangled, mangled);
+    push[[]u8](&ctx.*.mono_resolved, resolved);
+}
+
+fn fs_mono_lookup(ctx: *FsCtx, mangled: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.mono_mangled)) {
+        if (@strEq(get[[]u8](ctx.*.mono_mangled, i), mangled) == 1) {
+            return get[[]u8](ctx.*.mono_resolved, i);
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn fs_mono_init(ctx: *FsCtx) void {
+    fs_mono_register(ctx, "Box__i32",  "Box_i32");
+    fs_mono_register(ctx, "Box__Trit", "Box_Trit");
+    fs_mono_register(ctx, "Box__p32",  "Box_p32");
+    fs_mono_register(ctx, "Vec__i32",  "Vec_i32");
+    fs_mono_register(ctx, "Vec__trit", "Vec_trit");
+}
+
+fn fs_ctx_new(pool: *ArrayList[FNode], file: []u8) FsCtx {
+    let ctx: FsCtx = FsCtx{
+        .pool = pool,
+        .local_names = make[[]u8](16),
+        .local_types = make[[]u8](16),
+        .fn_eff_names = make[[]u8](8),
+        .fn_eff_vals = make[i32](8),
+        .mono_mangled = make[[]u8](8),
+        .mono_resolved = make[[]u8](8),
+        .err_members = make[[]u8](8),
+        .type_names = make[[]u8](16),
+        .type_fields = make[[]u8](32),
+        .type_field_tys = make[[]u8](32),
+        .fn_err_ret = 0,
+        .errors = 0,
+        .raw_depth = 0,
+        .block_depth = 0,
+        .scope_dead = make[[]u8](8),
+        .file = file,
+    };
+    fs_mono_init(&ctx);
+    return ctx;
+}
+
+fn fs_clear_locals(ctx: *FsCtx) void {
+    ctx.*.local_names = make[[]u8](16);
+    ctx.*.local_types = make[[]u8](16);
+}
+
+fn fs_is_annot_token(s: []u8) i32 {
+    if (s.len < 2) { return 0; }
+    if ((s[0] as i32) == 64) { return 1; }
+    return 0;
+}
+
+fn fs_ty_is_error_union(ty: []u8) i32 {
+    if (ty.len < 1) { return 0; }
+    if ((ty[0] as i32) == 33) { return 1; }
+    return 0;
+}
+
+fn fs_dup_in(names: ArrayList[[]u8], name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](names)) {
+        if (@strEq(get[[]u8](names, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fs_err_member_known(ctx: *FsCtx, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.err_members)) {
+        if (@strEq(get[[]u8](ctx.*.err_members, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fs_type_field_known(ctx: *FsCtx, ty_name: []u8, field: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.type_fields)) {
+        if (@strEq(get[[]u8](ctx.*.type_names, i), ty_name) == 1
+            && @strEq(get[[]u8](ctx.*.type_fields, i), field) == 1) {
+            return 1;
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fs_type_field_put(ctx: *FsCtx, ty_name: []u8, field: []u8, fty: []u8) void {
+    push[[]u8](&ctx.*.type_names, ty_name);
+    push[[]u8](&ctx.*.type_fields, field);
+    push[[]u8](&ctx.*.type_field_tys, fty);
+}
+
+fn fs_type_field_ty(ctx: *FsCtx, ty_name: []u8, field: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.type_fields)) {
+        if (@strEq(get[[]u8](ctx.*.type_names, i), ty_name) == 1
+            && @strEq(get[[]u8](ctx.*.type_fields, i), field) == 1) {
+            return get[[]u8](ctx.*.type_field_tys, i);
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn fs_expr_is_error_base(ctx: *FsCtx, idx: i32) i32 {
+    let n: FNode = fs_at(ctx, idx);
+    if (n.code == 15 && @strEq(n.text, "error") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_expr_is_error_member(ctx: *FsCtx, idx: i32) i32 {
+    let n: FNode = fs_at(ctx, idx);
+    if (n.code == 20 && fs_expr_is_error_base(ctx, n.a) == 1) { return 1; }
+    return 0;
+}
+
+fn fs_err(ctx: *FsCtx, code: []u8, msg: []u8, line: i32) void {
+    ctx.*.errors = ctx.*.errors + 1;
+    _zag_print("flashc1 sema ");
+    _zag_print(code);
+    _zag_print(" (");
+    _zag_print(ctx.*.file);
+    if (line > 0) {
+        _zag_print(":");
+        _zag_print(_zag_i64_to_str(line as i64));
+    }
+    _zag_print("): ");
+    _zag_println(msg);
+}
+
+fn fs_annot_declares(a: []u8) i32 {
+    if (@strEq(a, "@io") == 1)        { return fs_eff_io(); }
+    if (@strEq(a, "@photonic") == 1) { return fs_eff_photonic(); }
+    if (@strEq(a, "@alloc") == 1)    { return fs_eff_alloc(); }
+    return 0;
+}
+
+fn fs_annot_forbids(a: []u8) i32 {
+    if (@strEq(a, "@realtime") == 1) { return fs_eff_bor(fs_eff_alloc(), fs_eff_io()); }
+    if (@strEq(a, "@photonic") == 1) { return fs_eff_raw(); }
+    return 0;
+}
+
+fn fs_fn_declared_eff(annots: ArrayList[[]u8]) i32 {
+    let acc: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[[]u8](annots)) {
+        acc = fs_eff_bor(acc, fs_annot_declares(get[[]u8](annots, i)));
+        i = i + 1;
+    }
+    return acc;
+}
+
+fn fs_mono_mangle(base: []u8, targs: ArrayList[[]u8]) []u8 {
+    let s: []u8 = base;
+    let i: i32 = 0;
+    let n: i32 = len[[]u8](targs);
+    while (i < n) {
+        s = _zag_str_concat(s, "__");
+        s = _zag_str_concat(s, get[[]u8](targs, i));
+        i = i + 1;
+    }
+    return s;
+}
+
+fn fs_mono_instantiate(base: []u8, targs: ArrayList[[]u8]) []u8 {
+    if (len[[]u8](targs) < 1) { return base; }
+    return fs_mono_mangle(base, targs);
+}
+
+fn fs_mono_resolve(ctx: *FsCtx, mangled: []u8, targs: ArrayList[[]u8]) []u8 {
+    let hit: []u8 = fs_mono_lookup(ctx, mangled);
+    if (hit.len > 0) { return hit; }
+    if (len[[]u8](targs) > 0) {
+        let msg: []u8 = _zag_str_concat("generic instantiation failure: unknown template ", mangled);
+        fs_err(ctx, "F0005", msg, 0);
+    }
+    return mangled;
+}
+
+fn fs_type_of_literal(text: []u8) []u8 {
+    let has_dot: i32 = 0;
+    let i: i32 = 0;
+    while (i < text.len) {
+        if (text[i] == '.') { has_dot = 1; }
+        i = i + 1;
+    }
+    if (has_dot == 1) { return "f64"; }
+    return "i32";
+}
+
+fn fs_scope_dead(ctx: *FsCtx, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.scope_dead)) {
+        if (@strEq(get[[]u8](ctx.*.scope_dead, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fs_lookup_local(ctx: *FsCtx, name: []u8) []u8 {
+    let i: i32 = len[[]u8](ctx.*.local_names) - 1;
+    while (i >= 0) {
+        if (@strEq(get[[]u8](ctx.*.local_names, i), name) == 1) {
+            return get[[]u8](ctx.*.local_types, i);
+        }
+        i = i - 1;
+    }
+    return "";
+}
+
+fn fs_bind_local(ctx: *FsCtx, name: []u8, ty: []u8) void {
+    push[[]u8](&ctx.*.local_names, name);
+    push[[]u8](&ctx.*.local_types, ty);
+}
+
+fn fs_local_mark(ctx: *FsCtx) i32 {
+    return len[[]u8](ctx.*.local_names);
+}
+
+fn fs_pop_scope(ctx: *FsCtx, mark: i32) void {
+    while (len[[]u8](ctx.*.local_names) > mark) {
+        let dead: []u8 = pop[[]u8](&ctx.*.local_names);
+        let _t: []u8 = pop[[]u8](&ctx.*.local_types);
+        push[[]u8](&ctx.*.scope_dead, dead);
+    }
+}
+
+fn fs_catch_operand_ok(ctx: *FsCtx, idx: i32) i32 {
+    let n: FNode = fs_at(ctx, idx);
+    if (n.code == 17 && @strEq(n.text, "try") == 1) { return 1; }
+    if (fs_expr_is_error_member(ctx, idx) == 1) { return 1; }
+    return 0;
+}
+
+fn fs_binop_result_ty(lty: []u8, rty: []u8, op: []u8) []u8 {
+    let fl: i32 = fs_family_of(lty);
+    let fr: i32 = fs_family_of(rty);
+    if (fl == fs_family_trit() && fr == fs_family_trit()) { return fs_trit_bin_result(); }
+    let photo: []u8 = fs_photonic_bin_result(lty, rty);
+    if (photo.len > 0) { return photo; }
+    if (fs_same_family(lty, rty) == 1) {
+        if (fl == fs_family_posit())   { return lty; }
+        if (fl == fs_family_integer()) { return lty; }
+        if (fl == fs_family_float())   { return lty; }
+    }
+    if (@strEq(op, "==") == 1 || @strEq(op, "!=") == 1) { return "i32"; }
+    return "";
+}
+
+fn fs_callee_name(ctx: *FsCtx, callee_idx: i32) []u8 {
+    let n: FNode = fs_at(ctx, callee_idx);
+    if (n.code == 15) { return n.text; }
+    return "";
+}
+
+fn fs_raw_mode_call(name: []u8) i32 {
+    if (@strEq(name, "fire_shield") == 1)     { return 1; }
+    if (@strEq(name, "inject_phase") == 1)    { return 1; }
+    if (@strEq(name, "set_laser_mw") == 1)    { return 1; }
+    if (@strEq(name, "target_voxel") == 1)    { return 1; }
+    if (@strEq(name, "manual_polarity") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_builtin_eff(name: []u8) i32 {
+    if (@strEq(name, "_zag_print") == 1)      { return fs_eff_io(); }
+    if (@strEq(name, "_zag_println") == 1)    { return fs_eff_io(); }
+    if (@strEq(name, "_zag_eprintln") == 1)   { return fs_eff_io(); }
+    if (@strEq(name, "_zag_write_file") == 1) { return fs_eff_io(); }
+    if (@strEq(name, "_zag_malloc") == 1)     { return fs_eff_bor(fs_eff_alloc(), 2); }
+    if (@strEq(name, "_zag_free") == 1)       { return fs_eff_alloc(); }
+    if (@strEq(name, "fire_shield") == 1)     { return fs_eff_bor(fs_eff_io(), fs_eff_photonic()); }
+    if (@strEq(name, "inject_phase") == 1)    { return fs_eff_bor(fs_eff_io(), fs_eff_photonic()); }
+    if (@strEq(name, "set_laser_mw") == 1)    { return fs_eff_bor(fs_eff_io(), fs_eff_photonic()); }
+    return 0;
+}
+
+fn fs_fn_eff_lookup(ctx: *FsCtx, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.fn_eff_names)) {
+        if (@strEq(get[[]u8](ctx.*.fn_eff_names, i), name) == 1) {
+            return get[i32](ctx.*.fn_eff_vals, i);
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn fs_fn_eff_put(ctx: *FsCtx, name: []u8, eff: i32) void {
+    push[[]u8](&ctx.*.fn_eff_names, name);
+    push[i32](&ctx.*.fn_eff_vals, eff);
+}
+
+fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
+    let n: FNode = fs_at(ctx, idx);
+    if (n.code == 11) {
+        return FsTypeInfo{ .ty = "trit", .eff = 0 };
+    }
+    if (n.code == 12) {
+        return FsTypeInfo{ .ty = fs_type_of_literal(n.text), .eff = 0 };
+    }
+    if (n.code == 13) {
+        return FsTypeInfo{ .ty = "f32", .eff = 0 };
+    }
+    if (n.code == 14) {
+        return FsTypeInfo{ .ty = "[]u8", .eff = 0 };
+    }
+    if (n.code == 15) {
+        if (@strEq(n.text, "error") == 1) {
+            return FsTypeInfo{ .ty = "error", .eff = 0 };
+        }
+        if (fs_scope_dead(ctx, n.text) == 1) {
+            fs_err(ctx, "F0001", "let escapes group scope", n.line);
+            return FsTypeInfo{ .ty = "", .eff = 0 };
+        }
+        let ty: []u8 = fs_lookup_local(ctx, n.text);
+        if (ty.len == 0) {
+            fs_err(ctx, "F0001", "unknown identifier", n.line);
+            return FsTypeInfo{ .ty = "", .eff = 0 };
+        }
+        return FsTypeInfo{ .ty = ty, .eff = 0 };
+    }
+    if (n.code == 20) {
+        let base: FsTypeInfo = fs_check_expr(ctx, n.a);
+        if (@strEq(base.ty, "error") == 1) {
+            if (fs_err_member_known(ctx, n.text) == 0) {
+                fs_err(ctx, "F0001", "unknown error set member", n.line);
+            }
+            return FsTypeInfo{ .ty = "!error", .eff = base.eff };
+        }
+        if (base.ty.len > 0 && fs_type_field_known(ctx, base.ty, n.text) == 0) {
+            fs_err(ctx, "F0001", "unknown field on type", n.line);
+            return FsTypeInfo{ .ty = "", .eff = base.eff };
+        }
+        let fty: []u8 = fs_type_field_ty(ctx, base.ty, n.text);
+        if (fty.len == 0) { fty = "void"; }
+        return FsTypeInfo{ .ty = fty, .eff = base.eff };
+    }
+    if (n.code == 16) {
+        let lt: FsTypeInfo = fs_check_expr(ctx, n.a);
+        let rt: FsTypeInfo = fs_check_expr(ctx, n.b);
+        let acc_eff: i32 = fs_eff_bor(lt.eff, rt.eff);
+        if (fs_is_mixed_posit_integer(lt.ty, rt.ty) == 1) {
+            fs_err(ctx, "F0002", "mixed posit and integer in binary op — add explicit cast", n.line);
+            return FsTypeInfo{ .ty = "", .eff = acc_eff };
+        }
+        if (fs_binop_compatible(lt.ty, rt.ty) == 0) {
+            fs_err(ctx, "F0001", "incompatible operand types in binary op", n.line);
+            return FsTypeInfo{ .ty = "", .eff = acc_eff };
+        }
+        let res: []u8 = fs_binop_result_ty(lt.ty, rt.ty, n.text);
+        if (res.len == 0) {
+            fs_err(ctx, "F0001", "cannot infer result type of binary op", n.line);
+            return FsTypeInfo{ .ty = "", .eff = acc_eff };
+        }
+        return FsTypeInfo{ .ty = res, .eff = acc_eff };
+    }
+    if (n.code == 19) {
+        let sub: FsTypeInfo = fs_check_expr(ctx, n.a);
+        return FsTypeInfo{ .ty = n.text, .eff = sub.eff };
+    }
+    if (n.code == 18) {
+        let cn: []u8 = fs_callee_name(ctx, n.a);
+        if ((@strEq(cn, "__catch") == 1 || @strEq(cn, "__catchc") == 1)
+            && len[i32](n.kids) > 0
+            && fs_catch_operand_ok(ctx, get[i32](n.kids, 0)) == 0) {
+            fs_err(ctx, "F0001", "catch on non-error expression", n.line);
+        }
+        let acc_eff: i32 = 0;
+        let i: i32 = 0;
+        while (i < len[i32](n.kids)) {
+            let a: FsTypeInfo = fs_check_expr(ctx, get[i32](n.kids, i));
+            acc_eff = fs_eff_bor(acc_eff, a.eff);
+            i = i + 1;
+        }
+        let callee_eff: i32 = fs_fn_eff_lookup(ctx, cn);
+        if (callee_eff < 0) { callee_eff = fs_builtin_eff(cn); }
+        acc_eff = fs_eff_bor(acc_eff, callee_eff);
+        if (ctx.*.raw_depth > 0 && fs_raw_mode_call(cn) == 1) {
+            acc_eff = fs_eff_bor(acc_eff, fs_eff_bor(fs_eff_io(), fs_eff_raw()));
+        }
+        if (len[[]u8](n.names) > 0) {
+            let mangled: []u8 = fs_mono_instantiate(cn, n.names);
+            let resolved: []u8 = fs_mono_resolve(ctx, mangled, n.names);
+            return FsTypeInfo{ .ty = resolved, .eff = acc_eff };
+        }
+        if (@strEq(cn, "trit") == 1) { return FsTypeInfo{ .ty = "trit", .eff = acc_eff }; }
+        if (@strEq(cn, "trit_add") == 1 || @strEq(cn, "trit_mul") == 1) {
+            return FsTypeInfo{ .ty = "trit", .eff = acc_eff };
+        }
+        if (@strEq(cn, "trit_nand") == 1 || @strEq(cn, "trit_neg") == 1) {
+            return FsTypeInfo{ .ty = "trit", .eff = acc_eff };
+        }
+        if (@strEq(cn, "wave_default") == 1) { return FsTypeInfo{ .ty = "Wave", .eff = acc_eff }; }
+        if (@strEq(cn, "mat3_identity") == 1 || @strEq(cn, "mat3_rotation_xy_90") == 1) {
+            return FsTypeInfo{ .ty = "Mat3", .eff = acc_eff };
+        }
+        if (@strEq(cn, "mat3_mul") == 1) { return FsTypeInfo{ .ty = "Mat3", .eff = acc_eff }; }
+        if (@strEq(cn, "mat3_apply") == 1) { return FsTypeInfo{ .ty = "TritTriple", .eff = acc_eff }; }
+        return FsTypeInfo{ .ty = "void", .eff = acc_eff };
+    }
+    if (n.code == 17) {
+        let sub: FsTypeInfo = fs_check_expr(ctx, n.a);
+        return FsTypeInfo{ .ty = sub.ty, .eff = sub.eff };
+    }
+    if (n.code == 22) {
+        let acc_eff: i32 = 0;
+        let i: i32 = 0;
+        while (i < len[i32](n.kids)) {
+            let sub: FsTypeInfo = fs_check_expr(ctx, get[i32](n.kids, i));
+            acc_eff = fs_eff_bor(acc_eff, sub.eff);
+            i = i + 1;
+        }
+        let fi: i32 = 0;
+        while (fi < len[[]u8](n.names)) {
+            let fname: []u8 = get[[]u8](n.names, fi);
+            if (fs_type_field_known(ctx, n.text, fname) == 0) {
+                fs_err(ctx, "F0001", "unknown field in struct literal", n.line);
+            }
+            fi = fi + 1;
+        }
+        return FsTypeInfo{ .ty = n.text, .eff = acc_eff };
+    }
+    return FsTypeInfo{ .ty = "", .eff = 0 };
+}
+
+fn fs_check_stmts(ctx: *FsCtx, body: ArrayList[i32]) i32 {
+    let acc_eff: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[i32](body)) {
+        acc_eff = fs_eff_bor(acc_eff, fs_check_stmt(ctx, get[i32](body, i)));
+        i = i + 1;
+    }
+    return acc_eff;
+}
+
+fn fs_ty_eq(declared: []u8, inferred: []u8) i32 {
+    if (@strEq(declared, inferred) == 1) { return 1; }
+    if ((@strEq(declared, "trit") == 1 || @strEq(declared, "Trit") == 1)
+        && (@strEq(inferred, "trit") == 1 || @strEq(inferred, "Trit") == 1)) {
+        return 1;
+    }
+    return 0;
+}
+
+fn fs_check_stmt(ctx: *FsCtx, idx: i32) i32 {
+    let n: FNode = fs_at(ctx, idx);
+    if (n.code == 2) {
+        let ti: FsTypeInfo = fs_check_expr(ctx, n.a);
+        let ty: []u8 = n.ty;
+        if (n.flag == 0) { ty = ti.ty; }
+        if (n.flag == 1 && ty.len > 0 && ti.ty.len > 0 && fs_ty_eq(ty, ti.ty) == 0) {
+            fs_err(ctx, "F0001", "let binding type mismatch", n.line);
+        }
+        fs_bind_local(ctx, n.text, ty);
+        return ti.eff;
+    }
+    if (n.code == 3) {
+        if (n.flag2 == 1) {
+            let ti: FsTypeInfo = fs_check_expr(ctx, n.a);
+            if (fs_expr_is_error_member(ctx, n.a) == 1 && ctx.*.fn_err_ret == 0) {
+                fs_err(ctx, "F0001", "error return in non-fallible function", n.line);
+            }
+            return ti.eff;
+        }
+        return 0;
+    }
+    if (n.code == 6) {
+        ctx.*.raw_depth = ctx.*.raw_depth + 1;
+        ctx.*.block_depth = ctx.*.block_depth + 1;
+        let inner: i32 = fs_eff_bor(fs_check_stmts(ctx, n.kids), fs_eff_raw());
+        ctx.*.block_depth = ctx.*.block_depth - 1;
+        ctx.*.raw_depth = ctx.*.raw_depth - 1;
+        return inner;
+    }
+    if (n.code == 4) {
+        let ce: FsTypeInfo = fs_check_expr(ctx, n.a);
+        ctx.*.block_depth = ctx.*.block_depth + 1;
+        let te: i32 = fs_check_stmts(ctx, n.kids);
+        let ee: i32 = 0;
+        if (n.flag == 1) { ee = fs_check_stmts(ctx, n.kids2); }
+        ctx.*.block_depth = ctx.*.block_depth - 1;
+        return fs_eff_bor(fs_eff_bor(ce.eff, te), ee);
+    }
+    if (n.code == 5) {
+        let ce: FsTypeInfo = fs_check_expr(ctx, n.a);
+        ctx.*.block_depth = ctx.*.block_depth + 1;
+        let be: i32 = fs_check_stmts(ctx, n.kids);
+        ctx.*.block_depth = ctx.*.block_depth - 1;
+        return fs_eff_bor(ce.eff, be);
+    }
+    if (n.code == 7) {
+        let te: FsTypeInfo = fs_check_expr(ctx, n.a);
+        let ve: FsTypeInfo = fs_check_expr(ctx, n.b);
+        return fs_eff_bor(te.eff, ve.eff);
+    }
+    if (n.code == 8) {
+        let ti: FsTypeInfo = fs_check_expr(ctx, n.a);
+        return ti.eff;
+    }
+    if (n.code == 34) {
+        let mark: i32 = fs_local_mark(ctx);
+        ctx.*.block_depth = ctx.*.block_depth + 1;
+        let eff: i32 = fs_check_stmts(ctx, n.kids);
+        ctx.*.block_depth = ctx.*.block_depth - 1;
+        fs_pop_scope(ctx, mark);
+        return eff;
+    }
+    if (n.code == 35) {
+        if (ctx.*.block_depth > 0) {
+            fs_err(ctx, "F0001", "defer in invalid context", n.line);
+        }
+        return fs_check_stmt(ctx, n.a);
+    }
+    return 0;
+}
+
+fn fs_fn_annots(n: FNode) ArrayList[[]u8] {
+    // names2 may hold tparams and/or @annotations (distinguished by @ prefix).
+    let out: ArrayList[[]u8] = make[[]u8](2);
+    let i: i32 = 0;
+    while (i < len[[]u8](n.names2)) {
+        let a: []u8 = get[[]u8](n.names2, i);
+        if (fs_is_annot_token(a) == 1) {
+            push[[]u8](&out, a);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn fs_check_fn_effects(ctx: *FsCtx, n: FNode) void {
+    let body_eff: i32 = fs_check_stmts(ctx, n.kids);
+    let annots: ArrayList[[]u8] = fs_fn_annots(n);
+    let declared: i32 = fs_fn_declared_eff(annots);
+    let total: i32 = fs_eff_bor(body_eff, declared);
+    fs_fn_eff_put(ctx, n.text, total);
+    let i: i32 = 0;
+    while (i < len[[]u8](annots)) {
+        let a: []u8 = get[[]u8](annots, i);
+        let forb: i32 = fs_annot_forbids(a);
+        if (forb != 0 && fs_eff_intersects(total, forb) == 1) {
+            fs_err(ctx, "F0003", "capability constraint violated in function", n.line);
+        }
+        i = i + 1;
+    }
+}
+
+fn fs_check_fn(ctx: *FsCtx, n: FNode) void {
+    fs_clear_locals(ctx);
+    ctx.*.fn_err_ret = fs_ty_is_error_union(n.ty);
+    let pi: i32 = 0;
+    while (pi < len[[]u8](n.names)) {
+        fs_bind_local(ctx, get[[]u8](n.names, pi), get[[]u8](n.types, pi));
+        pi = pi + 1;
+    }
+    fs_check_fn_effects(ctx, n);
+    ctx.*.fn_err_ret = 0;
+}
+
+fn fs_register_error_set(ctx: *FsCtx, n: FNode) void {
+    let seen: ArrayList[[]u8] = make[[]u8](8);
+    let i: i32 = 0;
+    while (i < len[[]u8](n.names)) {
+        let m: []u8 = get[[]u8](n.names, i);
+        if (fs_dup_in(seen, m) == 1) {
+            fs_err(ctx, "F0001", "duplicate error set member", n.line);
+        } else {
+            push[[]u8](&seen, m);
+            push[[]u8](&ctx.*.err_members, m);
+        }
+        i = i + 1;
+    }
+}
+
+fn fs_register_typed_decl(ctx: *FsCtx, n: FNode, kind: []u8) void {
+    if (len[[]u8](n.names) != len[[]u8](n.types)) {
+        fs_err(ctx, "F0001", "field/type count mismatch in type declaration", n.line);
+        return;
+    }
+    let seen: ArrayList[[]u8] = make[[]u8](8);
+    let i: i32 = 0;
+    while (i < len[[]u8](n.names)) {
+        let fname: []u8 = get[[]u8](n.names, i);
+        let fty: []u8 = get[[]u8](n.types, i);
+        if (fs_dup_in(seen, fname) == 1) {
+            let msg: []u8 = _zag_str_concat("duplicate field in ", kind);
+            fs_err(ctx, "F0001", msg, n.line);
+        } else {
+            push[[]u8](&seen, fname);
+        }
+        if (@strEq(fty, "void") == 1) {
+            let msg: []u8 = _zag_str_concat("missing field type in ", kind);
+            fs_err(ctx, "F0001", msg, n.line);
+        } else {
+            fs_type_field_put(ctx, n.text, fname, fty);
+        }
+        i = i + 1;
+    }
+}
+
+fn fs_register_enum(ctx: *FsCtx, n: FNode) void {
+    let seen: ArrayList[[]u8] = make[[]u8](8);
+    let i: i32 = 0;
+    while (i < len[[]u8](n.names)) {
+        let m: []u8 = get[[]u8](n.names, i);
+        if (fs_dup_in(seen, m) == 1) {
+            fs_err(ctx, "F0001", "duplicate enum variant", n.line);
+        } else {
+            push[[]u8](&seen, m);
+            fs_type_field_put(ctx, n.text, m, "i32");
+        }
+        i = i + 1;
+    }
+}
+
+fn fs_register_decl(ctx: *FsCtx, idx: i32) void {
+    let n: FNode = fs_at(ctx, idx);
+    if (n.code == 33) { fs_register_error_set(ctx, n); }
+    if (n.code == 30) { fs_register_typed_decl(ctx, n, "struct"); }
+    if (n.code == 32) { fs_register_typed_decl(ctx, n, "union"); }
+    if (n.code == 31) { fs_register_enum(ctx, n); }
+}
+
+fn fs_check_decl(ctx: *FsCtx, idx: i32) void {
+    let n: FNode = fs_at(ctx, idx);
+    if (n.code == 1) { fs_check_fn(ctx, n); }
+}
+
+fn fsema_check_pool(pool: *ArrayList[FNode], decls: ArrayList[i32], file: []u8) i32 {
+    let ctx: FsCtx = fs_ctx_new(pool, file);
+    let i: i32 = 0;
+    while (i < len[i32](decls)) {
+        fs_register_decl(&ctx, get[i32](decls, i));
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len[i32](decls)) {
+        fs_check_decl(&ctx, get[i32](decls, i));
+        i = i + 1;
+    }
+    return ctx.errors;
+}

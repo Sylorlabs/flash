@@ -1,0 +1,108 @@
+// selfhost/lib/pcm_emit.flash — PCM metadata for manifest PathSegments (Flash port).
+
+@import("manifest.flash")
+
+struct PcmFields {
+    pcm_row: i32,
+    pcm_col: i32,
+    phase_a_rad: f32,
+    phase_b_rad: f32,
+    phase_result_rad: f32,
+    lattice_op: i32,
+}
+
+fn pcm_phase_neg_rad() f32 { return 0.0 - 1.0471976; }
+fn pcm_phase_zero_rad() f32 { return 0.0; }
+fn pcm_phase_pos_rad() f32 { return 1.0471976; }
+
+fn pcm_lattice_idle() i32 { return 0; }
+fn pcm_lattice_phase_sum() i32 { return 3; }
+fn pcm_lattice_phase_mul() i32 { return 5; }
+fn pcm_lattice_phase_invert() i32 { return 2; }
+fn pcm_lattice_consensus() i32 { return 7; }
+
+fn pcm_trit_wire(v: i32) i32 {
+    if (v > 1) { return 1; }
+    if (v < 0 - 1) { return 0 - 1; }
+    return v;
+}
+
+fn pcm_trit_to_phase_rad(t: i32) f32 {
+    if (t == 0 - 1) { return pcm_phase_neg_rad(); }
+    if (t == 1) { return pcm_phase_pos_rad(); }
+    return pcm_phase_zero_rad();
+}
+
+fn pcm_fields_idle(row: i32) PcmFields {
+    return PcmFields{
+        .pcm_row = row,
+        .pcm_col = 0,
+        .phase_a_rad = 0.0,
+        .phase_b_rad = 0.0,
+        .phase_result_rad = 0.0,
+        .lattice_op = pcm_lattice_idle(),
+    };
+}
+
+fn pcm_for_trit_op(op: []u8, a: Trit, b: Trit, result: Trit, row: i32) PcmFields {
+    let av: i32 = pcm_trit_wire(a.val);
+    let bv: i32 = pcm_trit_wire(b.val);
+    let rv: i32 = pcm_trit_wire(result.val);
+    if (@strEq(op, "trit_add") == 1) {
+        return PcmFields{
+            .pcm_row = row,
+            .pcm_col = 0,
+            .phase_a_rad = pcm_trit_to_phase_rad(av),
+            .phase_b_rad = pcm_trit_to_phase_rad(bv),
+            .phase_result_rad = pcm_trit_to_phase_rad(rv),
+            .lattice_op = pcm_lattice_phase_sum(),
+        };
+    }
+    if (@strEq(op, "trit_mul") == 1) {
+        return PcmFields{
+            .pcm_row = row,
+            .pcm_col = 0,
+            .phase_a_rad = pcm_trit_to_phase_rad(av),
+            .phase_b_rad = pcm_trit_to_phase_rad(bv),
+            .phase_result_rad = pcm_trit_to_phase_rad(rv),
+            .lattice_op = pcm_lattice_phase_mul(),
+        };
+    }
+    if (@strEq(op, "trit_neg") == 1) {
+        return PcmFields{
+            .pcm_row = row,
+            .pcm_col = 0,
+            .phase_a_rad = pcm_trit_to_phase_rad(av),
+            .phase_b_rad = pcm_phase_zero_rad(),
+            .phase_result_rad = pcm_trit_to_phase_rad(rv),
+            .lattice_op = pcm_lattice_phase_invert(),
+        };
+    }
+    if (@strEq(op, "trit_nand") == 1) {
+        return PcmFields{
+            .pcm_row = row,
+            .pcm_col = 0,
+            .phase_a_rad = pcm_trit_to_phase_rad(av),
+            .phase_b_rad = pcm_trit_to_phase_rad(bv),
+            .phase_result_rad = pcm_trit_to_phase_rad(rv),
+            .lattice_op = pcm_lattice_consensus(),
+        };
+    }
+    return pcm_fields_idle(row);
+}
+
+fn path_segment_apply_pcm(seg: PathSegment, pcm: PcmFields) PathSegment {
+    return PathSegment{
+        .from = seg.from,
+        .to = seg.to,
+        .laser_power_mw = seg.laser_power_mw,
+        .polarization = seg.polarization,
+        .op_tag = seg.op_tag,
+        .pcm_row = pcm.pcm_row,
+        .pcm_col = pcm.pcm_col,
+        .phase_a_rad = pcm.phase_a_rad,
+        .phase_b_rad = pcm.phase_b_rad,
+        .phase_result_rad = pcm.phase_result_rad,
+        .lattice_op = pcm.lattice_op,
+    };
+}

@@ -1,0 +1,10 @@
+// flash/runtime/photonic_hw.zag — hardware HAL placeholder (FLASH_RT=hw).
+//
+// RayOS/silicon links real _flash_raw_* implementations. This module documents
+// the symbol contract; do not import alongside photonic_rt.zag in shims.
+
+@import("../toolchain/zag-poc/std/rt.zag")
+
+fn flash_hw_note() void {
+    _zag_println("photonic_hw: link RayOS HAL when FLASH_RT=hw");
+}

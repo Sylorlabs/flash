@@ -1,0 +1,9 @@
+// flash/types/types_std.zag — umbrella import for Flash primitive types
+//
+//   @import("flash/types/types_std.zag") as types
+//   let c: types.VoxelCoord = types.voxel(0, 0, 0);
+
+@import("phase.zag")
+@import("wave.zag")
+@import("beam.zag")
+@import("wave_types.zag")

@@ -1,0 +1,113 @@
+// flash/compiler/flashc_test.zag — end-to-end flashc driver smoke (3 programs).
+//
+// Exercises --check, --emit-zag, full compile, and --check rejection of bad programs.
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("../toolchain/zag-poc/selfhost/std/process.zag")
+
+fn fct_fail(msg: []u8) void {
+    _zag_print("flashc_test FAIL: ");
+    _zag_println(msg);
+    process_exit(1);
+}
+
+fn fct_run(cmd: []u8) void {
+    let rc: i32 = process_run_shell(cmd);
+    if (rc != 0) {
+        _zag_print("flashc_test FAIL cmd: ");
+        _zag_println(cmd);
+        process_exit(1);
+    }
+}
+
+fn fct_run_expect_fail(cmd: []u8) void {
+    let rc: i32 = process_run_shell(cmd);
+    if (rc == 0) {
+        _zag_print("flashc_test FAIL expected reject: ");
+        _zag_println(cmd);
+        process_exit(1);
+    }
+}
+
+fn fct_run_expect_rc(cmd: []u8, want: i32) void {
+    let rc: i32 = process_run_shell(cmd);
+    if (rc != want) {
+        _zag_print("flashc_test FAIL exit code mismatch (want ");
+        print_i32(want);
+        _zag_print(" got ");
+        print_i32(rc);
+        _zag_print(") cmd: ");
+        _zag_println(cmd);
+        process_exit(1);
+    }
+}
+
+fn fct_flashc_reject(root: []u8, name: []u8) void {
+    let src: []u8 = _zag_str_concat(_zag_str_concat(root, "/flash/compiler/testdata/"), name);
+    src = _zag_str_concat(src, ".flash.zag");
+
+    let check_cmd: []u8 = _zag_str_concat(_zag_str_concat(root, "/flashc "), src);
+    check_cmd = _zag_str_concat(check_cmd, " --check");
+    fct_run_expect_fail(check_cmd);
+}
+
+fn fct_flashc(root: []u8, name: []u8) void {
+    let src: []u8 = _zag_str_concat(_zag_str_concat(root, "/flash/compiler/testdata/"), name);
+    src = _zag_str_concat(src, ".flash.zag");
+
+    let check_cmd: []u8 = _zag_str_concat(_zag_str_concat(root, "/flashc "), src);
+    check_cmd = _zag_str_concat(check_cmd, " --check");
+    fct_run(check_cmd);
+
+    let emit_cmd: []u8 = _zag_str_concat(_zag_str_concat(root, "/flashc "), src);
+    emit_cmd = _zag_str_concat(emit_cmd, " --emit-zag --emit-manifest");
+    fct_run(emit_cmd);
+
+    let out: []u8 = _zag_str_concat(_zag_str_concat(root, "/flash/compiler/testdata/"), name);
+    out = _zag_str_concat(out, ".out");
+
+    let build_cmd: []u8 = _zag_str_concat(_zag_str_concat(root, "/flashc "), src);
+    build_cmd = _zag_str_concat(build_cmd, " -o ");
+    build_cmd = _zag_str_concat(build_cmd, out);
+    fct_run(build_cmd);
+
+    if (_zag_file_exists(out) == 0) {
+        fct_fail("missing output binary");
+    }
+}
+
+fn main() i32 {
+    _zag_println("flashc_test: start");
+
+    let root: []u8 = ".";
+    if (_zag_file_exists("flash.mod") == 0) {
+        if (_zag_file_exists("../flash.mod") == 1) {
+            root = "..";
+        }
+    }
+
+    if (_zag_file_exists(_zag_str_concat(root, "/flashc")) == 0) {
+        fct_fail("flashc binary not found — run build.sh first");
+    }
+
+    fct_flashc(root, "trit_ops");
+    fct_flashc(root, "wave_p32");
+    fct_flashc(root, "raw_block");
+
+    fct_flashc_reject(root, "bad_mixed");
+    fct_flashc_reject(root, "bad_unknown");
+    fct_flashc_reject(root, "bad_raw_call");
+
+    let trit_src: []u8 = _zag_str_concat(_zag_str_concat(root, "/flash/compiler/testdata/"), "trit_ops");
+    trit_src = _zag_str_concat(trit_src, ".flash.zag");
+    let trit_out: []u8 = _zag_str_concat(_zag_str_concat(root, "/flash/compiler/testdata/"), "trit_ops");
+    trit_out = _zag_str_concat(trit_out, ".out");
+    let run_cmd: []u8 = _zag_str_concat(_zag_str_concat(root, "/flashc "), trit_src);
+    run_cmd = _zag_str_concat(run_cmd, " -o ");
+    run_cmd = _zag_str_concat(run_cmd, trit_out);
+    run_cmd = _zag_str_concat(run_cmd, " --run");
+    fct_run_expect_rc(run_cmd, 0);
+
+    _zag_println("flashc_test: ok (3 programs + 3 reject checks + --run)");
+    return 0;
+}

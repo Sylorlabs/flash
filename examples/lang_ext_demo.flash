@@ -1,0 +1,43 @@
+// examples/lang_ext_demo.flash - pub / extern / error-set language extensions.
+
+error { NotFound, BadInput };
+
+pub struct Point {
+    x: i32,
+    y: i32,
+}
+
+pub enum Color { Red, Green, Blue }
+
+extern fn _zag_print(s: []u8) void;
+extern fn _zag_println(s: []u8) void;
+extern fn _zag_i64_to_str(v: i64) []u8;
+
+fn lookup(id: i32) !i32 {
+    if (id < 0) { return error.NotFound; }
+    if (id == 0) { return error.BadInput; }
+    return id * 10;
+}
+
+pub fn greet() void {
+    _zag_print("greet=pub_fn\n");
+}
+
+fn main() i32 {
+    greet();
+
+    let p: Point = Point{ .x = 3, .y = 4 };
+    _zag_print("point=");
+    _zag_print(_zag_i64_to_str(p.x as i64));
+    _zag_print(",");
+    _zag_println(_zag_i64_to_str(p.y as i64));
+
+    let c: Color = Color.Red;
+    _zag_print("color=");
+    _zag_println(_zag_i64_to_str(c as i64));
+
+    _zag_println("errors=NotFound,BadInput");
+
+    _zag_println("lang_ext_demo: ok");
+    return 0;
+}

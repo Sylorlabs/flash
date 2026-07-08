@@ -1,0 +1,7 @@
+// harsh_lex_bytes.flash — lexer smoke input (embedded control/garbage bytes).
+// Used by tests/fuzz_lex_smoke.sh; must fail --check without crashing.
+
+fn main() i32 {
+    let x: i32 = 0;
+    return x;
+}

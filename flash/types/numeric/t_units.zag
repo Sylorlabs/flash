@@ -1,0 +1,103 @@
+// flash/types/numeric/t_units.zag — balanced-ternary integer units (t1..t80).
+//
+// THE NATIVE FAMILY. Flash is a balanced-ternary language: a t-unit's width
+// is counted in TRITS, its range is the symmetric ±(3^width − 1)/2, and sign
+// is intrinsic to the digits (balanced ternary has no unsigned variant — a
+// negative value is just digits, not an interpretation bit).
+//
+// Cost model (the whole point):
+//   • On ternary hardware a t-unit IS its digits — trit_encoding_bits equals
+//     the width, an identity: no re-encoding, no masking, no wrap emulation.
+//   • On today's binary bootstrap hosts a t-unit rides in a plain machine
+//     integer (nbits = ceil(width·log2 3) + 1). Arithmetic is ordinary host
+//     arithmetic — t-units promise RANGE semantics, never base-2 wraparound,
+//     so the embedding emits zero masking code. Overflow past the declared
+//     range is unspecified, exactly like exceeding a chamber's trit lanes.
+//   • Binary i/u units are the interop family and pay their own embedding
+//     (an i8's mod-256 wrap costs a real modulo on ternary hardware).
+//
+// t1 is the trit itself: range {-1, 0, +1}. t40 is the widest unit whose
+// range is exact in the catalog's i64 metadata; t41..t80 are valid catalog
+// entries for future wide lanes (range fields carry the 0 sentinel, like
+// i/u units past 63 bits).
+
+@import("numeric_common.zag") as common
+
+fn t_unit_count() i32 { return 80; }
+
+fn t_unit_valid(width: i32) i32 {
+    if (width < 1 || width > 80) { return 0; }
+    return 1;
+}
+
+// Balanced ternary is intrinsically signed.
+fn t_unit_signed(width: i32) i32 { return 1; }
+
+fn t_unit_width(width: i32) i32 { return width; }
+
+fn t_unit_min(width: i32) i64 {
+    return common.num_trit_signed_min(width);
+}
+
+fn t_unit_max(width: i32) i64 {
+    return common.num_trit_signed_max(width);
+}
+
+// Native: a t-unit's trit encoding is itself. Identity, zero cost.
+fn t_unit_trit_encoding_bits(width: i32) i32 {
+    return width;
+}
+
+// What a binary host pays to carry this unit (bits, incl. sign).
+fn t_unit_bit_encoding_bits(width: i32) i32 {
+    return common.num_bit_encoding_bits(width);
+}
+
+fn t_unit_storage_bytes(width: i32) i32 {
+    return common.num_storage_bytes(t_unit_bit_encoding_bits(width), 1);
+}
+
+fn t_unit_descriptor(width: i32) common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "",
+        .kind = common.KIND_TRIT_INT(),
+        .width = width,
+        .signed = 1,
+        .min_val = t_unit_min(width),
+        .max_val = t_unit_max(width),
+        .trit_encoding_bits = t_unit_trit_encoding_bits(width),
+        .storage_bytes = t_unit_storage_bytes(width),
+        .es = 0,
+        .useed = 0,
+        .nbits = t_unit_bit_encoding_bits(width),
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = width,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn t_unit_descriptor_named(name: []u8, width: i32) common.TypeDescriptor {
+    let d: common.TypeDescriptor = t_unit_descriptor(width);
+    return common.TypeDescriptor{
+        .name = name,
+        .kind = d.kind,
+        .width = d.width,
+        .signed = d.signed,
+        .min_val = d.min_val,
+        .max_val = d.max_val,
+        .trit_encoding_bits = d.trit_encoding_bits,
+        .storage_bytes = d.storage_bytes,
+        .es = d.es,
+        .useed = d.useed,
+        .nbits = d.nbits,
+        .exponent_bits = d.exponent_bits,
+        .mantissa_bits = d.mantissa_bits,
+        .ieee_binary = d.ieee_binary,
+        .int_bits = d.int_bits,
+        .frac_bits = d.frac_bits,
+        .moduli_count = d.moduli_count,
+    };
+}

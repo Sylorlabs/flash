@@ -1,0 +1,6 @@
+// flash/compiler/testdata/bad_unknown.flash.zag — must fail --check (unknown trit).
+program bad_unknown
+
+trit x = +1
+
+let trit_add(x, ghost) = z

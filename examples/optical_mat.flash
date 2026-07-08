@@ -1,0 +1,15 @@
+// examples/optical_mat.flash.zag — 3×3 optical matrix transform via Flash surface DSL.
+//
+// Demonstrates optical mat3_mul / mat3_apply lowering to nine PathSegments
+// through matrix_rt.zag mat3_route() in the flash_codegen path.
+
+program optical_mat
+
+trit vx = +1
+trit vy = 0
+trit vz = 0
+
+optical mat3_identity() = id
+optical mat3_rotation_xy_90() = rot
+optical mat3_mul(rot, id) = composed
+let mat3_apply(composed, vx, vy, vz) = result

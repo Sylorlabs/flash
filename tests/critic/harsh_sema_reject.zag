@@ -1,0 +1,123 @@
+// harsh_sema_reject.zag — programs that MUST fail Flash semantic analysis.
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/toolchain/zag-poc/std/list.zag")
+@import("../../flash/compiler/flash_ast.zag")
+@import("../../flash/compiler/flash_sema.zag")
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn must_reject(decls: ArrayList[*FlashNode], file: []u8, label: []u8) void {
+    let errs: i32 = sema_check_program(decls, file);
+    if (errs < 1) { test_fail(label); }
+    test_pass(label);
+}
+
+fn build_mixed_posit_int() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](4);
+    flash_push_stmt(&body, flash_mk_let("p", "p32", 1, 1,
+        flash_mk_cast(flash_mk_int("1"), "p32")));
+    flash_push_stmt(&body, flash_mk_let("x", "i32", 1, 1, flash_mk_int("2")));
+    let bad: *FlashNode = flash_mk_bin("+", flash_mk_ident("p"), flash_mk_ident("x"));
+    flash_push_stmt(&body, flash_mk_let("y", "p32", 1, 1, bad));
+    flash_push_stmt(&body, flash_mk_ret(1, flash_mk_ident("y")));
+    push[*FlashNode](&decls, flash_mk_fn("mixed_add", "p32", body));
+    return decls;
+}
+
+fn build_realtime_alloc() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let args: ArrayList[*FlashNode] = make[*FlashNode](2);
+    push[*FlashNode](&args, flash_mk_int("64"));
+    flash_push_stmt(&body, flash_mk_estmt(
+        flash_mk_call(flash_mk_ident("_zag_malloc"), args)));
+    flash_push_stmt(&body, flash_mk_ret(0, flash_mk_int("0")));
+    let annots: ArrayList[[]u8] = make[[]u8](2);
+    push[[]u8](&annots, "@realtime");
+    push[*FlashNode](&decls, flash_mk_fn_ann("rt_alloc", "i32", annots, body));
+    return decls;
+}
+
+fn build_realtime_io() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let args: ArrayList[*FlashNode] = make[*FlashNode](2);
+    push[*FlashNode](&args, flash_mk_str("leak"));
+    flash_push_stmt(&body, flash_mk_estmt(
+        flash_mk_call(flash_mk_ident("_zag_println"), args)));
+    flash_push_stmt(&body, flash_mk_ret(0, flash_mk_int("0")));
+    let annots: ArrayList[[]u8] = make[[]u8](2);
+    push[[]u8](&annots, "@realtime");
+    push[*FlashNode](&decls, flash_mk_fn_ann("rt_io", "i32", annots, body));
+    return decls;
+}
+
+fn build_photonic_raw_violation() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let raw_body: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let shield_args: ArrayList[*FlashNode] = make[*FlashNode](4);
+    push[*FlashNode](&shield_args, flash_mk_int("0"));
+    push[*FlashNode](&shield_args, flash_mk_int("0"));
+    push[*FlashNode](&shield_args, flash_mk_int("0"));
+    push[*FlashNode](&shield_args, flash_mk_float("1.0"));
+    flash_push_stmt(&raw_body, flash_mk_estmt(
+        flash_mk_call(flash_mk_ident("fire_shield"), shield_args)));
+    flash_push_stmt(&body, flash_mk_raw(raw_body));
+    flash_push_stmt(&body, flash_mk_ret(0, flash_mk_int("0")));
+    let annots: ArrayList[[]u8] = make[[]u8](2);
+    push[[]u8](&annots, "@photonic");
+    push[*FlashNode](&decls, flash_mk_fn_ann("photo_raw", "i32", annots, body));
+    return decls;
+}
+
+fn build_incompatible_binop() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](4);
+    flash_push_stmt(&body, flash_mk_let("t", "Trit", 1, 1, flash_mk_trit("1")));
+    flash_push_stmt(&body, flash_mk_let("w", "Wave", 1, 1, flash_mk_wave(make[*FlashNode](1))));
+    let bad: *FlashNode = flash_mk_bin("+", flash_mk_ident("t"), flash_mk_ident("w"));
+    flash_push_stmt(&body, flash_mk_let("z", "Trit", 1, 1, bad));
+    flash_push_stmt(&body, flash_mk_ret(1, flash_mk_ident("z")));
+    push[*FlashNode](&decls, flash_mk_fn("trit_wave", "Trit", body));
+    return decls;
+}
+
+fn build_valid_control() ArrayList[*FlashNode] {
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](2);
+    let body: ArrayList[*FlashNode] = make[*FlashNode](3);
+    flash_push_stmt(&body, flash_mk_let("a", "Trit", 1, 1, flash_mk_trit("1")));
+    flash_push_stmt(&body, flash_mk_let("b", "Trit", 1, 1, flash_mk_trit("0")));
+    let sum: *FlashNode = flash_mk_bin("+", flash_mk_ident("a"), flash_mk_ident("b"));
+    flash_push_stmt(&body, flash_mk_ret(1, sum));
+    push[*FlashNode](&decls, flash_mk_fn("ok_trit", "Trit", body));
+    return decls;
+}
+
+fn main() i32 {
+    _zag_println("harsh_sema_reject: running");
+
+    let ok: ArrayList[*FlashNode] = build_valid_control();
+    if (sema_check_program(ok, "control.zag") != 0) { test_fail("control_should_pass"); }
+    test_pass("control_should_pass");
+
+    must_reject(build_mixed_posit_int(), "mixed.zag", "reject_mixed_posit_int");
+    must_reject(build_realtime_alloc(), "rt_alloc.zag", "reject_realtime_alloc");
+    must_reject(build_realtime_io(), "rt_io.zag", "reject_realtime_io");
+    must_reject(build_photonic_raw_violation(), "photo_raw.zag", "reject_photonic_raw");
+    must_reject(build_incompatible_binop(), "trit_wave.zag", "reject_trit_wave_binop");
+
+    _zag_println("harsh_sema_reject: ok");
+    return 0;
+}

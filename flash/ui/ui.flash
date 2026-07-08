@@ -1,0 +1,375 @@
+// flash/ui/ui.flash — retained-mode UI engine on the vgpu vector layer.
+//
+// A widget tree lives in a pool (index-linked, no pointers); widgets carry
+// state; state changes mark damage; rendering repaints ONLY damaged widgets
+// over their own background, tracking repainted pixels. That is the engine
+// contract a live display needs: update → damage → minimal redraw → present.
+//
+//   let ui: UiTree = ui_new(480, 320);
+//   let card: i32 = ui_card(&ui, 0, 24, 60, 200, 120);
+//   let g: i32 = ui_gauge(&ui, card, 40, 80, 40, 72);
+//   ui_render_full(&ui, &fb);          // frame 0
+//   ui_set_value(&ui, g, 90);          // marks g damaged
+//   let px: i32 = ui_render_damage(&ui, &fb);   // repaints just the gauge
+//
+// Widget kinds: panel(0) card(1) label(2) vlabel(3) button(4) gauge(5)
+// progress(6) toggle(7) sparkline(8).
+
+@import("../driver/vgpu.flash")
+
+fn ui_kind_panel() i32    { return 0; }
+fn ui_kind_card() i32     { return 1; }
+fn ui_kind_label() i32    { return 2; }
+fn ui_kind_vlabel() i32   { return 3; }
+fn ui_kind_button() i32   { return 4; }
+fn ui_kind_gauge() i32    { return 5; }
+fn ui_kind_progress() i32 { return 6; }
+fn ui_kind_toggle() i32   { return 7; }
+fn ui_kind_spark() i32    { return 8; }
+
+struct UiTheme {
+    bg_r: i32, bg_g: i32, bg_b: i32,
+    bg2_r: i32, bg2_g: i32, bg2_b: i32,
+    card_r: i32, card_g: i32, card_b: i32,
+    ink_r: i32, ink_g: i32, ink_b: i32,
+    mut_r: i32, mut_g: i32, mut_b: i32,
+    acc_r: i32, acc_g: i32, acc_b: i32,
+    acc2_r: i32, acc2_g: i32, acc2_b: i32,
+    radius: f32,
+}
+
+fn ui_theme_engine() UiTheme {
+    return UiTheme{
+        .bg_r = 14, .bg_g = 16, .bg_b = 34,
+        .bg2_r = 44, .bg2_g = 30, .bg2_b = 70,
+        .card_r = 244, .card_g = 244, .card_b = 250,
+        .ink_r = 40, .ink_g = 40, .ink_b = 62,
+        .mut_r = 130, .mut_g = 130, .mut_b = 160,
+        .acc_r = 255, .acc_g = 176, .acc_b = 32,
+        .acc2_r = 96, .acc2_g = 80, .acc2_b = 220,
+        .radius = 12.0,
+    };
+}
+
+struct UiNode {
+    kind:   i32,
+    parent: i32,
+    x: f32, y: f32, w: f32, h: f32,   // relative to parent
+    text:   []u8,
+    value:  i32,      // gauge/progress 0..100, toggle 0/1, button pressed 0/1
+    size:   f32,      // text size / accent scale
+    accent: i32,      // 0 = primary accent, 1 = secondary
+    dirty:  i32,
+    data:   ArrayList[i32],   // sparkline samples 0..100
+}
+
+struct UiTree {
+    w: i32,
+    h: i32,
+    theme: UiTheme,
+    nodes: ArrayList[UiNode],
+}
+
+fn ui_new(w: i32, h: i32) UiTree {
+    let t: UiTree = UiTree{
+        .w = w, .h = h,
+        .theme = ui_theme_engine(),
+        .nodes = make[UiNode](16),
+    };
+    return t;
+}
+
+fn ui_node_base(kind: i32, parent: i32, x: f32, y: f32, w: f32, h: f32) UiNode {
+    return UiNode{
+        .kind = kind, .parent = parent,
+        .x = x, .y = y, .w = w, .h = h,
+        .text = "", .value = 0, .size = 12.0, .accent = 0,
+        .dirty = 1, .data = make[i32](2),
+    };
+}
+
+fn ui_push(t: *UiTree, n: UiNode) i32 {
+    push[UiNode](&t.*.nodes, n);
+    return len[UiNode](t.*.nodes) - 1;
+}
+
+fn ui_card(t: *UiTree, parent: i32, x: f32, y: f32, w: f32, h: f32) i32 {
+    return ui_push(t, ui_node_base(ui_kind_card(), parent, x, y, w, h));
+}
+
+fn ui_label(t: *UiTree, parent: i32, x: f32, y: f32, text: []u8, muted: i32) i32 {
+    let n: UiNode = ui_node_base(ui_kind_label(), parent, x, y, (text.len * 6) as f32, 8.0);
+    n.text = text;
+    n.accent = muted;
+    return ui_push(t, n);
+}
+
+fn ui_vlabel(t: *UiTree, parent: i32, x: f32, y: f32, text: []u8, size: f32, weight_accent: i32) i32 {
+    let n: UiNode = ui_node_base(ui_kind_vlabel(), parent, x, y, vg_text_width(text, size), size + 4.0);
+    n.text = text;
+    n.size = size;
+    n.accent = weight_accent;
+    return ui_push(t, n);
+}
+
+fn ui_button(t: *UiTree, parent: i32, x: f32, y: f32, w: f32, h: f32, text: []u8, secondary: i32) i32 {
+    let n: UiNode = ui_node_base(ui_kind_button(), parent, x, y, w, h);
+    n.text = text;
+    n.accent = secondary;
+    return ui_push(t, n);
+}
+
+fn ui_gauge(t: *UiTree, parent: i32, cx: f32, cy: f32, rad: f32, value: i32) i32 {
+    let n: UiNode = ui_node_base(ui_kind_gauge(), parent, cx - rad, cy - rad, rad * 2.0, rad * 2.0);
+    n.value = value;
+    n.size = rad;
+    return ui_push(t, n);
+}
+
+fn ui_progress(t: *UiTree, parent: i32, x: f32, y: f32, w: f32, value: i32) i32 {
+    let n: UiNode = ui_node_base(ui_kind_progress(), parent, x, y, w, 10.0);
+    n.value = value;
+    return ui_push(t, n);
+}
+
+fn ui_toggle(t: *UiTree, parent: i32, x: f32, y: f32, on: i32) i32 {
+    let n: UiNode = ui_node_base(ui_kind_toggle(), parent, x, y, 34.0, 18.0);
+    n.value = on;
+    return ui_push(t, n);
+}
+
+fn ui_spark(t: *UiTree, parent: i32, x: f32, y: f32, w: f32, h: f32) i32 {
+    return ui_push(t, ui_node_base(ui_kind_spark(), parent, x, y, w, h));
+}
+
+fn ui_spark_push(t: *UiTree, id: i32, sample: i32) void {
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    push[i32](&n.data, sample);
+    n.dirty = 1;
+    set[UiNode](&t.*.nodes, id, n);
+}
+
+// ── state → damage ───────────────────────────────────────────────────────────
+
+fn ui_set_value(t: *UiTree, id: i32, v: i32) void {
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    if (n.value != v) {
+        n.value = v;
+        n.dirty = 1;
+        set[UiNode](&t.*.nodes, id, n);
+    }
+}
+
+fn ui_set_text(t: *UiTree, id: i32, s: []u8) void {
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    n.text = s;
+    n.dirty = 1;
+    set[UiNode](&t.*.nodes, id, n);
+}
+
+// absolute position of a node (walk parents; parent -1/0 semantics: id 0 may
+// be a root card; parent < 0 means screen)
+fn ui_abs_x(t: *UiTree, id: i32) f32 {
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    if (n.parent < 0) { return n.x; }
+    return ui_abs_x(t, n.parent) + n.x;
+}
+
+fn ui_abs_y(t: *UiTree, id: i32) f32 {
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    if (n.parent < 0) { return n.y; }
+    return ui_abs_y(t, n.parent) + n.y;
+}
+
+// ── painting ─────────────────────────────────────────────────────────────────
+
+fn ui_paint_bg_region(t: *UiTree, fb: *SoftFb, x: f32, y: f32, w: f32, h: f32) void {
+    // repaint the screen gradient under a damaged region
+    let p: VPath = vg_path_new();
+    vg_move_to(&p, x, y);
+    vg_line_to(&p, x + w, y);
+    vg_line_to(&p, x + w, y + h);
+    vg_line_to(&p, x, y + h);
+    vg_close(&p);
+    vg_fill_linear(fb, &p, 0.0, 0.0, 0.0, t.*.h as f32,
+        t.*.theme.bg_r, t.*.theme.bg_g, t.*.theme.bg_b, 255,
+        t.*.theme.bg2_r, t.*.theme.bg2_g, t.*.theme.bg2_b, 255);
+}
+
+fn ui_paint_card_region(t: *UiTree, fb: *SoftFb, id: i32) void {
+    // repaint a card's surface under a damaged child
+    let ax: f32 = ui_abs_x(t, id);
+    let ay: f32 = ui_abs_y(t, id);
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    let p: VPath = vg_path_new();
+    vg_rounded_rect(&p, ax, ay, n.w, n.h, t.*.theme.radius);
+    vg_fill(fb, &p, t.*.theme.card_r, t.*.theme.card_g, t.*.theme.card_b, 255);
+}
+
+fn ui_paint_node(t: *UiTree, fb: *SoftFb, id: i32) void {
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    let ax: f32 = ui_abs_x(t, id);
+    let ay: f32 = ui_abs_y(t, id);
+    let th: UiTheme = t.*.theme;
+
+    if (n.kind == ui_kind_card()) {
+        let sh: VPath = vg_path_new();
+        vg_rounded_rect(&sh, ax + 2.0, ay + 4.0, n.w, n.h, th.radius);
+        vg_fill(fb, &sh, 0, 0, 0, 70);
+        let p: VPath = vg_path_new();
+        vg_rounded_rect(&p, ax, ay, n.w, n.h, th.radius);
+        vg_fill(fb, &p, th.card_r, th.card_g, th.card_b, 250);
+        return;
+    }
+    if (n.kind == ui_kind_label()) {
+        if (n.accent == 1) {
+            softgpu_text(fb, ax as i32, ay as i32, n.text, th.mut_r, th.mut_g, th.mut_b);
+        } else {
+            softgpu_text(fb, ax as i32, ay as i32, n.text, th.ink_r, th.ink_g, th.ink_b);
+        }
+        return;
+    }
+    if (n.kind == ui_kind_vlabel()) {
+        let wgt: f32 = n.size / 9.0;
+        if (n.accent == 1) { wgt = n.size / 5.5; }
+        vg_text_vec(fb, ax, ay, n.text, n.size, wgt, 240, 240, 250, 255);
+        return;
+    }
+    if (n.kind == ui_kind_button()) {
+        let p: VPath = vg_path_new();
+        vg_rounded_rect(&p, ax, ay, n.w, n.h, n.h * 0.5);
+        if (n.value == 1) {
+            // pressed: darker, inset
+            vg_fill(fb, &p, th.acc2_r / 2, th.acc2_g / 2, th.acc2_b / 2, 255);
+        } else if (n.accent == 1) {
+            vg_fill_linear(fb, &p, ax, ay, ax + n.w, ay + n.h,
+                th.acc2_r, th.acc2_g, th.acc2_b, 255, 150, 60, 200, 255);
+        } else {
+            vg_fill_linear(fb, &p, ax, ay, ax + n.w, ay + n.h,
+                th.acc_r, th.acc_g, th.acc_b, 255, 255, 120, 40, 255);
+        }
+        let tx: f32 = ax + (n.w - vg_text_width(n.text, 12.0)) * 0.5;
+        vg_text_vec(fb, tx, ay + (n.h - 12.0) * 0.5, n.text, 12.0, 1.8, 255, 255, 255, 255);
+        return;
+    }
+    if (n.kind == ui_kind_gauge()) {
+        let cx: f32 = ax + n.size;
+        let cy: f32 = ay + n.size;
+        let full: f32 = 4.7124;
+        let sweep: f32 = full * (n.value as f32) / 100.0;
+        let a0: f32 = 2.3562;
+        let track: VPath = vg_path_new();
+        vg_donut(&track, cx, cy, n.size, n.size - 10.0, a0, a0 + full);
+        vg_fill(fb, &track, 220, 220, 232, 255);
+        if (n.value > 0) {
+            let arc: VPath = vg_path_new();
+            vg_donut(&arc, cx, cy, n.size, n.size - 10.0, a0, a0 + sweep);
+            vg_fill(fb, &arc, th.acc2_r, th.acc2_g, th.acc2_b, 255);
+        }
+        let label: []u8 = _zag_i64_to_str(n.value as i64);
+        let tx: f32 = cx - vg_text_width(label, 16.0) * 0.5;
+        vg_text_vec(fb, tx, cy - 8.0, label, 16.0, 2.6, th.ink_r, th.ink_g, th.ink_b, 255);
+        return;
+    }
+    if (n.kind == ui_kind_progress()) {
+        let track: VPath = vg_path_new();
+        vg_rounded_rect(&track, ax, ay, n.w, n.h, n.h * 0.5);
+        vg_fill(fb, &track, 220, 220, 232, 255);
+        let fw: f32 = n.w * (n.value as f32) / 100.0;
+        if (fw > n.h) {
+            let bar: VPath = vg_path_new();
+            vg_rounded_rect(&bar, ax, ay, fw, n.h, n.h * 0.5);
+            vg_fill_linear(fb, &bar, ax, ay, ax + n.w, ay,
+                th.acc_r, th.acc_g, th.acc_b, 255, th.acc2_r, th.acc2_g, th.acc2_b, 255);
+        }
+        return;
+    }
+    if (n.kind == ui_kind_toggle()) {
+        let track: VPath = vg_path_new();
+        vg_rounded_rect(&track, ax, ay, n.w, n.h, n.h * 0.5);
+        if (n.value == 1) {
+            vg_fill(fb, &track, th.acc2_r, th.acc2_g, th.acc2_b, 255);
+        } else {
+            vg_fill(fb, &track, 200, 200, 214, 255);
+        }
+        let kx: f32 = ax + 2.0;
+        if (n.value == 1) { kx = ax + n.w - n.h + 2.0; }
+        let knob: VPath = vg_path_new();
+        vg_circle(&knob, kx + (n.h - 4.0) * 0.5, ay + n.h * 0.5, (n.h - 4.0) * 0.5);
+        vg_fill(fb, &knob, 255, 255, 255, 255);
+        return;
+    }
+    if (n.kind == ui_kind_spark()) {
+        let cnt: i32 = len[i32](n.data);
+        if (cnt < 2) { return; }
+        let p: VPath = vg_path_new();
+        let i: i32 = 0;
+        while (i < cnt) {
+            let sx: f32 = ax + n.w * (i as f32) / ((cnt - 1) as f32);
+            let sy: f32 = ay + n.h - n.h * (get[i32](n.data, i) as f32) / 100.0;
+            if (i == 0) { vg_move_to(&p, sx, sy); }
+            else { vg_line_to(&p, sx, sy); }
+            i = i + 1;
+        }
+        vg_stroke(fb, &p, 2.5, th.acc2_r, th.acc2_g, th.acc2_b, 255);
+        return;
+    }
+}
+
+fn ui_clear_dirty(t: *UiTree, id: i32) void {
+    let n: UiNode = get[UiNode](t.*.nodes, id);
+    n.dirty = 0;
+    set[UiNode](&t.*.nodes, id, n);
+}
+
+// Full render: background, then every node in declaration order.
+fn ui_render_full(t: *UiTree, fb: *SoftFb) void {
+    ui_paint_bg_region(t, fb, 0.0, 0.0, t.*.w as f32, t.*.h as f32);
+    let i: i32 = 0;
+    while (i < len[UiNode](t.*.nodes)) {
+        ui_paint_node(t, fb, i);
+        ui_clear_dirty(t, i);
+        i = i + 1;
+    }
+}
+
+// Damage render: repaint only dirty nodes over their local background;
+// returns the number of pixels repainted (the engine's frame-cost metric).
+fn ui_render_damage(t: *UiTree, fb: *SoftFb) i32 {
+    let repainted: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[UiNode](t.*.nodes)) {
+        let n: UiNode = get[UiNode](t.*.nodes, i);
+        if (n.dirty == 1) {
+            let ax: f32 = ui_abs_x(t, i);
+            let ay: f32 = ui_abs_y(t, i);
+            let pad: f32 = 3.0;
+            let rx: i32 = (ax - pad) as i32;
+            let ry: i32 = (ay - pad) as i32;
+            let rw: i32 = (n.w + pad * 2.0) as i32;
+            let rh: i32 = (n.h + pad * 2.0) as i32;
+            vg_set_clip(fb, rx, ry, rw, rh);
+            if (n.parent >= 0) {
+                ui_paint_card_region(t, fb, n.parent);
+            } else {
+                ui_paint_bg_region(t, fb, rx as f32, ry as f32, rw as f32, rh as f32);
+            }
+            // repaint overlapping siblings within the clip (declaration
+            // order). Card surfaces were already restored above — replaying
+            // card nodes would re-layer their drop shadows inside the clip.
+            let j: i32 = 0;
+            while (j < len[UiNode](t.*.nodes)) {
+                let sib: UiNode = get[UiNode](t.*.nodes, j);
+                if (j != n.parent && sib.kind != ui_kind_card()) {
+                    ui_paint_node(t, fb, j);
+                }
+                j = j + 1;
+            }
+            vg_clear_clip(fb);
+            ui_clear_dirty(t, i);
+            repainted = repainted + rw * rh;
+        }
+        i = i + 1;
+    }
+    return repainted;
+}

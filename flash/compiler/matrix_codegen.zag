@@ -1,0 +1,76 @@
+// matrix_codegen.zag — compiler-side optical matrix routing (no wave.zag dep).
+//
+// Mirrors flash/runtime/matrix_rt.zag mat3_route() for flashc self-build.
+// Emits nine PathSegments — one per 3×3 matrix element optical lane.
+
+@import("manifest.zag")
+@import("../stdlib/trit.zag")
+@import("../types/mat3.zag")
+@import("../toolchain/zag-poc/std/rt.zag")
+
+struct TritTriple {
+    x: Trit,
+    y: Trit,
+    z: Trit,
+}
+
+struct MatRouteCtx {
+    pos: Coord,
+    depth: i32,
+    base_power_mw: f32,
+    out: *CoordinateManifest,
+}
+
+fn mcg_abs_f32(v: f32) f32 {
+    if (v < 0.0) { return 0.0 - v; }
+    return v;
+}
+
+fn mcg_to_i8(t: Trit) i8 {
+    if (t.val == 1) { return 1; }
+    if (t.val == 0 - 1) { return 0 - 1; }
+    return 0;
+}
+
+fn mat_route_ctx_new(out: *CoordinateManifest) MatRouteCtx {
+    return MatRouteCtx{
+        .pos = coord(0.0, 0.0, 0.0),
+        .depth = 0,
+        .base_power_mw = 1.0,
+        .out = out,
+    };
+}
+
+fn mat3_route_term(
+    ctx: *MatRouteCtx,
+    row: i32,
+    col: i32,
+    weight: f32,
+    tr: Trit,
+    op_tag: []u8,
+) void {
+    let from: Coord = ctx.*.pos;
+    let dx: f32 = col as f32;
+    let dy: f32 = row as f32;
+    let dz: f32 = ctx.*.depth as f32;
+    let to_coord: Coord = coord(from.x + dx, from.y + dy, from.z + dz);
+    ctx.*.pos = to_coord;
+    ctx.*.depth = ctx.*.depth + 1;
+    let pol: i32 = mcg_to_i8(tr) as i32;
+    let power: f32 = mcg_abs_f32(ctx.*.base_power_mw * weight);
+    let seg: PathSegment = path_segment_new(from, to_coord, power, pol, op_tag);
+    manifest_push_seg(ctx.*.out, seg);
+}
+
+// Emit nine unrolled path segments — mirrors matrix_rt.zag mat3_route().
+fn mat3_route(ctx: *MatRouteCtx, m: Mat3, input: TritTriple) void {
+    mat3_route_term(ctx, 0, 0, m.m00, input.x, "mat3_r0c0");
+    mat3_route_term(ctx, 0, 1, m.m01, input.y, "mat3_r0c1");
+    mat3_route_term(ctx, 0, 2, m.m02, input.z, "mat3_r0c2");
+    mat3_route_term(ctx, 1, 0, m.m10, input.x, "mat3_r1c0");
+    mat3_route_term(ctx, 1, 1, m.m11, input.y, "mat3_r1c1");
+    mat3_route_term(ctx, 1, 2, m.m12, input.z, "mat3_r1c2");
+    mat3_route_term(ctx, 2, 0, m.m20, input.x, "mat3_r2c0");
+    mat3_route_term(ctx, 2, 1, m.m21, input.y, "mat3_r2c1");
+    mat3_route_term(ctx, 2, 2, m.m22, input.z, "mat3_r2c2");
+}

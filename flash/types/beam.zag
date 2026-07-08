@@ -1,0 +1,66 @@
+// beam.zag — primitive optical beam path for Active Lattice routing
+//
+// Describes a guided beam through PCM matrix cells. Each hop accumulates
+// phase shifts that implement balanced-ternary logic (no binary gates).
+
+@import("phase.zag") as phase
+@import("wave.zag") as wave
+
+struct BeamHop {
+    pcm_row: i32,
+    pcm_col: i32,
+    phase_delta: phase.Phase,
+    lattice_op: i32,
+}
+
+struct Beam {
+    wave: wave.Wave,
+    origin_row: i32,
+    origin_col: i32,
+    hop_count: i32,
+    total_phase_rad: f32,
+}
+
+struct BeamPath {
+    hops: []BeamHop,
+    len: i32,
+}
+
+fn launch(w: wave.Wave, row: i32, col: i32) Beam {
+    return Beam{
+        .wave = w,
+        .origin_row = row,
+        .origin_col = col,
+        .hop_count = 0,
+        .total_phase_rad = w.phase.radians,
+    };
+}
+
+fn route(b: Beam, row: i32, col: i32, delta: phase.Phase, op_tag: i32) Beam {
+    let new_phase: f32 = b.total_phase_rad + delta.radians;
+    let w2: wave.Wave = wave.phase_shift(b.wave, delta.radians);
+    return Beam{
+        .wave = w2,
+        .origin_row = b.origin_row,
+        .origin_col = b.origin_col,
+        .hop_count = b.hop_count + 1,
+        .total_phase_rad = new_phase,
+    };
+}
+
+fn trit_hop(b: Beam, row: i32, col: i32, trit_val: i8, op_tag: i32) Beam {
+    let delta: phase.Phase = phase.from_trit(trit_val);
+    return route(b, row, col, delta, op_tag);
+}
+
+fn append_hop(path: BeamPath, hop: BeamHop) BeamPath {
+    if (path.len < path.hops.len) {
+        path.hops[path.len] = hop;
+        path.len = path.len + 1;
+    }
+    return path;
+}
+
+fn terminal_trit(b: Beam) i8 {
+    return b.wave.phase.trit_wire;
+}

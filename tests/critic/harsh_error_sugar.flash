@@ -1,0 +1,21 @@
+// harsh_error_sugar.flash — must pass stage-1 --check (error sugar + decls).
+
+error { NotFound, BadInput };
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color { Red, Green, Blue }
+
+fn lookup(id: i32) !i32 {
+    if (id < 0) { return error.NotFound; }
+    if (id == 0) { return error.BadInput; }
+    return id * 10;
+}
+
+fn main() i32 {
+    let _p: Point = Point{ .x = 1, .y = 2 };
+    return 0;
+}

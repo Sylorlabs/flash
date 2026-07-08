@@ -1,0 +1,8 @@
+// flash/rt/rt.flash — Flash native runtime contract (documentation module).
+//
+// The actual extern bindings live in flash/rt/rt.zag (Zag shim header) and are
+// implemented by flash/toolchain/flashz. Flash programs link against these
+// primitives; no sibling zag repo is required.
+
+// Re-export path for Flash sources that want a .flash import marker:
+// @import is not used here — shims import flash/rt/rt.zag directly.

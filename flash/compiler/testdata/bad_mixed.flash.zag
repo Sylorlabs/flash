@@ -1,0 +1,8 @@
+// flash/compiler/testdata/bad_mixed.flash.zag — must fail --check (posit+int trit op).
+program bad_mixed
+
+p32 gain = 2.25
+
+sat_i16 lane = 1024
+
+let trit_add(gain, lane) = z

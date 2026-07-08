@@ -1,0 +1,131 @@
+// raw_sim.zag — znc-safe software driver for raw {} five-API surface.
+//
+// Mirrors flash/wave/raw.zag contracts with explicit session state for tests.
+// Cell storage delegates to chamber_sim.zag (8×8×8 Active Lattice).
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("chamber_sim.zag")
+
+fn POL_OFF() i8 { return SIM_TRIT_ZERO(); }
+fn POL_VERT() i8 { return SIM_TRIT_POS(); }
+fn POL_HORZ() i8 { return SIM_TRIT_NEG(); }
+
+struct VoxelCoord {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+struct BeamId {
+    wall: i32,
+    slot: i32,
+}
+
+struct RawRtState {
+    raw_active: i32,
+    target_x: i32,
+    target_y: i32,
+    target_z: i32,
+    laser_mw_0: f32,
+    laser_mw_1: f32,
+    laser_mw_2: f32,
+    laser_mw_3: f32,
+    grid: ChamberGrid,
+    cells: *VoxelCell,
+}
+
+struct RawSession {
+    active: i32,
+}
+
+fn voxel(x: i32, y: i32, z: i32) VoxelCoord {
+    return VoxelCoord{ .x = x, .y = y, .z = z };
+}
+
+fn raw_state_new() RawRtState {
+    let grid: ChamberGrid = ChamberGrid{
+        .cells = null as *VoxelCell,
+        .edge  = CHAMBER_EDGE(),
+        .ready = 0,
+    };
+    chamber_init(&grid);
+    return RawRtState{
+        .raw_active = 0,
+        .target_x = 0,
+        .target_y = 0,
+        .target_z = 0,
+        .laser_mw_0 = 0.0,
+        .laser_mw_1 = 0.0,
+        .laser_mw_2 = 0.0,
+        .laser_mw_3 = 0.0,
+        .grid = grid,
+        .cells = grid.cells,
+    };
+}
+
+fn raw_state_free(st: *RawRtState) void {
+    if (st.*.grid.ready == 1 && st.*.grid.cells != null) {
+        _zag_free(st.*.grid.cells as *i8);
+        st.*.grid.cells = null;
+        st.*.grid.ready = 0;
+        st.*.cells = null;
+    }
+}
+
+fn raw_enter(st: *RawRtState) i32 {
+    if (st.*.raw_active == 1) { return 0; }
+    st.*.raw_active = 1;
+    return 1;
+}
+
+fn raw_exit(st: *RawRtState, sess: *RawSession) void {
+    if (sess.*.active == 1) {
+        st.*.raw_active = 0;
+        sess.*.active = 0;
+    }
+}
+
+fn fire_shield(st: *RawRtState, target: VoxelCoord, mw: f32) i32 {
+    if (st.*.raw_active == 0) { return 0; }
+    if (!sim_voxel_in_bounds(st.*.grid.edge, target.x, target.y, target.z)) { return 0; }
+    st.*.target_x = target.x;
+    st.*.target_y = target.y;
+    st.*.target_z = target.z;
+    let idx: i32 = voxel_linear_index(st.*.grid.edge, target.x, target.y, target.z);
+    st.*.cells[idx].amp = mw / 1000.0;
+    st.*.cells[idx].pol = POL_HORZ();
+    return 1;
+}
+
+fn inject_phase(st: *RawRtState, coord: VoxelCoord, phase_rad: f32) i32 {
+    if (st.*.raw_active == 0) { return 0; }
+    return chamber_set_phase(&st.*.grid, coord.x, coord.y, coord.z, phase_rad);
+}
+
+fn set_laser_mw(st: *RawRtState, beam: BeamId, mw: f32) i32 {
+    if (st.*.raw_active == 0) { return 0; }
+    if (beam.slot != 0) { return 0; }
+    if (beam.wall == 0) { st.*.laser_mw_0 = mw; return 1; }
+    if (beam.wall == 1) { st.*.laser_mw_1 = mw; return 1; }
+    if (beam.wall == 2) { st.*.laser_mw_2 = mw; return 1; }
+    if (beam.wall == 3) { st.*.laser_mw_3 = mw; return 1; }
+    return 0;
+}
+
+fn target_voxel(st: *RawRtState, coord: VoxelCoord) i32 {
+    if (st.*.raw_active == 0) { return 0; }
+    if (!sim_voxel_in_bounds(st.*.grid.edge, coord.x, coord.y, coord.z)) { return 0; }
+    st.*.target_x = coord.x;
+    st.*.target_y = coord.y;
+    st.*.target_z = coord.z;
+    return 1;
+}
+
+fn manual_polarity(st: *RawRtState, coord: VoxelCoord, pol: i8) i32 {
+    if (pol != POL_OFF() && pol != POL_VERT() && pol != POL_HORZ()) { return 0; }
+    if (st.*.raw_active == 0) { return 0; }
+    if (!sim_voxel_in_bounds(st.*.grid.edge, coord.x, coord.y, coord.z)) { return 0; }
+    let idx: i32 = voxel_linear_index(st.*.grid.edge, coord.x, coord.y, coord.z);
+    st.*.cells[idx].pol = pol;
+    return 1;
+}

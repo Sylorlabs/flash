@@ -1,0 +1,44 @@
+// examples/tunit_demo.flash — native balanced-ternary integer units.
+//
+// t<width> is Flash's NATIVE integer family: width counted in TRITS, range
+// the symmetric ±(3^width − 1)/2, sign intrinsic to the digits (balanced
+// ternary has no unsigned variant). t1 is the trit itself.
+//
+// Cost model: on ternary hardware a t-unit IS its digits — no re-encoding.
+// On the binary bootstrap host it lowers to a plain machine integer with NO
+// masking or wrap emulation, because t-units promise range semantics, never
+// base-2 wraparound. Binary i/u units remain available as interop types and
+// pay their own embedding (mod-2^w wrap costs a modulo on ternary hardware).
+
+fn t9_scale(v: t9, k: t9) t9 {
+    return v * k;
+}
+
+fn main() i32 {
+    // t9: ±(3^9 − 1)/2 = ±9841 — the range is symmetric, negation is free.
+    let a: t9 = 9841;
+    let b: t9 = 0 - 9841;
+    let s: t9 = a + b;
+    _zag_print("t9_sum=");
+    _zag_println(_zag_i64_to_str(s as i64));
+    _zag_print("t9_max=");
+    _zag_println(_zag_i64_to_str(t9_scale(a, 1) as i64));
+
+    // widening within the native family is a cast (radix stays, range grows)
+    let prod: t27 = (a as t27) * (a as t27);
+    _zag_print("t27_prod=");
+    _zag_println(_zag_i64_to_str(prod as i64));
+
+    let big: t27 = 3812798742493;         // t27 max: (3^27 − 1)/2
+    let neg: t27 = 0 - 3812798742493;
+    _zag_print("t27_sum=");
+    _zag_println(_zag_i64_to_str((big + neg) as i64));
+
+    // catalog descriptors: native identity vs binary interop embedding
+    print_type_by_name("t9");
+    print_type_by_name("t27");
+    print_type_by_name("i8");
+
+    _zag_println("tunit_demo: ok");
+    return 0;
+}

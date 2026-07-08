@@ -1,0 +1,47 @@
+// tests/integration/trit_math_correct.zag — balanced trit math regression.
+//
+// Verifies znc-safe trit_math mirrors flash/ternary/arithmetic.zag:
+//   +1 + +1 = -1 (sum) with carry +1
+//   +1 * +1 = +1
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/stdlib/trit_math.zag") as tm
+@import("../../flash/stdlib/trit.zag")
+
+fn tmc_fail(msg: []u8) void {
+    _zag_print("trit_math_correct FAIL: ");
+    _zag_println(msg);
+    _zag_exit(1);
+}
+
+fn tmc_expect_i32(actual: i32, expected: i32, label: []u8) void {
+    if (actual != expected) {
+        _zag_print("trit_math_correct FAIL ");
+        _zag_print(label);
+        _zag_print(" got ");
+        print_i32(actual);
+        _zag_print(" want ");
+        print_i32(expected);
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn main() i32 {
+    _zag_println("trit_math_correct: start");
+
+    let plus: i8 = 1;
+    let add_res: tm.TritAddResult = tm.add(plus, plus, 0);
+    tmc_expect_i32(add_res.sum as i32, 0 - 1, "add(+1,+1) sum");
+    tmc_expect_i32(add_res.carry as i32, 1, "add(+1,+1) carry");
+
+    let mul_res: tm.TritMulResult = tm.mul(plus, plus);
+    tmc_expect_i32(mul_res.product as i32, 1, "mul(+1,+1)");
+
+    let a: Trit = trit(1);
+    tmc_expect_i32(trit_val(trit_add(a, a)), 0 - 1, "trit_add(+1,+1) balanced");
+    tmc_expect_i32(trit_val(trit_mul(a, a)), 1, "trit_mul(+1,+1)");
+
+    _zag_println("trit_math_correct: ok");
+    return 0;
+}

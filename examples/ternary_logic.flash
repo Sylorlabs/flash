@@ -1,0 +1,14 @@
+// examples/ternary_logic.flash.zag — balanced-trit logic via Flash bindings.
+//
+// Exercises trit_add, trit_mul, trit_nand, and trit_neg lowering.
+
+program ternary_logic
+
+trit a = +1
+trit b = T
+trit z = 0
+
+let trit_add(a, b) = sum_ab
+let trit_mul(a, z) = prod_az
+let trit_nand(sum_ab, prod_az) = nand_out
+let trit_neg(nand_out, z) = final

@@ -1,0 +1,280 @@
+// flash/types/numeric/special.zag — ADC, bignum, RNS, LNS, VSA, microscaling types.
+
+@import("numeric_common.zag") as common
+@import("u_units.zag") as u_units
+
+// u11 — 11-bit ADC lane (0..2047), alias of u11 with photonic ADC semantics.
+fn special_descriptor_u11() common.TypeDescriptor {
+    let d: common.TypeDescriptor = u_units.u_unit_descriptor_named("u11", 11);
+    return common.TypeDescriptor{
+        .name = "u11",
+        .kind = d.kind,
+        .width = d.width,
+        .signed = d.signed,
+        .min_val = d.min_val,
+        .max_val = d.max_val,
+        .trit_encoding_bits = d.trit_encoding_bits,
+        .storage_bytes = d.storage_bytes,
+        .es = 0,
+        .useed = 0,
+        .nbits = 11,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 11,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_u_any() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "u_any",
+        .kind = common.KIND_BIGNUM(),
+        .width = 128,
+        .signed = 0,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(128),
+        .storage_bytes = 16,
+        .es = 0,
+        .useed = 0,
+        .nbits = 128,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_i_any() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "i_any",
+        .kind = common.KIND_BIGNUM(),
+        .width = 128,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(128),
+        .storage_bytes = 16,
+        .es = 0,
+        .useed = 0,
+        .nbits = 128,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_rns_3() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "rns_3",
+        .kind = common.KIND_RNS(),
+        .width = 96,
+        .signed = 0,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(96),
+        .storage_bytes = 12,
+        .es = 0,
+        .useed = 0,
+        .nbits = 96,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 3,
+    };
+}
+
+fn special_descriptor_l32() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "l32",
+        .kind = common.KIND_LNS(),
+        .width = 32,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(32),
+        .storage_bytes = 4,
+        .es = 0,
+        .useed = 0,
+        .nbits = 32,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_l16() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "l16",
+        .kind = common.KIND_LNS(),
+        .width = 16,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(16),
+        .storage_bytes = 2,
+        .es = 0,
+        .useed = 0,
+        .nbits = 16,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_bf16() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "bf16",
+        .kind = common.KIND_MICROSCALE(),
+        .width = 16,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(16),
+        .storage_bytes = 2,
+        .es = 0,
+        .useed = 0,
+        .nbits = 16,
+        .exponent_bits = 8,
+        .mantissa_bits = 7,
+        .ieee_binary = 1,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_mx_fp8() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "mx_fp8",
+        .kind = common.KIND_MICROSCALE(),
+        .width = 8,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(8),
+        .storage_bytes = 1,
+        .es = 0,
+        .useed = 0,
+        .nbits = 8,
+        .exponent_bits = 4,
+        .mantissa_bits = 3,
+        .ieee_binary = 1,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_mx_fp4() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "mx_fp4",
+        .kind = common.KIND_MICROSCALE(),
+        .width = 4,
+        .signed = 1,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(4),
+        .storage_bytes = 1,
+        .es = 0,
+        .useed = 0,
+        .nbits = 4,
+        .exponent_bits = 2,
+        .mantissa_bits = 1,
+        .ieee_binary = 1,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_vsa_b256() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "vsa_b<256>",
+        .kind = common.KIND_VSA(),
+        .width = 256,
+        .signed = 0,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(256),
+        .storage_bytes = 8,
+        .es = 0,
+        .useed = 0,
+        .nbits = 256,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_descriptor_vsa_b4096() common.TypeDescriptor {
+    return common.TypeDescriptor{
+        .name = "vsa_b<4096>",
+        .kind = common.KIND_VSA(),
+        .width = 4096,
+        .signed = 0,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = common.num_trit_encoding_bits(4096),
+        .storage_bytes = 128,
+        .es = 0,
+        .useed = 0,
+        .nbits = 4096,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn special_unit_count() i32 { return 11; }
+
+fn special_descriptor_at(idx: i32) common.TypeDescriptor {
+    if (idx == 0)  { return special_descriptor_u11(); }
+    if (idx == 1)  { return special_descriptor_u_any(); }
+    if (idx == 2)  { return special_descriptor_i_any(); }
+    if (idx == 3)  { return special_descriptor_rns_3(); }
+    if (idx == 4)  { return special_descriptor_l32(); }
+    if (idx == 5)  { return special_descriptor_l16(); }
+    if (idx == 6)  { return special_descriptor_bf16(); }
+    if (idx == 7)  { return special_descriptor_mx_fp8(); }
+    if (idx == 8)  { return special_descriptor_mx_fp4(); }
+    if (idx == 9)  { return special_descriptor_vsa_b256(); }
+    if (idx == 10) { return special_descriptor_vsa_b4096(); }
+    return common.td_empty();
+}
+
+fn special_lookup(name: []u8) ?common.TypeDescriptor {
+    if (@strEq(name, "u11"))          { return special_descriptor_u11(); }
+    if (@strEq(name, "u_any"))        { return special_descriptor_u_any(); }
+    if (@strEq(name, "i_any"))        { return special_descriptor_i_any(); }
+    if (@strEq(name, "rns_3"))        { return special_descriptor_rns_3(); }
+    if (@strEq(name, "l32"))          { return special_descriptor_l32(); }
+    if (@strEq(name, "l16"))          { return special_descriptor_l16(); }
+    if (@strEq(name, "bf16"))         { return special_descriptor_bf16(); }
+    if (@strEq(name, "mx_fp8"))       { return special_descriptor_mx_fp8(); }
+    if (@strEq(name, "mx_fp4"))       { return special_descriptor_mx_fp4(); }
+    if (@strEq(name, "vsa_b<256>"))   { return special_descriptor_vsa_b256(); }
+    if (@strEq(name, "vsa_b<4096>"))  { return special_descriptor_vsa_b4096(); }
+    return null;
+}

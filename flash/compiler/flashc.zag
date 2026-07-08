@@ -1,0 +1,525 @@
+// flash/compiler/flashc.zag — Flash compiler driver.
+//
+// Usage:
+//   flashc <file.flash.zag> [-o output] [--emit-manifest] [--emit-zag]
+//          [--check] [--verbose] [--run]
+//
+// Pipeline: read file → lex → parse → sema → codegen → emit manifest
+//           → write Zag shim → invoke znc for final native compile.
+
+@import("../toolchain/zag-poc/std/list.zag")
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("../toolchain/zag-poc/selfhost/zagmod.zag")
+@import("../toolchain/zag-poc/selfhost/std/process.zag")
+@import("parse.zag")
+@import("flash_parse.zag")
+@import("flash_emit_zag.zag")
+@import("flash_sema_surface.zag")
+@import("codegen.zag")
+@import("manifest.zag")
+
+fn fc_has_flag(name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < process_arg_count()) {
+        if (@strEq(process_arg(i), name)) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fc_find_path(start: i32) []u8 {
+    let i: i32 = start;
+    while (i < process_arg_count()) {
+        let a: []u8 = process_arg(i);
+        if (a.len > 0) {
+            if (a[0] != '-') { return a; }
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn fc_flag_value(name: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < process_arg_count()) {
+        if (@strEq(process_arg(i), name)) {
+            if (i + 1 < process_arg_count()) { return process_arg(i + 1); }
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn fc_ends_with(s: []u8, suf: []u8) i32 {
+    if (s.len < suf.len) { return 0; }
+    let off: i32 = s.len - suf.len;
+    let i: i32 = 0;
+    while (i < suf.len) {
+        if (s[off + i] != suf[i]) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn fc_stem_of(path: []u8) []u8 {
+    let slash: i32 = -1;
+    let i: i32 = 0;
+    while (i < path.len) {
+        if (path[i] == '/') { slash = i; }
+        i = i + 1;
+    }
+    let base: []u8 = path;
+    if (slash >= 0) { base = path[slash + 1..]; }
+    if (fc_ends_with(base, ".flash.zag") == 1) {
+        return base[0..base.len - 10];
+    }
+    if (fc_ends_with(base, ".flash") == 1) {
+        return base[0..base.len - 6];
+    }
+    let dot: i32 = -1;
+    let j: i32 = 0;
+    while (j < base.len) {
+        if (base[j] == '.') { dot = j; }
+        j = j + 1;
+    }
+    if (dot > 0) { return base[0..dot]; }
+    return base;
+}
+
+fn fc_dir_of(path: []u8) []u8 {
+    let slash: i32 = -1;
+    let i: i32 = 0;
+    while (i < path.len) {
+        if (path[i] == '/') { slash = i; }
+        i = i + 1;
+    }
+    if (slash < 0) { return "."; }
+    return path[0..slash];
+}
+
+fn fc_substr_at(hay: []u8, needle: []u8) i32 {
+    if (needle.len < 1 || hay.len < needle.len) { return -1; }
+    let i: i32 = 0;
+    while (i <= hay.len - needle.len) {
+        let j: i32 = 0;
+        let ok: i32 = 1;
+        while (j < needle.len) {
+            if (hay[i + j] != needle[j]) { ok = 0; }
+            j = j + 1;
+        }
+        if (ok == 1) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn fc_rel_path(path: []u8) []u8 {
+    let ex: i32 = fc_substr_at(path, "examples/");
+    if (ex >= 0) { return path[ex..]; }
+    let sh: i32 = fc_substr_at(path, "selfhost/");
+    if (sh >= 0) { return path[sh..]; }
+    let td: i32 = fc_substr_at(path, "flash/compiler/testdata/");
+    if (td >= 0) { return path[td..]; }
+    let fc: i32 = fc_substr_at(path, "flash/compiler/");
+    if (fc >= 0) { return path[fc..]; }
+    if (path.len >= 2 && path[0] == '.' && path[1] == '/') {
+        return path[2..];
+    }
+    return path;
+}
+
+fn fc_read_flash_mod() ZagMod {
+    let path: []u8 = "flash.mod";
+    let src: []u8 = _zag_read_file(path);
+    if (src.len < 0) {
+        _zag_println("flashc: cannot read flash.mod");
+        process_exit(1);
+    }
+    return zagmod_parse(src);
+}
+
+fn fc_validate_deps(mod_: ZagMod) void {
+    let i: i32 = 0;
+    let n: i32 = len[Dep](mod_.deps);
+    let found_zag: i32 = 0;
+    while (i < n) {
+        let d: Dep = get[Dep](mod_.deps, i);
+        if (@strEq(d.name, "zag")) {
+            found_zag = 1;
+            if (_zag_file_exists(d.path) == 0) {
+                _zag_print("flashc: zag dep missing at ");
+                _zag_println(d.path);
+                process_exit(1);
+            }
+        }
+        i = i + 1;
+    }
+    if (found_zag == 0) {
+        _zag_println("flashc: flash.mod must declare [deps] zag");
+        process_exit(1);
+    }
+}
+
+fn fc_write_or_die(path: []u8, text: []u8) void {
+    let rc: i32 = _zag_write_file(path, text);
+    if (rc != 0) {
+        _zag_print("flashc: failed to write ");
+        _zag_println(path);
+        process_exit(1);
+    }
+}
+
+fn fc_znc_path(mod_: ZagMod) []u8 {
+    let env: []u8 = _zag_getenv("ZNC");
+    if (env.len > 0 && _zag_file_exists(env) == 1) { return env; }
+    let i: i32 = 0;
+    while (i < len[Dep](mod_.deps)) {
+        let d: Dep = get[Dep](mod_.deps, i);
+        if (@strEq(d.name, "zag")) {
+            return _zag_str_concat(d.path, "/znc");
+        }
+        i = i + 1;
+    }
+    if (_zag_file_exists("flash/toolchain/flashz") == 1) { return "flash/toolchain/flashz"; }
+    return "../zag/zag-poc/znc";
+}
+
+fn fc_compile_shim(znc: []u8, shim_path: []u8, out_path: []u8) i32 {
+    let cmd: []u8 = znc;
+    cmd = _zag_str_concat(cmd, " ");
+    cmd = _zag_str_concat(cmd, shim_path);
+    cmd = _zag_str_concat(cmd, " -o ");
+    cmd = _zag_str_concat(cmd, out_path);
+    return process_run_shell(cmd);
+}
+
+// Surface programs start with the `program` keyword; anything else (fn/struct/
+// enum/@import at top level) is a full-language Flash source.
+fn fc_is_surface(text: []u8) i32 {
+    let i: i32 = 0;
+    let n: i32 = text.len;
+    while (i < n) {
+        let c: i32 = text[i] as i32;
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            i = i + 1;
+        } else if (c == '/' && i + 1 < n && (text[i + 1] as i32) == '/') {
+            while (i < n && (text[i] as i32) != '\n') { i = i + 1; }
+        } else {
+            let start: i32 = i;
+            while (i < n) {
+                let w: i32 = text[i] as i32;
+                let is_word: i32 = 0;
+                if (w >= 'a' && w <= 'z') { is_word = 1; }
+                if (w >= 'A' && w <= 'Z') { is_word = 1; }
+                if (w == '_') { is_word = 1; }
+                if (is_word == 0) {
+                    if (@strEq(text[start..i], "program") == 1) { return 1; }
+                    return 0;
+                }
+                i = i + 1;
+            }
+            if (@strEq(text[start..n], "program") == 1) { return 1; }
+            return 0;
+        }
+    }
+    return 0;
+}
+
+fn fc_path_join(dir: []u8, rel: []u8) []u8 {
+    if (rel.len > 0 && rel[0] == '/') { return rel; }
+    if (@strEq(dir, ".") == 1) { return rel; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), rel);
+}
+
+fn fc_list_has(list: *ArrayList[[]u8], s: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](list.*)) {
+        if (@strEq(get[[]u8](list.*, i), s) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+// Collect declarations across Flash-to-Flash imports: @import of a
+// *.flash.zag path splices that file's decls into the same compilation
+// (deduped by file); other @imports pass through to the shim verbatim
+// (deduped by path).
+fn fc_collect_decls(
+    path: []u8,
+    out_decls: *ArrayList[*FlashNode],
+    seen_files: *ArrayList[[]u8],
+    seen_imports: *ArrayList[[]u8],
+) i32 {
+    if (fc_list_has(seen_files, path) == 1) { return 0; }
+    push[[]u8](seen_files, path);
+
+    let text: []u8 = _zag_read_file(path);
+    if (text.len < 0) {
+        _zag_print("flashc: cannot read import ");
+        _zag_println(path);
+        return 1;
+    }
+    let pr: FlashProgResult = flash_parse_program(text);
+    if (pr.err != 0) {
+        _zag_print("flashc: parse errors in ");
+        _zag_println(path);
+        return 1;
+    }
+
+    let errs: i32 = 0;
+    let dir: []u8 = fc_dir_of(path);
+    let i: i32 = 0;
+    while (i < len[*FlashNode](pr.decls)) {
+        let d: *FlashNode = get[*FlashNode](pr.decls, i);
+        let flash_import: i32 = 0;
+        let imp_path: []u8 = "";
+        switch (d.*) {
+            .import_ => |imp| {
+                if (fc_ends_with(imp.path, ".flash.zag") == 1 || fc_ends_with(imp.path, ".flash") == 1) {
+                    flash_import = 1;
+                    imp_path = imp.path;
+                } else if (fc_list_has(seen_imports, imp.path) == 0) {
+                    push[[]u8](seen_imports, imp.path);
+                    push[*FlashNode](out_decls, d);
+                }
+            }
+            else => {
+                push[*FlashNode](out_decls, d);
+            }
+        }
+        if (flash_import == 1) {
+            errs = errs + fc_collect_decls(
+                fc_path_join(dir, imp_path), out_decls, seen_files, seen_imports);
+        }
+        i = i + 1;
+    }
+    return errs;
+}
+
+// Full-language pipeline: parse (+ Flash imports) → emit Zag → shim → znc.
+// Type checking is delegated to znc for now (stage-0 bootstrap posture).
+fn fc_compile_full(src: []u8, text: []u8, mod_: ZagMod) i32 {
+    let check_only: i32 = fc_has_flag("--check");
+    let emit_zag_only: i32 = fc_has_flag("--emit-zag");
+
+    fc_log("flashc: parse (full language)");
+    let decls: ArrayList[*FlashNode] = make[*FlashNode](32);
+    let seen_files: ArrayList[[]u8] = make[[]u8](8);
+    let seen_imports: ArrayList[[]u8] = make[[]u8](8);
+    let errs: i32 = fc_collect_decls(src, &decls, &seen_files, &seen_imports);
+    if (errs > 0) {
+        _zag_println("flashc: parse errors — aborting");
+        return 1;
+    }
+
+    if (check_only == 1) {
+        fc_log("flashc: sema");
+        let nerr: i32 = sema_check_program(decls, src);
+        if (nerr > 0) {
+            _zag_println("flashc: semantic errors — aborting");
+            return 1;
+        }
+        _zag_println("flashc: --check ok");
+        return 0;
+    }
+
+    fc_log("flashc: emit zag");
+    let er: FezResult = fez_emit_program(decls);
+
+    let shim_path: []u8 = fc_shim_path(src);
+    let shim_dir: []u8 = fc_dir_of(shim_path);
+    let out: ArrayList[u8] = make[u8](4096);
+    cg_emit_shim_imports(&out, shim_dir, er.has_raw, 0);
+    let ei: i32 = 0;
+    while (ei < er.src.len) {
+        push[u8](&out, er.src.data[ei]);
+        ei = ei + 1;
+    }
+    fc_write_or_die(shim_path, out.data[0..out.len]);
+    _zag_print("flashc: wrote shim ");
+    _zag_println(shim_path);
+
+    if (fc_has_flag("--emit-manifest") == 1) {
+        let stem: []u8 = fc_stem_of(src);
+        let mani: CoordinateManifest = manifest_new(stem, "0.1.0");
+        let mtext: []u8 = manifest_write(&mani);
+        let mpath: []u8 = fc_manifest_path(src);
+        fc_write_or_die(mpath, mtext);
+        _zag_print("flashc: emitted manifest ");
+        _zag_println(mpath);
+    }
+
+    if (emit_zag_only == 1) {
+        _zag_println("flashc: --emit-zag done");
+        return 0;
+    }
+
+    let out_path: []u8 = fc_flag_value("-o");
+    if (out_path.len == 0) { out_path = fc_default_out(src); }
+
+    let znc: []u8 = fc_znc_path(mod_);
+    fc_log("flashc: znc");
+    let rc: i32 = fc_compile_shim(znc, shim_path, out_path);
+    if (rc != 0) {
+        _zag_println("flashc: znc compile failed");
+        return 1;
+    }
+    _zag_print("flashc: built ");
+    _zag_println(out_path);
+
+    if (fc_has_flag("--run") == 1) {
+        let runcmd: []u8 = out_path;
+        if (out_path.len > 0 && out_path[0] != '/') {
+            runcmd = _zag_str_concat("./", out_path);
+        }
+        _zag_println("flashc: -- running --");
+        _zag_flush();
+        let run_rc: i32 = process_run_shell(runcmd);
+        return run_rc;
+    }
+
+    return 0;
+}
+
+fn fc_usage() void {
+    _zag_println("usage: flashc <file.flash> [-o output] [--emit-manifest] [--emit-zag]");
+    _zag_println("       [--check] [--verbose] [--run]");
+    _zag_println("  --check       semantic analysis only (no codegen/znc)");
+    _zag_println("  --emit-zag    emit Zag shim only (skip znc link)");
+    _zag_println("  --verbose     print pipeline stages");
+    _zag_println("  Pipeline: read → lex → parse → sema → codegen → manifest → znc");
+}
+
+fn fc_default_out(src: []u8) []u8 {
+    return _zag_str_concat(fc_stem_of(src), ".out");
+}
+
+fn fc_shim_path(src: []u8) []u8 {
+    let stem: []u8 = fc_stem_of(src);
+    let dir: []u8 = fc_dir_of(src);
+    let base: []u8 = _zag_str_concat(stem, "_shim.zag");
+    if (@strEq(dir, ".") == 1) { return base; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), base);
+}
+
+fn fc_manifest_path(src: []u8) []u8 {
+    let dir: []u8 = fc_dir_of(src);
+    if (@strEq(dir, ".") == 1) { return "flash.manifest"; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), "flash.manifest");
+}
+
+fn fc_verbose() i32 {
+    return fc_has_flag("--verbose");
+}
+
+fn fc_log(msg: []u8) void {
+    if (fc_verbose() == 1) {
+        _zag_println(msg);
+    }
+}
+
+fn main() i32 {
+    if (process_arg_count() < 2) {
+        fc_usage();
+        return 1;
+    }
+
+    let src: []u8 = fc_rel_path(fc_find_path(1));
+    if (src.len == 0) {
+        fc_usage();
+        return 1;
+    }
+
+    let check_only: i32 = fc_has_flag("--check");
+    let emit_zag_only: i32 = fc_has_flag("--emit-zag");
+
+    let mod_: ZagMod = fc_read_flash_mod();
+    fc_validate_deps(mod_);
+
+    fc_log("flashc: reading source");
+    if (fc_verbose() == 0) {
+        _zag_print("flashc: ");
+        _zag_println(src);
+    }
+    let text: []u8 = _zag_read_file(src);
+    if (text.len < 0) {
+        _zag_print("flashc: cannot read ");
+        _zag_println(src);
+        return 1;
+    }
+
+    if (fc_is_surface(text) == 0) {
+        return fc_compile_full(src, text, mod_);
+    }
+
+    fc_log("flashc: parse");
+    let parse_res: FlashParseResult = flash_parse(text, src);
+    if (parse_res.err != 0) {
+        _zag_println("flashc: parse errors — aborting");
+        return 1;
+    }
+    let prog: FlashProgram = parse_res.prog;
+
+    fc_log("flashc: sema");
+    let nerr: i32 = flash_sema_surface(&prog, src);
+    if (nerr > 0) {
+        _zag_println("flashc: semantic errors — aborting");
+        return 1;
+    }
+
+    if (check_only == 1) {
+        _zag_println("flashc: --check ok");
+        return 0;
+    }
+
+    fc_log("flashc: codegen");
+    let shim_path: []u8 = fc_shim_path(src);
+    let shim_dir: []u8 = fc_dir_of(shim_path);
+    let bundle: FlashCodegenBundle = flash_codegen_all(&prog, shim_dir);
+    fc_write_or_die(shim_path, bundle.shim_buf.data[0..bundle.shim_buf.len]);
+    _zag_print("flashc: wrote shim ");
+    _zag_println(shim_path);
+
+    if (fc_has_flag("--emit-manifest") == 1) {
+        let mtext: []u8 = manifest_write(&bundle.manifest);
+        let mpath: []u8 = fc_manifest_path(src);
+        fc_write_or_die(mpath, mtext);
+        _zag_print("flashc: emitted manifest ");
+        _zag_println(mpath);
+    }
+
+    if (emit_zag_only == 1) {
+        _zag_println("flashc: --emit-zag done");
+        return 0;
+    }
+
+    let out_path: []u8 = fc_flag_value("-o");
+    if (out_path.len == 0) { out_path = fc_default_out(src); }
+
+    let znc: []u8 = fc_znc_path(mod_);
+    fc_log("flashc: znc");
+    if (fc_verbose() == 1) {
+        _zag_print("flashc: znc ");
+        _zag_println(znc);
+    }
+    let rc: i32 = fc_compile_shim(znc, shim_path, out_path);
+    if (rc != 0) {
+        _zag_println("flashc: znc compile failed");
+        return 1;
+    }
+    _zag_print("flashc: built ");
+    _zag_println(out_path);
+
+    if (fc_has_flag("--run") == 1) {
+        let runcmd: []u8 = out_path;
+        if (out_path.len > 0 && out_path[0] != '/') {
+            runcmd = _zag_str_concat("./", out_path);
+        }
+        _zag_println("flashc: -- running --");
+        _zag_flush();
+        let run_rc: i32 = process_run_shell(runcmd);
+        return run_rc;
+    }
+
+    return 0;
+}

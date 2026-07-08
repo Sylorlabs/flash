@@ -1,0 +1,22 @@
+// flash/stdlib/flash_slim.zag — slim runtime umbrella for GENERATED SHIMS.
+//
+//   @import("flash/stdlib/flash_slim.zag")
+//
+// Everything flash_std re-exports EXCEPT photonic.zag (the session API), which
+// transitively pulls the Zag spatial/manifest originals (hardware_manager,
+// flash_to_zag, grid, ...). Shims never call the session API, and keeping those
+// originals out of shim compilations frees their names for the Flash ports in
+// selfhost/lib to claim as real symbols. Programs that want the session API can
+// still @import flash/stdlib/photonic.zag (or flash_std.zag) explicitly.
+//
+// Re-exports:
+//   trit / photon       — balanced-ternary + carrier structs
+//   io                  — print_trit, print_wave, print_type_info
+//   numeric_ops         — trit_to_i32, posit_to_trit_lanes, fp_to_amplitude
+//   catalog             — flash/types/numeric/catalog (type families + lookup)
+
+@import("trit.zag")
+@import("photon.zag")
+@import("io.zag")
+@import("numeric_ops.zag")
+@import("../types/numeric/catalog.zag")

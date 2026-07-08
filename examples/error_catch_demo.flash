@@ -1,0 +1,48 @@
+// examples/error_catch_demo.flash — try / catch / orelse / !T / error sets.
+
+error { DivideByZero, Negative };
+
+extern fn _zag_print(s: []u8) void;
+extern fn _zag_println(s: []u8) void;
+extern fn _zag_i64_to_str(v: i64) []u8;
+
+fn divide(a: i32, b: i32) !i32 {
+    if (b == 0) { return error.DivideByZero; }
+    if (a < 0) { return error.Negative; }
+    return a / b;
+}
+
+fn maybe_half(x: i32) ?i32 {
+    if (x == 0) { return null; }
+    return x / 2;
+}
+
+fn run_checks() !i32 {
+    let ok: i32 = try divide(20, 2);
+    _zag_print("try_val=");
+    _zag_println(_zag_i64_to_str(ok as i64));
+
+    let fb: i32 = divide(10, 0) catch -1;
+    _zag_print("catch_fb=");
+    _zag_println(_zag_i64_to_str(fb as i64));
+
+    let cap: i32 = divide(10, 0) catch |e| e;
+    _zag_print("catch_cap=");
+    _zag_println(_zag_i64_to_str(cap as i64));
+
+    let ov: i32 = maybe_half(8) orelse 99;
+    _zag_print("orelse_val=");
+    _zag_println(_zag_i64_to_str(ov as i64));
+
+    let ofb: i32 = maybe_half(0) orelse 99;
+    _zag_print("orelse_fb=");
+    _zag_println(_zag_i64_to_str(ofb as i64));
+
+    _zag_println("errors=DivideByZero,Negative");
+    _zag_println("error_catch_demo: ok");
+    return 0;
+}
+
+fn main() i32 {
+    return run_checks() catch 1;
+}

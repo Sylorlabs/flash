@@ -1,0 +1,7 @@
+// harsh_catch_type.flash — must fail stage-1 --check (catch on non-error expr).
+
+fn main() i32 {
+    let ok: i32 = 10;
+    let bad: i32 = ok catch 0;
+    return bad;
+}

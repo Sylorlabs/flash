@@ -1,0 +1,39 @@
+// tests/ternary_smoke.zag — basic balanced-trit arithmetic smoke test.
+
+@import("../flash/toolchain/zag-poc/std/rt.zag")
+@import("../flash/stdlib/trit.zag")
+
+fn expect_trit(actual: Trit, expected: i32, label: []u8) void {
+    if (trit_val(actual) != expected) {
+        _zag_print("FAIL ");
+        _zag_print(label);
+        _zag_print(" got ");
+        print_i32(trit_val(actual));
+        _zag_print(" want ");
+        print_i32(expected);
+        _zag_println("");
+        _zag_exit(1);
+    }
+}
+
+fn main() i32 {
+    let a: Trit = trit(1);
+    let b: Trit = trit(-1);
+    let z: Trit = trit(0);
+
+    expect_trit(trit_add(a, b), 0, "add(+1,-1)");
+    expect_trit(trit_add(a, z), 1, "add(+1,0)");
+    // Balanced carry: +1 + +1 = 2 → sum trit -1, carry +1 (not clamped +1).
+    expect_trit(trit_add(a, a), -1, "add(+1,+1) balanced sum -1 carry +1");
+    expect_trit(trit_mul(a, b), -1, "mul(+1,-1)");
+    expect_trit(trit_mul(b, b), 1, "mul(-1,-1)");
+    expect_trit(trit_neg(a), -1, "neg(+1)");
+    expect_trit(trit_nand(a, b), 1, "nand(+1,-1)");
+    expect_trit(trit_nand(z, z), 0, "nand(0,0)");
+
+    if (trit_eq(a, a) != 1) { _zag_println("FAIL trit_eq reflexive"); _zag_exit(1); }
+    if (trit_eq(a, b) != 0) { _zag_println("FAIL trit_eq distinct"); _zag_exit(1); }
+
+    _zag_println("ternary_smoke: ok");
+    return 0;
+}

@@ -1,0 +1,26 @@
+// flash/wave/wave_std.zag — umbrella import for Flash wave standard library
+//
+//   @import("flash/wave/wave_std.zag") as wave
+//
+// Re-exports:
+//   types (via wave_types) — VoxelCoord, WaveSample, HorizontalBeam, VerticalPipeline
+//   pipeline               — stream_up, read_voxel, vertical_polarity
+//   interference           — shield, partition, collide, merge_waves
+//   raw                    — fire_shield, inject_phase, set_laser_mw, target_voxel,
+//                            manual_polarity
+//
+// DEPENDENCIES:
+//   flash/types/{wave_types,wave,beam,phase}.zag
+//   flash/ternary/trit.zag
+//   photonic runtime: _flash_* extern symbols from raw.zag / pipeline.zag
+//
+// Consumers that call raw.* or pipeline.* must also import the driver that
+// supplies those extern bodies:
+//
+//   @import("flash/runtime/photonic_rt.zag")
+//   @import("flash/wave/wave_std.zag") as wave
+
+@import("../types/wave_types.zag")
+@import("pipeline.zag") as pipeline
+@import("interference.zag") as interference
+@import("raw.zag") as raw

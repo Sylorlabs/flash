@@ -1,0 +1,6 @@
+// flash/compiler/testdata/trit_ops.flash.zag — trit bindings + trit_add op.
+program trit_ops
+
+trit x = +1
+trit y = T
+let trit_add(x, y) = z

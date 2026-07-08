@@ -1,0 +1,196 @@
+// flash/types/numeric/numeric_common.zag — shared numeric catalog primitives.
+//
+// Flash is BALANCED-TERNARY NATIVE: the t-family (t_units.zag) is the home
+// radix and encodes with zero conversion cost on ternary hardware. Binary
+// families (i/u/fp/...) are interop contracts; each descriptor declares its
+// embedding cost into trits (trit_encoding_bits). The mirror
+// (num_bit_encoding_bits) prices ternary payloads on binary hosts — which is
+// what today's bootstrap toolchain pays, and what real hardware retires.
+
+// Type family tags used by Flash SEMA family checks.
+fn FAMILY_NONE() i32     { return 0; }
+fn FAMILY_INTEGER() i32  { return 1; }
+fn FAMILY_POSIT() i32    { return 2; }
+fn FAMILY_FLOAT() i32    { return 4; }
+fn FAMILY_TRIT() i32     { return 8; }
+fn FAMILY_WAVE() i32     { return 16; }
+fn FAMILY_BEAM() i32     { return 32; }
+fn FAMILY_PHASE() i32    { return 64; }
+
+// Descriptor kind (orthogonal to SEMA family bitmask).
+fn KIND_SIGNED_INT() i32    { return 1; }
+fn KIND_UNSIGNED_INT() i32  { return 2; }
+fn KIND_FLOAT() i32         { return 3; }
+fn KIND_POSIT() i32         { return 4; }
+fn KIND_QUIRE() i32         { return 5; }
+fn KIND_SATURATING() i32    { return 6; }
+fn KIND_FIXED() i32         { return 7; }
+fn KIND_BIGNUM() i32        { return 8; }
+fn KIND_RNS() i32           { return 9; }
+fn KIND_LNS() i32           { return 10; }
+fn KIND_VSA() i32           { return 11; }
+fn KIND_MICROSCALE() i32    { return 12; }
+fn KIND_TRIT_INT() i32      { return 13; }   // balanced-ternary integer (native family)
+
+struct TypeDescriptor {
+    name: []u8,
+    kind: i32,
+    width: i32,
+    signed: i32,
+    min_val: i64,
+    max_val: i64,
+    trit_encoding_bits: i32,
+    storage_bytes: i32,
+    es: i32,
+    useed: i32,
+    nbits: i32,
+    exponent_bits: i32,
+    mantissa_bits: i32,
+    ieee_binary: i32,
+    int_bits: i32,
+    frac_bits: i32,
+    moduli_count: i32,
+}
+
+fn td_empty() TypeDescriptor {
+    return TypeDescriptor{
+        .name = "",
+        .kind = 0,
+        .width = 0,
+        .signed = 0,
+        .min_val = 0,
+        .max_val = 0,
+        .trit_encoding_bits = 0,
+        .storage_bytes = 0,
+        .es = 0,
+        .useed = 0,
+        .nbits = 0,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = 0,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn num_pow2(exp: i32) i64 {
+    if (exp <= 0) { return 1; }
+    let r: i64 = 1;
+    let i: i32 = 0;
+    while (i < exp) {
+        r = r * 2;
+        i = i + 1;
+    }
+    return r;
+}
+
+fn num_pow3(exp: i32) i64 {
+    if (exp <= 0) { return 1; }
+    let r: i64 = 1;
+    let i: i32 = 0;
+    while (i < exp) {
+        r = r * 3;
+        i = i + 1;
+    }
+    return r;
+}
+
+// Minimum balanced-trit lanes to losslessly tag a `width`-bit payload.
+fn num_trit_encoding_bits(width: i32) i32 {
+    if (width <= 0) { return 0; }
+    if (width <= 48) {
+        let payload: i64 = num_pow2(width);
+        let trits: i32 = 0;
+        let cap: i64 = 1;
+        while (cap < payload) {
+            cap = cap * 3;
+            trits = trits + 1;
+        }
+        return trits;
+    }
+    // ceil(width / log2(3)) for wide types (quire, VSA) without 2^width loops.
+    let num: i32 = width * 1000;
+    let den: i32 = 1585;
+    let q: i32 = num / den;
+    let r: i32 = num - q * den;
+    if (r > 0) { return q + 1; }
+    return q;
+}
+
+fn num_storage_bytes(width: i32, is_signed: i32) i32 {
+    if (width <= 8)  { return 1; }
+    if (width <= 16) { return 2; }
+    if (width <= 32) { return 4; }
+    return 8;
+}
+
+fn num_parse_uint_suffix(name: []u8, start: i32) i32 {
+    if (start >= name.len) { return -1; }
+    let v: i32 = 0;
+    let i: i32 = start;
+    while (i < name.len) {
+        let c: i32 = name[i] as i32;
+        if (c < 48 || c > 57) { return -1; }
+        v = v * 10 + (c - 48);
+        if (v > 127) { return -1; }
+        i = i + 1;
+    }
+    return v;
+}
+
+fn num_signed_min(width: i32) i64 {
+    if (width <= 0) { return 0; }
+    if (width > 63) { return 0; }
+    return 0 - num_pow2(width - 1);
+}
+
+fn num_signed_max(width: i32) i64 {
+    if (width <= 0) { return 0; }
+    if (width > 63) { return 0; }
+    return num_pow2(width - 1) - 1;
+}
+
+fn num_unsigned_max(width: i32) i64 {
+    if (width <= 0) { return 0; }
+    if (width > 63) { return 0; }
+    return num_pow2(width) - 1;
+}
+
+// Balanced-ternary integer range: `width` trits hold ±(3^width − 1)/2.
+// Sign is intrinsic to the digits — there is no unsigned variant to define.
+// 3^40 still fits i64, so ranges are exact through t40; wider units are
+// catalog metadata only (0 sentinel, like i/u units past 63 bits).
+fn num_trit_signed_min(width: i32) i64 {
+    if (width <= 0) { return 0; }
+    if (width > 40) { return 0; }
+    return 0 - ((num_pow3(width) - 1) / 2);
+}
+
+fn num_trit_signed_max(width: i32) i64 {
+    if (width <= 0) { return 0; }
+    if (width > 40) { return 0; }
+    return (num_pow3(width) - 1) / 2;
+}
+
+// Mirror of num_trit_encoding_bits: minimum binary bits to losslessly hold a
+// `width`-trit balanced payload (incl. sign) — what a BINARY host pays to
+// carry the native family. ceil(width·log2(3)) + 1 sign bit.
+fn num_bit_encoding_bits(width: i32) i32 {
+    if (width <= 0) { return 0; }
+    let num: i32 = width * 1585;
+    let q: i32 = num / 1000;
+    let r: i32 = num - q * 1000;
+    if (r > 0) { q = q + 1; }
+    return q + 1;
+}
+
+fn num_starts_with(t: []u8, prefix: []u8) i32 {
+    if (t.len < prefix.len) { return 0; }
+    let i: i32 = 0;
+    while (i < prefix.len) {
+        if (t[i] != prefix[i]) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}

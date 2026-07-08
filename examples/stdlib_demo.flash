@@ -1,0 +1,28 @@
+// examples/stdlib_demo.flash — demonstrates selfhost/std fmt + vec modules.
+
+@import("std/fmt.flash")
+@import("std/vec.flash")
+
+fn main() i32 {
+    let v: Vec[i32] = vec_new[i32](4);
+    vec_push[i32](&v, 7);
+    vec_push[i32](&v, 8);
+    vec_push[i32](&v, 9);
+
+    _zag_print("len=");
+    flash_println_str(flash_fmt_int(vec_len[i32](v)));
+
+    _zag_print("mid=");
+    flash_println_str(flash_fmt_int(vec_get[i32](v, 1)));
+
+    let parts: ArrayList[[]u8] = make[[]u8](4);
+    push[[]u8](&parts, "x");
+    push[[]u8](&parts, "y");
+    flash_println_str(flash_fmt_join(parts, "+"));
+
+    vec_free[i32](&v);
+    free[[]u8](&parts);
+
+    flash_println_str("stdlib_demo: ok");
+    return 0;
+}

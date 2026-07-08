@@ -1,0 +1,22 @@
+// examples/full_demo.flash.zag — comprehensive Flash surface demo.
+//
+// Exercises: trit bindings, wave carrier, p32 posit, sat_i16 clamp lane,
+// and a raw { } hardware block lowered to coordinate manifest paths.
+
+program full_demo
+
+trit a = +1
+trit b = T
+let trit_add(a, b) = sum
+
+wave carrier = default
+
+p32 energy = 1.5
+
+sat_i16 sample = 32000
+
+raw {
+    fire_shield(0, 0, 0, 2.5);
+    inject_phase(1, 0, 0, 0.785);
+    set_laser_mw(0, 0, 3.0);
+}

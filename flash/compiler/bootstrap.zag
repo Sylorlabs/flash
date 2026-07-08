@@ -1,0 +1,76 @@
+// flash/compiler/bootstrap.zag — Flash compiler bootstrap entry point.
+//
+// Wires Flash stdlib + Zag spatial modules, compiles a ternary program through
+// flash_to_zag, and emits the coordinate manifest artifact.
+//
+// Usage (from flash project root):
+//   ../zag/zag-poc/znc build flash/compiler/bootstrap.zag -o flash-bootstrap
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("../toolchain/zag-poc/selfhost/zagmod.zag")
+@import("../stdlib/trit.zag")
+@import("../stdlib/photon.zag")
+@import("manifest.zag")
+@import("flash_to_zag.zag")
+
+fn bootstrap_read_flash_mod() ZagMod {
+    let path: []u8 = "flash.mod";
+    let src: []u8 = _zag_read_file(path);
+    if (src.len < 0) {
+        _zag_println("flash bootstrap: cannot read flash.mod");
+        _zag_exit(1);
+    }
+    return zagmod_parse(src);
+}
+
+fn bootstrap_validate_deps(mod_: ZagMod) void {
+    let i: i32 = 0;
+    let n: i32 = len[Dep](mod_.deps);
+    let found_zag: i32 = 0;
+    while (i < n) {
+        let d: Dep = get[Dep](mod_.deps, i);
+        if (@strEq(d.name, "zag")) {
+            found_zag = 1;
+            if (_zag_file_exists(d.path) == 0) {
+                _zag_print("flash bootstrap: zag dep missing at ");
+                _zag_println(d.path);
+                _zag_exit(1);
+            }
+        }
+        i = i + 1;
+    }
+    if (found_zag == 0) {
+        _zag_println("flash bootstrap: flash.mod must declare [deps] zag");
+        _zag_exit(1);
+    }
+}
+
+fn bootstrap_emit_manifest(out_path: []u8, text: []u8) void {
+    let rc: i32 = _zag_write_file(out_path, text);
+    if (rc != 0) {
+        _zag_print("flash bootstrap: failed to write ");
+        _zag_println(out_path);
+        _zag_exit(1);
+    }
+}
+
+fn main() i32 {
+    _zag_println("flash bootstrap: loading flash.mod");
+    let mod_: ZagMod = bootstrap_read_flash_mod();
+    bootstrap_validate_deps(mod_);
+
+    _zag_print("flash bootstrap: package ");
+    _zag_print(mod_.name);
+    _zag_print(" ");
+    _zag_println(mod_.version);
+
+    _zag_println("flash bootstrap: compiling ternary program → spatial manifest");
+    let manifest: CoordinateManifest = compile_ternary_program("hello_photon");
+
+    let text: []u8 = manifest_write(&manifest);
+    bootstrap_emit_manifest("flash.manifest", text);
+
+    _zag_println("flash bootstrap: emitted flash.manifest");
+    print_i32(len[PathSegment](manifest.segments));
+    return 0;
+}

@@ -1,0 +1,111 @@
+// examples/layers_demo.flash.zag — vgpu v4 showcase: strokes and layers.
+//
+// Single-outline strokes: a wide semi-transparent bezier with NO seam
+// overdraw at joins, cap styles (butt / round / square), and join styles
+// (bevel / round). Offscreen layers: a group of overlapping shapes drawn
+// once, composited at several group opacities without internal double-
+// darkening, plus a blurred layer as a true group drop shadow.
+
+@import("../flash/driver/vgpu.flash")
+
+fn draw_group(l: *SoftFb) void {
+    // overlapping shapes — the classic group-opacity test
+    let c1: VPath = vg_path_new();
+    vg_circle(&c1, 44.0, 40.0, 30.0);
+    vg_fill(l, &c1, 255, 176, 32, 255);
+    let c2: VPath = vg_path_new();
+    vg_circle(&c2, 76.0, 40.0, 30.0);
+    vg_fill(l, &c2, 32, 200, 255, 255);
+    let bar: VPath = vg_path_new();
+    vg_rounded_rect(&bar, 20.0, 66.0, 80.0, 16.0, 8.0);
+    vg_fill(l, &bar, 240, 240, 250, 255);
+    softgpu_text(l, 38, 70, "GROUP", 30, 30, 50);
+}
+
+fn main() i32 {
+    let fb: SoftFb = softgpu_new(480, 300);
+
+    let bg: VPath = vg_path_new();
+    vg_move_to(&bg, 0.0, 0.0);
+    vg_line_to(&bg, 480.0, 0.0);
+    vg_line_to(&bg, 480.0, 300.0);
+    vg_line_to(&bg, 0.0, 300.0);
+    vg_close(&bg);
+    vg_fill_linear(&fb, &bg, 0.0, 0.0, 0.0, 300.0, 16, 18, 38, 255, 46, 32, 74, 255);
+
+    vg_text_dots(&fb, 24.0, 16.0, "STROKES + LAYERS", 2.0, 240, 240, 250, 255);
+
+    // ── seamless translucent stroke: one wide bezier at 40% alpha ───────────
+    let s: VPath = vg_path_new();
+    vg_move_to(&s, 30.0, 120.0);
+    vg_cubic_to(&s, 120.0, 50.0, 150.0, 160.0, 240.0, 96.0);
+    vg_cubic_to(&s, 320.0, 40.0, 380.0, 140.0, 450.0, 76.0);
+    vg_stroke(&fb, &s, 16.0, 120, 220, 255, 102);
+    softgpu_text(&fb, 30, 138, "TRANSLUCENT STROKE - NO SEAMS", 150, 150, 175);
+
+    // ── cap styles ───────────────────────────────────────────────────────────
+    let capk: i32 = 0;
+    while (capk < 3) {
+        let ln: VPath = vg_path_new();
+        vg_move_to(&ln, 40.0, 170.0 + (capk as f32) * 20.0);
+        vg_line_to(&ln, 120.0, 170.0 + (capk as f32) * 20.0);
+        vg_stroke_ex(&fb, &ln, 12.0, capk, vg_join_round(), 255, 176, 32, 255);
+        capk = capk + 1;
+    }
+    softgpu_text(&fb, 132, 166, "BUTT", 150, 150, 175);
+    softgpu_text(&fb, 132, 186, "ROUND", 150, 150, 175);
+    softgpu_text(&fb, 132, 206, "SQUARE", 150, 150, 175);
+    softgpu_text(&fb, 40, 226, "CAPS", 150, 150, 175);
+
+    // ── join styles on a zigzag ──────────────────────────────────────────────
+    let z1: VPath = vg_path_new();
+    vg_move_to(&z1, 210.0, 200.0);
+    vg_line_to(&z1, 240.0, 165.0);
+    vg_line_to(&z1, 270.0, 200.0);
+    vg_line_to(&z1, 300.0, 165.0);
+    vg_stroke_ex(&fb, &z1, 11.0, vg_cap_butt(), vg_join_bevel(), 150, 110, 235, 255);
+    let z2: VPath = vg_path_new();
+    vg_move_to(&z2, 210.0, 245.0);
+    vg_line_to(&z2, 240.0, 210.0);
+    vg_line_to(&z2, 270.0, 245.0);
+    vg_line_to(&z2, 300.0, 210.0);
+    vg_stroke_ex(&fb, &z2, 11.0, vg_cap_round(), vg_join_round(), 150, 110, 235, 255);
+    softgpu_text(&fb, 210, 254, "BEVEL / ROUND JOINS", 150, 150, 175);
+
+    // ── layers: draw the group once, composite at three opacities ───────────
+    let grp: SoftFb = vg_layer_new(120, 92);
+    draw_group(&grp);
+
+    // blurred copy of the layer = true group drop shadow
+    let sh: SoftFb = vg_layer_new(120, 92);
+    draw_group(&sh);
+    softgpu_clear(&sh, 0, 0, 0);
+    // reuse alpha plane: repaint shadow silhouette from coverage
+    let si: i32 = 0;
+    while (si < 120 * 92) {
+        if ((get[u8](sh.acc, si) as i32) > 0) {
+            set[u8](&sh.pix, si * 3, 0);
+            set[u8](&sh.pix, si * 3 + 1, 0);
+            set[u8](&sh.pix, si * 3 + 2, 0);
+        }
+        si = si + 1;
+    }
+    vg_blur_region(&sh, 0, 0, 120, 92, 4);
+
+    vg_layer_composite(&fb, &sh, 342, 168, 140);
+    vg_layer_composite(&fb, &grp, 336, 162, 255);
+    vg_layer_composite(&fb, &grp, 356, 108, 128);
+    vg_layer_composite(&fb, &grp, 226, 44, 64);
+    softgpu_text(&fb, 336, 262, "LAYER 100/50/25", 150, 150, 175);
+
+    let out: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/layers_demo.ppm" };
+    let rc: i32 = softgpu_present(out, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL layers present");
+        return 1;
+    }
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("layers_demo: ok");
+    return 0;
+}

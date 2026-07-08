@@ -1,0 +1,361 @@
+// flash/compiler/flash_ast.zag — Flash surface-syntax AST (monomorphization-ready).
+//
+// Tagged union FlashNode over heap pointers. Generic metadata lives on
+// FnDecl.tparams, StructDecl.tparams, Call.targs, StructLit.targs.
+// Method receivers stored as bare_name + recv_ty on FnDecl.
+
+@import("../toolchain/zag-poc/std/list.zag")
+
+struct Param { name: []u8, pty: []u8 }
+
+// ── declarations ──────────────────────────────────────────────────────────────
+struct FnDecl {
+    name:      []u8,              // mangled symbol (T_method for methods)
+    bare_name: []u8,              // source name before mangling
+    tparams:   ArrayList[[]u8],
+    params:    ArrayList[Param],
+    ret:       []u8,
+    annots:    ArrayList[[]u8],   // @photonic, @io, @realtime, ...
+    body:      ArrayList[*FlashNode],
+    is_method: i32,
+    recv_name: []u8,
+    recv_ty:   []u8,
+    line:      i32,
+}
+
+// Post-SEMA function bundle (shared by flash_sema_surface + flash_codegen).
+struct TypedFn {
+    decl:   FnDecl,
+    ret_ty: []u8,
+}
+
+struct StructDecl {
+    name:    []u8,
+    fields:  ArrayList[Param],
+    tparams: ArrayList[[]u8],
+    annots:  ArrayList[[]u8],
+}
+
+struct EnumDecl { name: []u8, members: ArrayList[[]u8] }
+
+struct Import {
+    path:      []u8,
+    alias:     []u8,
+    has_alias: i32,
+}
+
+// ── statements ────────────────────────────────────────────────────────────────
+struct Let {
+    name:     []u8,
+    dty:      []u8,
+    has_dty:  i32,
+    has_init: i32,
+    expr:     *FlashNode,
+}
+
+struct Return { has_expr: i32, expr: *FlashNode }
+
+struct If {
+    cond:      *FlashNode,
+    then_body: ArrayList[*FlashNode],
+    els_body:  ArrayList[*FlashNode],
+    has_els:   i32,
+    cap:       []u8,
+    has_cap:   i32,
+}
+
+struct UnionDecl {
+    name:   []u8,
+    fields: ArrayList[Param],
+}
+
+struct While { cond: *FlashNode, body: ArrayList[*FlashNode] }
+struct RawBlock { body: ArrayList[*FlashNode] }
+struct Assign  { target: *FlashNode, expr: *FlashNode }
+struct ExprStmt { expr: *FlashNode }
+
+struct SwitchArm {
+    tags:    ArrayList[[]u8],
+    cap:     []u8,
+    has_cap: i32,
+    body:    ArrayList[*FlashNode],
+}
+
+struct Switch {
+    subject:  *FlashNode,
+    arms:     ArrayList[SwitchArm],
+    els_body: ArrayList[*FlashNode],
+    has_els:  i32,
+}
+
+// ── expressions ───────────────────────────────────────────────────────────────
+struct TritLit { text: []u8 }
+struct IntLit  { text: []u8 }
+struct FloatLit { text: []u8 }
+struct StrLit  { text: []u8 }
+struct Ident   { name: []u8 }
+struct Bin     { op: []u8, l: *FlashNode, r: *FlashNode }
+struct Un      { op: []u8, e: *FlashNode }
+struct Call    { callee: *FlashNode, args: ArrayList[*FlashNode], targs: ArrayList[[]u8] }
+struct Cast    { expr: *FlashNode, target: []u8 }
+struct Field   { base: *FlashNode, fname: []u8 }
+struct Index   { base: *FlashNode, idx: *FlashNode }
+struct SliceExpr { base: *FlashNode, lo: *FlashNode, hi: *FlashNode, has_hi: i32 }
+struct FieldInit { name: []u8, val: *FlashNode }
+struct StructLit { sname: []u8, fields: ArrayList[FieldInit], targs: ArrayList[[]u8] }
+
+struct WaveExpr  { args: ArrayList[*FlashNode] }
+struct BeamExpr  { args: ArrayList[*FlashNode] }
+struct PhaseExpr { args: ArrayList[*FlashNode] }
+
+union FlashNode {
+    fn_decl:  FnDecl,
+    let_:     Let,
+    ret:      Return,
+    if_:      If,
+    while_:   While,
+    raw_:     RawBlock,
+    switch_:  Switch,
+    assign:   Assign,
+    estmt:    ExprStmt,
+    import_:  Import,
+    trit_:    TritLit,
+    ilit:     IntLit,
+    flit:     FloatLit,
+    slit:     StrLit,
+    id:       Ident,
+    bin:      Bin,
+    un:       Un,
+    call:     Call,
+    cast_:    Cast,
+    fld:      Field,
+    idx:      Index,
+    slice_:   SliceExpr,
+    slit_:    StructLit,
+    wave_:    WaveExpr,
+    beam_:    BeamExpr,
+    phase_:   PhaseExpr,
+    struct_:  StructDecl,
+    enum_:    EnumDecl,
+    union_d:  UnionDecl,
+}
+
+fn flash_node_code(n: *FlashNode) i32 {
+    return switch (n.*) {
+        .fn_decl  => |_x| 1,
+        .let_     => |_x| 2,
+        .ret      => |_x| 3,
+        .if_      => |_x| 4,
+        .while_   => |_x| 5,
+        .raw_     => |_x| 6,
+        .assign   => |_x| 7,
+        .estmt    => |_x| 8,
+        .switch_  => |_x| 9,
+        .import_  => |_x| 10,
+        .trit_    => |_x| 11,
+        .ilit     => |_x| 12,
+        .flit     => |_x| 13,
+        .slit     => |_x| 14,
+        .id       => |_x| 15,
+        .bin      => |_x| 16,
+        .un       => |_x| 17,
+        .call     => |_x| 18,
+        .cast_    => |_x| 19,
+        .fld      => |_x| 20,
+        .idx      => |_x| 21,
+        .slice_   => |_x| 26,
+        .slit_    => |_x| 22,
+        .wave_    => |_x| 23,
+        .beam_    => |_x| 24,
+        .phase_   => |_x| 25,
+        .struct_  => |_x| 30,
+        .enum_    => |_x| 31,
+        .union_d  => |_x| 32,
+    };
+}
+
+fn flash_is_numeric_family(ty: []u8) bool {
+    if (@strEq(ty, "i8") || @strEq(ty, "i16") || @strEq(ty, "i32") || @strEq(ty, "i64")) { return true; }
+    if (@strEq(ty, "u8") || @strEq(ty, "u16") || @strEq(ty, "u32") || @strEq(ty, "u64")) { return true; }
+    if (@strEq(ty, "sat_i8") || @strEq(ty, "sat_i16") || @strEq(ty, "sat_i32") || @strEq(ty, "sat_i64")) { return true; }
+    if (@strEq(ty, "f32") || @strEq(ty, "f64")) { return true; }
+    if (@strEq(ty, "p8") || @strEq(ty, "p16") || @strEq(ty, "p32") || @strEq(ty, "p64")) { return true; }
+    if (@strEq(ty, "wave") || @strEq(ty, "beam") || @strEq(ty, "phase") || @strEq(ty, "trit")) { return true; }
+    return false;
+}
+
+// ── constructors ──────────────────────────────────────────────────────────────
+fn flash_mk_trit(text: []u8) *FlashNode { return new(FlashNode{ .trit_ = TritLit{ .text = text } }); }
+fn flash_mk_int(text: []u8) *FlashNode { return new(FlashNode{ .ilit = IntLit{ .text = text } }); }
+fn flash_mk_float(text: []u8) *FlashNode { return new(FlashNode{ .flit = FloatLit{ .text = text } }); }
+fn flash_mk_str(text: []u8) *FlashNode { return new(FlashNode{ .slit = StrLit{ .text = text } }); }
+fn flash_mk_ident(name: []u8) *FlashNode { return new(FlashNode{ .id = Ident{ .name = name } }); }
+fn flash_mk_bin(op: []u8, l: *FlashNode, r: *FlashNode) *FlashNode {
+    return new(FlashNode{ .bin = Bin{ .op = op, .l = l, .r = r } });
+}
+fn flash_mk_un(op: []u8, e: *FlashNode) *FlashNode { return new(FlashNode{ .un = Un{ .op = op, .e = e } }); }
+fn flash_mk_field(base: *FlashNode, fname: []u8) *FlashNode {
+    return new(FlashNode{ .fld = Field{ .base = base, .fname = fname } });
+}
+fn flash_mk_index(base: *FlashNode, idx: *FlashNode) *FlashNode {
+    return new(FlashNode{ .idx = Index{ .base = base, .idx = idx } });
+}
+fn flash_mk_slice(base: *FlashNode, lo: *FlashNode, hi: *FlashNode, has_hi: i32) *FlashNode {
+    return new(FlashNode{ .slice_ = SliceExpr{ .base = base, .lo = lo, .hi = hi, .has_hi = has_hi } });
+}
+fn flash_mk_call(callee: *FlashNode, args: ArrayList[*FlashNode]) *FlashNode {
+    return new(FlashNode{ .call = Call{ .callee = callee, .args = args, .targs = make[[]u8](1) } });
+}
+fn flash_mk_gcall(callee: *FlashNode, args: ArrayList[*FlashNode], targs: ArrayList[[]u8]) *FlashNode {
+    return new(FlashNode{ .call = Call{ .callee = callee, .args = args, .targs = targs } });
+}
+fn flash_mk_cast(expr: *FlashNode, target: []u8) *FlashNode {
+    return new(FlashNode{ .cast_ = Cast{ .expr = expr, .target = target } });
+}
+fn flash_mk_assign(t: *FlashNode, e: *FlashNode) *FlashNode {
+    return new(FlashNode{ .assign = Assign{ .target = t, .expr = e } });
+}
+fn flash_mk_estmt(e: *FlashNode) *FlashNode { return new(FlashNode{ .estmt = ExprStmt{ .expr = e } }); }
+fn flash_mk_let(name: []u8, dty: []u8, has_dty: i32, has_init: i32, expr: *FlashNode) *FlashNode {
+    return new(FlashNode{ .let_ = Let{ .name = name, .dty = dty, .has_dty = has_dty, .has_init = has_init, .expr = expr } });
+}
+fn flash_mk_ret(has_expr: i32, expr: *FlashNode) *FlashNode {
+    return new(FlashNode{ .ret = Return{ .has_expr = has_expr, .expr = expr } });
+}
+fn flash_mk_if(cond: *FlashNode, then_body: ArrayList[*FlashNode], els_body: ArrayList[*FlashNode], has_els: i32) *FlashNode {
+    return new(FlashNode{ .if_ = If{ .cond = cond, .then_body = then_body, .els_body = els_body, .has_els = has_els, .cap = "", .has_cap = 0 } });
+}
+
+fn flash_mk_if_cap(cond: *FlashNode, then_body: ArrayList[*FlashNode], els_body: ArrayList[*FlashNode], has_els: i32, cap: []u8, has_cap: i32) *FlashNode {
+    return new(FlashNode{ .if_ = If{ .cond = cond, .then_body = then_body, .els_body = els_body, .has_els = has_els, .cap = cap, .has_cap = has_cap } });
+}
+fn flash_mk_while(cond: *FlashNode, body: ArrayList[*FlashNode]) *FlashNode {
+    return new(FlashNode{ .while_ = While{ .cond = cond, .body = body } });
+}
+fn flash_mk_raw(body: ArrayList[*FlashNode]) *FlashNode { return new(FlashNode{ .raw_ = RawBlock{ .body = body } }); }
+fn flash_mk_switch(subject: *FlashNode, arms: ArrayList[SwitchArm], els_body: ArrayList[*FlashNode], has_els: i32) *FlashNode {
+    return new(FlashNode{ .switch_ = Switch{ .subject = subject, .arms = arms, .els_body = els_body, .has_els = has_els } });
+}
+fn flash_mk_wave(args: ArrayList[*FlashNode]) *FlashNode { return new(FlashNode{ .wave_ = WaveExpr{ .args = args } }); }
+fn flash_mk_beam(args: ArrayList[*FlashNode]) *FlashNode { return new(FlashNode{ .beam_ = BeamExpr{ .args = args } }); }
+fn flash_mk_phase(args: ArrayList[*FlashNode]) *FlashNode { return new(FlashNode{ .phase_ = PhaseExpr{ .args = args } }); }
+fn flash_mk_import(path: []u8) *FlashNode { return new(FlashNode{ .import_ = Import{ .path = path, .alias = "", .has_alias = 0 } }); }
+
+fn flash_mk_fn(name: []u8, ret: []u8, body: ArrayList[*FlashNode]) *FlashNode {
+    return new(FlashNode{ .fn_decl = FnDecl{
+        .name = name, .bare_name = name, .tparams = make[[]u8](1), .params = make[Param](2),
+        .ret = ret, .annots = make[[]u8](1), .body = body, .is_method = 0,
+        .recv_name = "", .recv_ty = "", .line = 0,
+    } });
+}
+
+fn flash_mk_fn_ann(name: []u8, ret: []u8, annots: ArrayList[[]u8], body: ArrayList[*FlashNode]) *FlashNode {
+    return new(FlashNode{ .fn_decl = FnDecl{
+        .name = name, .bare_name = name, .tparams = make[[]u8](1), .params = make[Param](2),
+        .ret = ret, .annots = annots, .body = body, .is_method = 0,
+        .recv_name = "", .recv_ty = "", .line = 0,
+    } });
+}
+
+fn flash_mk_fn_params(name: []u8, ret: []u8, params: ArrayList[Param], body: ArrayList[*FlashNode]) *FlashNode {
+    return new(FlashNode{ .fn_decl = FnDecl{
+        .name = name, .bare_name = name, .tparams = make[[]u8](1), .params = params,
+        .ret = ret, .annots = make[[]u8](1), .body = body, .is_method = 0,
+        .recv_name = "", .recv_ty = "", .line = 0,
+    } });
+}
+
+fn flash_push_stmt(body: *ArrayList[*FlashNode], n: *FlashNode) void { push[*FlashNode](body, n); }
+
+fn flash_count_node(n: *FlashNode) i32 {
+    let c: i32 = 1;
+    switch (n.*) {
+        .fn_decl => |f| {
+            let i: i32 = 0;
+            while (i < len[*FlashNode](f.body)) {
+                c = c + flash_count_node(get[*FlashNode](f.body, i));
+                i = i + 1;
+            }
+        }
+        .let_ => |l| { if (l.has_init == 1) { c = c + flash_count_node(l.expr); } }
+        .ret => |r| { if (r.has_expr == 1) { c = c + flash_count_node(r.expr); } }
+        .if_ => |x| {
+            c = c + flash_count_node(x.cond);
+            let i: i32 = 0;
+            while (i < len[*FlashNode](x.then_body)) { c = c + flash_count_node(get[*FlashNode](x.then_body, i)); i = i + 1; }
+            if (x.has_els == 1) {
+                let j: i32 = 0;
+                while (j < len[*FlashNode](x.els_body)) { c = c + flash_count_node(get[*FlashNode](x.els_body, j)); j = j + 1; }
+            }
+        }
+        .while_ => |w| {
+            c = c + flash_count_node(w.cond);
+            let i: i32 = 0;
+            while (i < len[*FlashNode](w.body)) { c = c + flash_count_node(get[*FlashNode](w.body, i)); i = i + 1; }
+        }
+        .raw_ => |r| {
+            let i: i32 = 0;
+            while (i < len[*FlashNode](r.body)) { c = c + flash_count_node(get[*FlashNode](r.body, i)); i = i + 1; }
+        }
+        .switch_ => |sw| {
+            c = c + flash_count_node(sw.subject);
+            let ai: i32 = 0;
+            while (ai < len[SwitchArm](sw.arms)) {
+                let arm: SwitchArm = get[SwitchArm](sw.arms, ai);
+                let bi: i32 = 0;
+                while (bi < len[*FlashNode](arm.body)) { c = c + flash_count_node(get[*FlashNode](arm.body, bi)); bi = bi + 1; }
+                ai = ai + 1;
+            }
+            if (sw.has_els == 1) {
+                let ei: i32 = 0;
+                while (ei < len[*FlashNode](sw.els_body)) { c = c + flash_count_node(get[*FlashNode](sw.els_body, ei)); ei = ei + 1; }
+            }
+        }
+        .assign => |a| { c = c + flash_count_node(a.target) + flash_count_node(a.expr); }
+        .estmt => |e| { c = c + flash_count_node(e.expr); }
+        .bin => |b| { c = c + flash_count_node(b.l) + flash_count_node(b.r); }
+        .un => |u| { c = c + flash_count_node(u.e); }
+        .call => |k| {
+            c = c + flash_count_node(k.callee);
+            let i: i32 = 0;
+            while (i < len[*FlashNode](k.args)) { c = c + flash_count_node(get[*FlashNode](k.args, i)); i = i + 1; }
+        }
+        .fld => |f| { c = c + flash_count_node(f.base); }
+        .idx => |x| { c = c + flash_count_node(x.base) + flash_count_node(x.idx); }
+        .slice_ => |s| {
+            c = c + flash_count_node(s.base) + flash_count_node(s.lo);
+            if (s.has_hi == 1) { c = c + flash_count_node(s.hi); }
+        }
+        .slit_ => |s| {
+            let i: i32 = 0;
+            while (i < len[FieldInit](s.fields)) {
+                c = c + flash_count_node(get[FieldInit](s.fields, i).val);
+                i = i + 1;
+            }
+        }
+        .wave_ => |w| {
+            let i: i32 = 0;
+            while (i < len[*FlashNode](w.args)) { c = c + flash_count_node(get[*FlashNode](w.args, i)); i = i + 1; }
+        }
+        .beam_ => |b| {
+            let i: i32 = 0;
+            while (i < len[*FlashNode](b.args)) { c = c + flash_count_node(get[*FlashNode](b.args, i)); i = i + 1; }
+        }
+        .phase_ => |p| {
+            let i: i32 = 0;
+            while (i < len[*FlashNode](p.args)) { c = c + flash_count_node(get[*FlashNode](p.args, i)); i = i + 1; }
+        }
+        else => { }
+    }
+    return c;
+}
+
+fn flash_count_program(decls: ArrayList[*FlashNode]) i32 {
+    let total: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[*FlashNode](decls)) {
+        total = total + flash_count_node(get[*FlashNode](decls, i));
+        i = i + 1;
+    }
+    return total;
+}

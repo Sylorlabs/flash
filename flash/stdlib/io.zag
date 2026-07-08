@@ -1,0 +1,59 @@
+// flash/stdlib/io.zag — formatted debug output for Flash stdlib types.
+//
+// Integer emission via _zag_i64_to_str; canonical helpers live in
+// selfhost/std/io.flash (flash_print_int32, flash_print_trit).
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("trit.zag")
+@import("photon.zag")
+@import("../types/numeric/catalog.zag")
+
+fn print_int32(v: i32) void {
+    _zag_print(_zag_i64_to_str(v as i64));
+}
+
+fn print_trit(t: Trit) void {
+    _zag_print("trit(");
+    print_int32(t.val);
+    _zag_println(")");
+}
+
+fn print_wave(w: Wave) void {
+    _zag_print("Wave{ amp=");
+    print_int32((w.amplitude * 1000.0) as i32);
+    _zag_print(" wl_nm=");
+    print_int32(w.wavelength_nm as i32);
+    _zag_print(" phase_milli=");
+    print_int32((w.phase_rad * 1000.0) as i32);
+    _zag_println(" }");
+}
+
+fn print_type_info(d: TypeDescriptor) void {
+    _zag_print("Type{ kind=");
+    print_int32(d.kind);
+    _zag_print(" width=");
+    print_int32(d.width);
+    _zag_print(" signed=");
+    print_int32(d.signed);
+    _zag_print(" storage=");
+    print_int32(d.storage_bytes);
+    _zag_println(" }");
+}
+
+fn print_type_by_name(name: []u8) void {
+    _zag_print("Type{ name=");
+    _zag_print(name);
+    if (lookup_type(name)) |d| {
+        _zag_print(" kind=");
+        print_int32(d.kind);
+        _zag_print(" width=");
+        print_int32(d.width);
+        _zag_print(" signed=");
+        print_int32(d.signed);
+        _zag_print(" storage=");
+        print_int32(d.storage_bytes);
+        _zag_println(" }");
+    } else {
+        _zag_println(" MISSING }");
+    }
+}

@@ -1,0 +1,87 @@
+// flash/types/numeric/sat.zag — saturating integer metadata.
+
+@import("numeric_common.zag") as common
+
+fn sat_unit_count() i32 { return 4; }
+
+fn sat_base_width(base: []u8) i32 {
+    if (@strEq(base, "i8") || @strEq(base, "u8"))   { return 8; }
+    if (@strEq(base, "i16") || @strEq(base, "u16")) { return 16; }
+    if (@strEq(base, "i32") || @strEq(base, "u32")) { return 32; }
+    if (@strEq(base, "i64") || @strEq(base, "u64")) { return 64; }
+    return 0;
+}
+
+fn sat_is_signed(base: []u8) i32 {
+    if (base.len < 1) { return 0; }
+    if ((base[0] as i32) == 105) { return 1; }
+    return 0;
+}
+
+fn sat_min_for(base: []u8, w: i32, signed: i32) i64 {
+    if (signed == 1) { return common.num_signed_min(w); }
+    return 0;
+}
+
+fn sat_max_for(base: []u8, w: i32, signed: i32) i64 {
+    if (signed == 1) { return common.num_signed_max(w); }
+    return common.num_unsigned_max(w);
+}
+
+fn sat_descriptor(name: []u8, base: []u8) common.TypeDescriptor {
+    let w: i32 = sat_base_width(base);
+    let signed: i32 = sat_is_signed(base);
+    let min_v: i64 = sat_min_for(base, w, signed);
+    let max_v: i64 = sat_max_for(base, w, signed);
+    return common.TypeDescriptor{
+        .name = name,
+        .kind = common.KIND_SATURATING(),
+        .width = w,
+        .signed = signed,
+        .min_val = min_v,
+        .max_val = max_v,
+        .trit_encoding_bits = common.num_trit_encoding_bits(w),
+        .storage_bytes = common.num_storage_bytes(w, signed),
+        .es = 0,
+        .useed = 0,
+        .nbits = w,
+        .exponent_bits = 0,
+        .mantissa_bits = 0,
+        .ieee_binary = 0,
+        .int_bits = w,
+        .frac_bits = 0,
+        .moduli_count = 0,
+    };
+}
+
+fn sat_descriptor_sat_i8() common.TypeDescriptor {
+    return sat_descriptor("sat_i8", "i8");
+}
+
+fn sat_descriptor_sat_i16() common.TypeDescriptor {
+    return sat_descriptor("sat_i16", "i16");
+}
+
+fn sat_descriptor_sat_i32() common.TypeDescriptor {
+    return sat_descriptor("sat_i32", "i32");
+}
+
+fn sat_descriptor_sat_i64() common.TypeDescriptor {
+    return sat_descriptor("sat_i64", "i64");
+}
+
+fn sat_descriptor_at(idx: i32) common.TypeDescriptor {
+    if (idx == 0) { return sat_descriptor_sat_i8(); }
+    if (idx == 1) { return sat_descriptor_sat_i16(); }
+    if (idx == 2) { return sat_descriptor_sat_i32(); }
+    if (idx == 3) { return sat_descriptor_sat_i64(); }
+    return common.td_empty();
+}
+
+fn sat_lookup(name: []u8) ?common.TypeDescriptor {
+    if (@strEq(name, "sat_i8"))  { return sat_descriptor_sat_i8(); }
+    if (@strEq(name, "sat_i16")) { return sat_descriptor_sat_i16(); }
+    if (@strEq(name, "sat_i32")) { return sat_descriptor_sat_i32(); }
+    if (@strEq(name, "sat_i64")) { return sat_descriptor_sat_i64(); }
+    return null;
+}

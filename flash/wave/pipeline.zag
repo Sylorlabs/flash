@@ -1,0 +1,87 @@
+// flash/wave/pipeline.zag — vertical data pipeline APIs
+//
+// Floor lasers encode payload into phase-density waves that propagate upward
+// through glass voxel columns.  These functions are the safe, typed surface
+// over the photonic vertical-stream hardware.
+//
+//   stream_up(pipe, src)       — push a byte slice up the column
+//   read_voxel(pipe, coord)    — sample wave state at a voxel
+//   vertical_polarity(sample)  — extract balanced-ternary vertical dominance
+//
+// DEPENDENCY: flash/types/wave_types.zag
+// RUNTIME:    _flash_* externs lower to photonic engine chamber driver.
+
+@import("../types/wave_types.zag")
+
+error { StreamInactive, OutOfColumn, ReadFail }
+
+// ── hardware bindings (vertical axis) ─────────────────────────────────────────
+
+extern fn _flash_stream_up(col: i32, dep: i32, src: []u8) i32 @io;
+extern fn _flash_read_voxel(x: i32, y: i32, z: i32) u64 @io;
+extern fn _flash_pipeline_activate(col: i32, dep: i32) i32 @io;
+extern fn _flash_pipeline_head_z(col: i32, dep: i32) i32 @io;
+
+// ── decode helpers ────────────────────────────────────────────────────────────
+
+fn decode_wave_sample(raw: u64) WaveSample {
+    // Hardware word layout (documented for mapper/back-end contract):
+    //   bits  0..31  payload
+    //   bits 32..47  phase fixed-point (u16 -> radians)
+    //   bits 48..55  amplitude fixed-point (u8  -> [0,1])
+    //   bits 56..57  balanced ternary polarity
+    let payload: u64 = raw & 4294967295;
+    let phase_u: u64 = (raw / 4294967296) & 65535;
+    let amp_u: u64   = (raw / 281474976710656) & 255;
+    let pol_u: u64   = (raw / 72370055770099328) & 3;
+    let pol: i8 = switch (pol_u as i32) {
+        0 => POL_OFF(),
+        1 => POL_VERT(),
+        2 => POL_HORZ(),
+        else => POL_OFF(),
+    };
+    let amp: f32  = (amp_u as f32) / 255.0;
+    let phase: f32 = (phase_u as f32) * 0.0000958738;   // 2π / 65536
+    return WaveSample{ .amp = amp, .phase = phase, .pol = pol, .payload = payload };
+}
+
+// ── public API ────────────────────────────────────────────────────────────────
+
+fn activate(pipe: *VerticalPipeline) void {
+    let ok: i32 = _flash_pipeline_activate(pipe.*.column, pipe.*.depth);
+    pipe.*.active = ok;
+}
+
+fn stream_up(pipe: *VerticalPipeline, src: []u8) !i32 {
+    if (pipe.*.active == 0) { return error.StreamInactive; }
+    if (src.len == 0) { return 0; }
+    let pushed: i32 = _flash_stream_up(pipe.*.column, pipe.*.depth, src);
+    let head: i32 = _flash_pipeline_head_z(pipe.*.column, pipe.*.depth);
+    pipe.*.head_z = head;
+    return pushed;
+}
+
+fn read_voxel(pipe: VerticalPipeline, coord: VoxelCoord) !WaveSample {
+    if (coord.x != pipe.column) { return error.OutOfColumn; }
+    let raw: u64 = _flash_read_voxel(coord.x, coord.y, coord.z);
+    if (raw == 18446744073709551615) { return error.ReadFail; }   // u64 max = tombstone
+    return decode_wave_sample(raw);
+}
+
+fn vertical_polarity(sample: WaveSample) i8 {
+    if (sample.pol == POL_VERT()) { return POL_VERT(); }
+    if (sample.pol == POL_HORZ()) { return POL_OFF(); }
+    // Infer weak vertical dominance from amplitude when axis tag is neutral.
+    if (sample.amp > 0.5) { return POL_VERT(); }
+    return POL_OFF();
+}
+
+fn is_vertical(sample: WaveSample) i32 {
+    return (vertical_polarity(sample) == POL_VERT()) as i32;
+}
+
+fn payload_at(pipe: VerticalPipeline, z: i32) !u64 {
+    let coord: VoxelCoord = voxel(pipe.column, pipe.depth, z);
+    let s: WaveSample = try read_voxel(pipe, coord);
+    return s.payload;
+}

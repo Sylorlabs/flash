@@ -1,0 +1,63 @@
+// harsh_raw.zag — adversarial sweep of raw {} five-API surface + runtime state.
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/runtime/raw_sim.zag") as raw
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn main() i32 {
+    _zag_println("harsh_raw: running");
+
+    let st: raw.RawRtState = raw.raw_state_new();
+    let sp: *raw.RawRtState = &st;
+
+    if (raw.fire_shield(sp, raw.voxel(1, 1, 1), 100.0) == 1) { test_fail("shield_without_raw"); }
+    test_pass("shield_without_raw");
+
+    if (raw.raw_enter(sp) != 1) { test_fail("raw_enter"); }
+    let sess: raw.RawSession = raw.RawSession{ .active = 1 };
+    test_pass("raw_enter");
+
+    if (raw.target_voxel(sp, raw.voxel(5, 5, 5)) != 1) { test_fail("target_voxel"); }
+    if (st.target_x != 5 || st.target_y != 5 || st.target_z != 5) { test_fail("target_voxel_state"); }
+    test_pass("target_voxel");
+
+    let beam: raw.BeamId = raw.BeamId{ .wall = 2, .slot = 0 };
+    if (raw.set_laser_mw(sp, beam, 750.0) != 1) { test_fail("set_laser_mw"); }
+    if (st.laser_mw_2 < 749.0) { test_fail("set_laser_mw_state"); }
+    test_pass("set_laser_mw");
+
+    let aim: raw.VoxelCoord = raw.voxel(5, 5, 5);
+    if (raw.fire_shield(sp, aim, 900.0) != 1) { test_fail("fire_shield"); }
+    let shield_idx: i32 = 5 * 64 + 5 * 8 + 5;
+    if (sp.*.cells[shield_idx].amp < 0.5) { test_fail("fire_shield_state"); }
+    if (sp.*.target_x != 5 || sp.*.target_y != 5 || sp.*.target_z != 5) { test_fail("fire_shield_target"); }
+    test_pass("fire_shield");
+
+    if (raw.inject_phase(sp, raw.voxel(2, 3, 4), 2.094395102) != 1) { test_fail("inject_phase"); }
+    let phase_idx: i32 = 4 * 64 + 3 * 8 + 2;
+    if (st.cells[phase_idx].phase < 2.0) { test_fail("inject_phase_state"); }
+    test_pass("inject_phase");
+
+    if (raw.manual_polarity(sp, raw.voxel(6, 6, 6), raw.POL_VERT()) != 1) { test_fail("manual_polarity"); }
+    let pol_idx: i32 = 6 * 64 + 6 * 8 + 6;
+    if (st.cells[pol_idx].pol != raw.POL_VERT()) { test_fail("manual_polarity_state"); }
+    test_pass("manual_polarity");
+
+    raw.raw_exit(sp, &sess);
+    if (raw.fire_shield(sp, raw.voxel(0, 0, 0), 1.0) == 1) { test_fail("post_exit_denied"); }
+    test_pass("post_exit_denied");
+
+    raw.raw_state_free(sp);
+    _zag_println("harsh_raw: ok");
+    return 0;
+}

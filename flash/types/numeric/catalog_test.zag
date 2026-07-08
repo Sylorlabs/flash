@@ -1,0 +1,120 @@
+// flash/types/numeric/catalog_test.zag — numeric catalog smoke tests.
+
+@import("../../toolchain/zag-poc/std/rt.zag")
+@import("catalog.zag")
+@import("numeric_common.zag") as common
+
+fn test_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn test_fail(name: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn main() i32 {
+    _zag_println("catalog_test: running");
+
+    // Indexed table sanity (run before lookup stress). Slot 0 is the NATIVE
+    // family's t1 — the trit itself: 1 trit, intrinsically signed, range ±1.
+    let t1: TypeDescriptor = catalog_at(0);
+    if (t1.width != 1 || t1.signed != 1) { test_fail("catalog_at_t1"); }
+    if (t1.min_val != 0 - 1 || t1.max_val != 1) { test_fail("catalog_at_t1_range"); }
+    if (t1.kind != common.KIND_TRIT_INT()) { test_fail("catalog_at_t1_kind"); }
+    test_pass("catalog_at_t1");
+
+    let i1: TypeDescriptor = catalog_at(80);
+    if (i1.width != 1 || i1.signed != 1) { test_fail("catalog_at_i1"); }
+    test_pass("catalog_at_i1");
+
+    let u1: TypeDescriptor = catalog_at(207);
+    if (u1.width != 1 || u1.signed != 0) { test_fail("catalog_at_u1"); }
+    test_pass("catalog_at_u1");
+
+    let p32_slot: TypeDescriptor = catalog_at(341);
+    if (p32_slot.width != 32 || p32_slot.es != 2) { test_fail("catalog_at_p32"); }
+    test_pass("catalog_at_p32");
+
+    let count: i32 = type_count();
+    if (count < 100) {
+        test_fail("type_count_ge_100");
+    }
+    test_pass("type_count_ge_100");
+
+    // Native t-units: trit encoding is the identity (no re-encoding cost);
+    // the binary-host embedding is priced in nbits.
+    if (lookup_type("t9")) |d| {
+        if (d.width != 9) { test_fail("lookup_t9_width"); }
+        if (d.signed != 1) { test_fail("lookup_t9_signed"); }
+        if (d.kind != common.KIND_TRIT_INT()) { test_fail("lookup_t9_kind"); }
+        if (d.min_val != 0 - 9841 || d.max_val != 9841) { test_fail("lookup_t9_range"); }
+        if (d.trit_encoding_bits != 9) { test_fail("lookup_t9_native_identity"); }
+        if (d.nbits != 16) { test_fail("lookup_t9_host_bits"); }
+    } else {
+        test_fail("lookup_t9");
+    }
+    test_pass("lookup_t9");
+
+    if (lookup_type("t27")) |d| {
+        if (d.max_val != 3812798742493) { test_fail("lookup_t27_range"); }
+        if (d.trit_encoding_bits != 27) { test_fail("lookup_t27_native_identity"); }
+    } else {
+        test_fail("lookup_t27");
+    }
+    test_pass("lookup_t27");
+
+    // t-units live in the trit family with the scalar; mixing with binary
+    // integers is a radix change and stays cast-only.
+    if (family_of("t9") != common.FAMILY_TRIT()) { test_fail("t9_family"); }
+    if (binop_compatible("t9", "trit") != 1) { test_fail("t9_trit_binop"); }
+    if (binop_compatible("t9", "i32") != 0) { test_fail("t9_i32_cast_only"); }
+    test_pass("t_family_rules");
+
+    if (lookup_type("i32")) |d| {
+        if (d.width != 32) { test_fail("lookup_i32_width"); }
+        if (d.signed != 1) { test_fail("lookup_i32_signed"); }
+        if (d.kind != 1) { test_fail("lookup_i32_kind"); }
+    } else {
+        test_fail("lookup_i32");
+    }
+    test_pass("lookup_i32");
+
+    if (lookup_type("p32")) |d| {
+        if (d.width != 32) { test_fail("lookup_p32_width"); }
+        if (d.es != 2) { test_fail("lookup_p32_es"); }
+        if (d.useed != 16) { test_fail("lookup_p32_useed"); }
+        if (d.nbits != 32) { test_fail("lookup_p32_nbits"); }
+    } else {
+        test_fail("lookup_p32");
+    }
+    test_pass("lookup_p32");
+
+    if (lookup_type("sat_i16")) |d| {
+        if (d.width != 16) { test_fail("lookup_sat_i16_width"); }
+        if (d.signed != 1) { test_fail("lookup_sat_i16_signed"); }
+        if (d.kind != 6) { test_fail("lookup_sat_i16_kind"); }
+    } else {
+        test_fail("lookup_sat_i16");
+    }
+    test_pass("lookup_sat_i16");
+
+    let u11: TypeDescriptor = catalog_at(217);
+    if (u11.width != 11) { test_fail("lookup_u11_width"); }
+    if (u11.signed != 0) { test_fail("lookup_u11_unsigned"); }
+    if (u11.nbits != 11) { test_fail("lookup_u11_nbits"); }
+    if (u11.kind != common.KIND_UNSIGNED_INT()) { test_fail("lookup_u11_kind"); }
+    if (lookup_type("u11")) |_| {
+        test_pass("lookup_u11");
+    } else {
+        test_fail("lookup_u11");
+    }
+
+    if (cat_is_trit("trit") != 1) { test_fail("family_trit"); }
+    test_pass("family_trit");
+
+    _zag_println("catalog_test: ok");
+    return 0;
+}

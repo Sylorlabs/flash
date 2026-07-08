@@ -1,0 +1,86 @@
+// flash/wave/raw.zag — raw {} mode direct photonic hardware APIs
+//
+// Inside a Flash `raw { ... }` block the compiler disables high-level wave
+// safety checks and exposes chamber registers directly.  These five entry
+// points are the only approved raw-mode surface:
+//
+//   fire_shield(target, mw)       — pulse a horizontal shield at target voxel
+//   inject_phase(coord, rad)      — overwrite voxel phase register
+//   set_laser_mw(beam_id, mw)     — set wall-laser power (milliwatts)
+//   target_voxel(coord)           — aim the active horizontal emitter
+//   manual_polarity(coord, pol)   — force balanced-ternary axis tag
+//
+// DEPENDENCY: flash/types/wave_types.zag
+// EFFECT:     all externs carry @io (hardware side-effect).
+
+@import("../types/wave_types.zag")
+@import("../ternary/trit.zag") as trit
+
+error { RawDenied, InvalidPolarity, LaserFault }
+
+// ── hardware bindings (raw register access) ─────────────────────────────────
+
+extern fn _flash_raw_fire_shield(x: i32, y: i32, z: i32, mw: f32) i32 @io;
+extern fn _flash_raw_inject_phase(x: i32, y: i32, z: i32, phase: f32) i32 @io;
+extern fn _flash_raw_set_laser_mw(wall: i32, slot: i32, mw: f32) i32 @io;
+extern fn _flash_raw_target_voxel(x: i32, y: i32, z: i32) i32 @io;
+extern fn _flash_raw_set_polarity(x: i32, y: i32, z: i32, pol: i32) i32 @io;
+extern fn _flash_raw_mode_enter() i32 @io;
+extern fn _flash_raw_mode_exit() i32 @io;
+
+// ── session guard (optional RAII-style bracket) ───────────────────────────────
+
+struct RawSession {
+    active: i32,
+}
+
+fn raw_enter() !RawSession {
+    let ok: i32 = _flash_raw_mode_enter();
+    if (ok == 0) { return error.RawDenied; }
+    return RawSession{ .active = 1 };
+}
+
+fn raw_exit(sess: *RawSession) void {
+    if (sess.*.active == 1) {
+        _flash_raw_mode_exit();
+        sess.*.active = 0;
+    }
+}
+
+// ── raw {} APIs ───────────────────────────────────────────────────────────────
+
+fn fire_shield(target: VoxelCoord, mw: f32) !void {
+    let ok: i32 = _flash_raw_fire_shield(target.x, target.y, target.z, mw);
+    if (ok == 0) { return error.LaserFault; }
+}
+
+fn inject_phase(coord: VoxelCoord, phase_rad: f32) !void {
+    let ok: i32 = _flash_raw_inject_phase(coord.x, coord.y, coord.z, phase_rad);
+    if (ok == 0) { return error.LaserFault; }
+}
+
+fn set_laser_mw(beam: BeamId, mw: f32) !void {
+    let ok: i32 = _flash_raw_set_laser_mw(beam.wall, beam.slot, mw);
+    if (ok == 0) { return error.LaserFault; }
+}
+
+fn target_voxel(coord: VoxelCoord) !void {
+    let ok: i32 = _flash_raw_target_voxel(coord.x, coord.y, coord.z);
+    if (ok == 0) { return error.LaserFault; }
+}
+
+fn manual_polarity(coord: VoxelCoord, pol: i8) !void {
+    if (pol != POL_OFF() && pol != POL_VERT() && pol != POL_HORZ()) {
+        return error.InvalidPolarity;
+    }
+    let tag: i32 = 0;
+    if (pol == POL_VERT()) { tag = 1; }
+    if (pol == POL_HORZ()) { tag = 2; }
+    let ok: i32 = _flash_raw_set_polarity(coord.x, coord.y, coord.z, tag);
+    if (ok == 0) { return error.LaserFault; }
+}
+
+// Convenience overload: Trit enum polarity tag.
+fn manual_polarity_trit(coord: VoxelCoord, p: trit.Trit) !void {
+    return try manual_polarity(coord, polarity_to_i8(p));
+}

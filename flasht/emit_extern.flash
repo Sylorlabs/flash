@@ -1,0 +1,89 @@
+// flasht/emit_extern.flash — scan manifest/fimg/shim for raw HAL symbols.
+//
+// Builds the [extern] table for FIMG v1: baseline runtime symbols plus any
+// _flash_raw_* entry points referenced by manifest op tags or shim text.
+
+fn extern_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) { push[u8](out, s[i]); i = i + 1; }
+}
+
+fn extern_push_unique(syms: *ArrayList[[]u8], sym: []u8) void {
+    if (sym.len < 1) { return; }
+    if (flash_list_has(syms, sym) == 1) { return; }
+    push[[]u8](syms, sym);
+}
+
+fn extern_sym_for_raw_op(op: []u8) []u8 {
+    if (@strEq(op, "raw_fire_shield") == 1)     { return "_flash_raw_fire_shield"; }
+    if (@strEq(op, "raw_inject_phase") == 1)    { return "_flash_raw_inject_phase"; }
+    if (@strEq(op, "raw_set_laser_mw") == 1)    { return "_flash_raw_set_laser_mw"; }
+    if (@strEq(op, "raw_target_voxel") == 1)    { return "_flash_raw_target_voxel"; }
+    if (@strEq(op, "raw_manual_polarity") == 1) { return "_flash_raw_set_polarity"; }
+    if (@strEq(op, "raw_set_polarity") == 1)     { return "_flash_raw_set_polarity"; }
+    return "";
+}
+
+fn extern_scan_op_quoted(text: []u8, start: i32, syms: *ArrayList[[]u8]) void {
+    if (start < 0 || start >= text.len) { return; }
+    let q0: i32 = flash_str_index_of(text[start..], "\"");
+    if (q0 < 0) { return; }
+    q0 = start + q0 + 1;
+    let q1: i32 = q0;
+    while (q1 < text.len && text[q1] != '"') {
+        q1 = q1 + 1;
+    }
+    if (q1 >= text.len) { return; }
+    let op: []u8 = text[q0..q1];
+    let sym: []u8 = extern_sym_for_raw_op(op);
+    if (sym.len > 0) { extern_push_unique(syms, sym); }
+}
+
+fn extern_scan_for_literal(text: []u8, needle: []u8, sym: []u8, syms: *ArrayList[[]u8]) void {
+    if (flash_str_index_of(text, needle) >= 0) {
+        extern_push_unique(syms, sym);
+    }
+}
+
+fn extern_scan_text(text: []u8, syms: *ArrayList[[]u8]) void {
+    let i: i32 = 0;
+    while (i < text.len) {
+        if (i + 6 < text.len) {
+            if (text[i] == 'o' && text[i + 1] == 'p' && text[i + 2] == ' '
+                && text[i + 3] == '=' && text[i + 4] == ' ') {
+                extern_scan_op_quoted(text, i + 5, syms);
+            }
+        }
+        i = i + 1;
+    }
+    extern_scan_for_literal(text, "_flash_raw_fire_shield", "_flash_raw_fire_shield", syms);
+    extern_scan_for_literal(text, "_flash_raw_inject_phase", "_flash_raw_inject_phase", syms);
+    extern_scan_for_literal(text, "_flash_raw_set_laser_mw", "_flash_raw_set_laser_mw", syms);
+    extern_scan_for_literal(text, "_flash_raw_target_voxel", "_flash_raw_target_voxel", syms);
+    extern_scan_for_literal(text, "_flash_raw_set_polarity", "_flash_raw_set_polarity", syms);
+    extern_scan_for_literal(text, "_flash_raw_mode_enter", "_flash_raw_mode_enter", syms);
+    extern_scan_for_literal(text, "_flash_raw_mode_exit", "_flash_raw_mode_exit", syms);
+}
+
+fn extern_collect(manifest_text: []u8, shim_text: []u8, fimg_text: []u8) ArrayList[[]u8] {
+    let syms: ArrayList[[]u8] = make[[]u8](16);
+    extern_push_unique(&syms, "_flash_raw_mode_enter");
+    extern_push_unique(&syms, "_flash_raw_mode_exit");
+    extern_push_unique(&syms, "_flash_stream_up");
+    extern_push_unique(&syms, "_flash_read_voxel");
+    extern_scan_text(manifest_text, &syms);
+    extern_scan_text(shim_text, &syms);
+    extern_scan_text(fimg_text, &syms);
+    return syms;
+}
+
+fn extern_emit_table(out: *ArrayList[u8], manifest_text: []u8, shim_text: []u8) void {
+    let syms: ArrayList[[]u8] = extern_collect(manifest_text, shim_text, "");
+    let i: i32 = 0;
+    extern_app(out, "[extern]\n");
+    while (i < len[[]u8](syms)) {
+        extern_app(out, get[[]u8](syms, i));
+        extern_app(out, "\n");
+        i = i + 1;
+    }
+}

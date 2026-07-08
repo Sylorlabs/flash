@@ -1,0 +1,65 @@
+// flasht/isa/ppu32.flash — PPU32 balanced-ternary photonic processor ISA (v1).
+//
+// Opcode layout: 32-bit word, top 8 bits = class, low 24 = operands.
+// Maps 1:1 to manifest op_tag + LatticeOp + _flash_raw_* HAL symbols.
+
+enum Ppu32Class {
+    Nop,
+    PcmPhaseShift,
+    PcmCouple,
+    LatticeRoute,
+    TritRegLoad,
+    TritAlu,
+    RawFireShield,
+    RawInjectPhase,
+    RawSetLaserMw,
+    RawTargetVoxel,
+    RawSetPolarity,
+    RawModeEnter,
+    RawModeExit,
+}
+
+enum Ppu32TritAluOp {
+    Add,
+    Mul,
+    Nand,
+    Neg,
+}
+
+struct Ppu32Insn {
+    cls: Ppu32Class,
+    row: i32,
+    col: i32,
+    phase_micro_rad: i32,
+    from_x_mm: i32,
+    from_y_mm: i32,
+    from_z_mm: i32,
+    to_x_mm: i32,
+    to_y_mm: i32,
+    to_z_mm: i32,
+    power_micro_mw: i32,
+    polarization: i32,
+    trit_a: i32,
+    trit_b: i32,
+    trit_dst: i32,
+    alu_op: Ppu32TritAluOp,
+}
+
+fn ppu32_class_pcm_phase_shift() i32 { return 1; }
+fn ppu32_class_lattice_route() i32 { return 3; }
+fn ppu32_class_trit_alu() i32 { return 5; }
+fn ppu32_class_raw_fire_shield() i32 { return 6; }
+
+fn ppu32_lattice_op_to_class(lattice_op: i32) i32 {
+    if (lattice_op == 3) { return ppu32_class_pcm_phase_shift(); }
+    if (lattice_op == 5) { return ppu32_class_pcm_phase_shift(); }
+    return ppu32_class_lattice_route();
+}
+
+fn ppu32_mm_to_micro(v: f32) i32 {
+    return (v * 1000.0) as i32;
+}
+
+fn ppu32_phase_to_micro(v: f32) i32 {
+    return (v * 1000000.0) as i32;
+}

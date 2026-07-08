@@ -1,0 +1,31 @@
+// selfhost/std/vec.flash — ergonomic Vec[T] API over ArrayList[T].
+//
+// Vec[T] is a thin wrapper around the growable buffer in std/list.flash.
+// Prefer vec_* when you want a Rust-flavored name; the underlying storage and
+// growth policy are identical to ArrayList (same make/push/get/len/free).
+
+@import("std/list.flash")
+
+struct Vec[T] {
+    buf: ArrayList[T],
+}
+
+fn vec_new[T](cap: i32) Vec[T] {
+    return Vec[T]{ .buf = make[T](cap) };
+}
+
+fn vec_push[T](v: *Vec[T], val: T) void {
+    push[T](&v.*.buf, val);
+}
+
+fn vec_get[T](v: Vec[T], i: i32) T {
+    return get[T](v.buf, i);
+}
+
+fn vec_len[T](v: Vec[T]) i32 {
+    return len[T](v.buf);
+}
+
+fn vec_free[T](v: *Vec[T]) void {
+    free[T](&v.*.buf);
+}

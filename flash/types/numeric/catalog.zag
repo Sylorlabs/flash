@@ -1,0 +1,312 @@
+// flash/types/numeric/catalog.zag — heterogeneous numeric family registry + type catalog.
+//
+// Flash is BALANCED-TERNARY NATIVE. The t-family (t1..t80, widths in trits)
+// is the home radix and occupies the FIRST slots of the catalog; the trit
+// scalar is t1. Binary integer (i/u), float, posit, sat, fixed, and special
+// units are INTEROP families: they keep exact value/arithmetic contracts
+// everywhere, but their digit-level semantics (bitwise ops, mod-2^w wrap) are
+// base-2 promises that cost real emulation on ternary hardware — each
+// descriptor prices that embedding in trit_encoding_bits. Native t-units pay
+// nothing in either direction that the radix doesn't force: trit encoding is
+// the identity, and the binary-host embedding (nbits) emits no masking code
+// because t-units promise range semantics, never base-2 wraparound.
+//
+// Family rules mirror Zag: posit, integer, float, trit, and photonic carriers
+// (Wave, Beam, Phase) live in disjoint families. Binary ops across families
+// require an explicit cast (e.g. `posit as i32` or `@intToPosit(x)`) — including
+// t-family × binary-integer mixes, which are a radix change, not a widening.
+//
+// Compile-time catalog: indexed tables for t1..t80, i1..i127, u1..u127, plus
+// static slices for fp / posit / sat / fixed / special families.
+
+@import("numeric_common.zag") as common
+@import("t_units.zag") as t_units
+@import("i_units.zag") as i_units
+@import("u_units.zag") as u_units
+@import("fp_units.zag") as fp_units
+@import("posit.zag") as posit
+@import("sat.zag") as sat
+@import("fixed.zag") as fixed
+@import("special.zag") as special
+
+// Re-export TypeDescriptor for consumers.
+struct TypeDescriptor {
+    name: []u8,
+    kind: i32,
+    width: i32,
+    signed: i32,
+    min_val: i64,
+    max_val: i64,
+    trit_encoding_bits: i32,
+    storage_bytes: i32,
+    es: i32,
+    useed: i32,
+    nbits: i32,
+    exponent_bits: i32,
+    mantissa_bits: i32,
+    ieee_binary: i32,
+    int_bits: i32,
+    frac_bits: i32,
+    moduli_count: i32,
+}
+
+fn td_from_common(d: common.TypeDescriptor) TypeDescriptor {
+    return TypeDescriptor{
+        .name = d.name,
+        .kind = d.kind,
+        .width = d.width,
+        .signed = d.signed,
+        .min_val = d.min_val,
+        .max_val = d.max_val,
+        .trit_encoding_bits = d.trit_encoding_bits,
+        .storage_bytes = d.storage_bytes,
+        .es = d.es,
+        .useed = d.useed,
+        .nbits = d.nbits,
+        .exponent_bits = d.exponent_bits,
+        .mantissa_bits = d.mantissa_bits,
+        .ieee_binary = d.ieee_binary,
+        .int_bits = d.int_bits,
+        .frac_bits = d.frac_bits,
+        .moduli_count = d.moduli_count,
+    };
+}
+
+// ── SEMA family bitmask (flash_sema.zag) ─────────────────────────────────────
+
+fn family_none() i32     { return common.FAMILY_NONE(); }
+fn family_integer() i32  { return common.FAMILY_INTEGER(); }
+fn family_posit() i32    { return common.FAMILY_POSIT(); }
+fn family_float() i32    { return common.FAMILY_FLOAT(); }
+fn family_trit() i32     { return common.FAMILY_TRIT(); }
+fn family_wave() i32     { return common.FAMILY_WAVE(); }
+fn family_beam() i32     { return common.FAMILY_BEAM(); }
+fn family_phase() i32    { return common.FAMILY_PHASE(); }
+
+fn cat_starts_with(t: []u8, prefix: []u8) i32 {
+    return common.num_starts_with(t, prefix);
+}
+
+fn cat_is_arb_int(t: []u8) i32 {
+    if (t.len < 2) { return 0; }
+    let c0: i32 = t[0] as i32;
+    if (c0 != 105 && c0 != 117) { return 0; }
+    let w: i32 = common.num_parse_uint_suffix(t, 1);
+    if (w < 1 || w > 127) { return 0; }
+    return 1;
+}
+
+fn cat_is_posit(t: []u8) i32 {
+    if (@strEq(t, "p8") || @strEq(t, "p16") || @strEq(t, "p32") || @strEq(t, "p64")) {
+        return 1;
+    }
+    return 0;
+}
+
+fn cat_is_integer(t: []u8) i32 {
+    if (cat_is_arb_int(t) == 1) { return 1; }
+    if (cat_starts_with(t, "sat_") == 1) { return 1; }
+    if (cat_starts_with(t, "fixed_") == 1) { return 1; }
+    if (@strEq(t, "u_any") || @strEq(t, "i_any")) { return 1; }
+    if (@strEq(t, "u11")) { return 1; }
+    if (cat_starts_with(t, "rns_") == 1) { return 1; }
+    return 0;
+}
+
+fn cat_is_float(t: []u8) i32 {
+    if (@strEq(t, "f16") || @strEq(t, "f32") || @strEq(t, "f64")) { return 1; }
+    if (@strEq(t, "f80") || @strEq(t, "f128")) { return 1; }
+    if (@strEq(t, "bf16") || @strEq(t, "mx_fp8") || @strEq(t, "mx_fp4")) { return 1; }
+    return 0;
+}
+
+// Native balanced-ternary integer unit: t<width> with width 1..80 in trits.
+fn cat_is_trit_unit(t: []u8) i32 {
+    if (t.len < 2) { return 0; }
+    if ((t[0] as i32) != 116) { return 0; }
+    let w: i32 = common.num_parse_uint_suffix(t, 1);
+    if (t_units.t_unit_valid(w) == 0) { return 0; }
+    return 1;
+}
+
+fn cat_is_trit(t: []u8) i32 {
+    if (@strEq(t, "trit") || @strEq(t, "Trit") || @strEq(t, "trit.Trit")) { return 1; }
+    if (cat_is_trit_unit(t) == 1) { return 1; }
+    return 0;
+}
+
+fn cat_is_wave(t: []u8) i32 {
+    if (@strEq(t, "wave") || @strEq(t, "Wave") || @strEq(t, "wave.Wave")) { return 1; }
+    return 0;
+}
+
+fn cat_is_beam(t: []u8) i32 {
+    if (@strEq(t, "beam") || @strEq(t, "Beam") || @strEq(t, "beam.Beam")) { return 1; }
+    return 0;
+}
+
+fn cat_is_phase(t: []u8) i32 {
+    if (@strEq(t, "phase") || @strEq(t, "Phase") || @strEq(t, "phase.Phase")) { return 1; }
+    return 0;
+}
+
+fn family_of(t: []u8) i32 {
+    // native family resolves first
+    if (cat_is_trit(t) == 1)    { return common.FAMILY_TRIT(); }
+    if (cat_is_posit(t) == 1)   { return common.FAMILY_POSIT(); }
+    if (cat_is_integer(t) == 1) { return common.FAMILY_INTEGER(); }
+    if (cat_is_float(t) == 1)   { return common.FAMILY_FLOAT(); }
+    if (cat_is_wave(t) == 1)    { return common.FAMILY_WAVE(); }
+    if (cat_is_beam(t) == 1)    { return common.FAMILY_BEAM(); }
+    if (cat_is_phase(t) == 1)   { return common.FAMILY_PHASE(); }
+    return common.FAMILY_NONE();
+}
+
+fn same_family(a: []u8, b: []u8) i32 {
+    let fa: i32 = family_of(a);
+    let fb: i32 = family_of(b);
+    if (fa == common.FAMILY_NONE() || fb == common.FAMILY_NONE()) { return 0; }
+    if (fa == fb) { return 1; }
+    return 0;
+}
+
+fn binop_compatible(a: []u8, b: []u8) i32 {
+    if (same_family(a, b) == 1) { return 1; }
+    return 0;
+}
+
+fn is_mixed_posit_integer(a: []u8, b: []u8) i32 {
+    let fa: i32 = family_of(a);
+    let fb: i32 = family_of(b);
+    if (fa == common.FAMILY_POSIT() && fb == common.FAMILY_INTEGER()) { return 1; }
+    if (fa == common.FAMILY_INTEGER() && fb == common.FAMILY_POSIT()) { return 1; }
+    return 0;
+}
+
+fn trit_bin_result() []u8 { return "Trit"; }
+
+fn photonic_bin_result(lty: []u8, rty: []u8) []u8 {
+    if (cat_is_wave(lty) == 1 && cat_is_wave(rty) == 1) { return "Wave"; }
+    if (cat_is_beam(lty) == 1 && cat_is_beam(rty) == 1) { return "Beam"; }
+    if (cat_is_phase(lty) == 1 && cat_is_phase(rty) == 1) { return "Phase"; }
+    return "";
+}
+
+// ── compile-time catalog tables ──────────────────────────────────────────────
+
+// Native t-family owns the front of the catalog (t1 at slot 0 IS the trit).
+fn catalog_t_base() i32      { return 0; }
+fn catalog_i_base() i32      { return 80; }
+fn catalog_u_base() i32      { return 207; }
+fn catalog_fp_base() i32     { return 334; }
+fn catalog_posit_base() i32  { return 339; }
+fn catalog_sat_base() i32    { return 344; }
+fn catalog_fixed_base() i32  { return 348; }
+fn catalog_special_base() i32 { return 351; }
+
+fn type_count() i32 {
+    return t_units.t_unit_count()
+        + i_units.i_unit_count()
+        + u_units.u_unit_count()
+        + fp_units.fp_unit_count()
+        + posit.posit_unit_count()
+        + sat.sat_unit_count()
+        + fixed.fixed_canonical_count()
+        + special.special_unit_count();
+}
+
+fn catalog_at(idx: i32) TypeDescriptor {
+    if (idx < 0 || idx >= type_count()) { return td_from_common(common.td_empty()); }
+
+    if (idx < catalog_i_base()) {
+        let w: i32 = idx - catalog_t_base() + 1;
+        return td_from_common(t_units.t_unit_descriptor(w));
+    }
+    if (idx < catalog_u_base()) {
+        let w: i32 = idx - catalog_i_base() + 1;
+        return td_from_common(i_units.i_unit_descriptor(w));
+    }
+    if (idx < catalog_fp_base()) {
+        let w: i32 = idx - catalog_u_base() + 1;
+        return td_from_common(u_units.u_unit_descriptor(w));
+    }
+    if (idx < catalog_posit_base()) {
+        let sub: i32 = idx - catalog_fp_base();
+        return td_from_common(fp_units.fp_descriptor_at(sub));
+    }
+    if (idx < catalog_sat_base()) {
+        let sub: i32 = idx - catalog_posit_base();
+        return td_from_common(posit.posit_descriptor_at(sub));
+    }
+    if (idx < catalog_fixed_base()) {
+        let sub: i32 = idx - catalog_sat_base();
+        return td_from_common(sat.sat_descriptor_at(sub));
+    }
+    if (idx < catalog_special_base()) {
+        let sub: i32 = idx - catalog_fixed_base();
+        return td_from_common(fixed.fixed_descriptor_at(sub));
+    }
+    let sub: i32 = idx - catalog_special_base();
+    return td_from_common(special.special_descriptor_at(sub));
+}
+
+fn lookup_type(name: []u8) ?TypeDescriptor {
+    if (name.len < 2) { return null; }
+    let c0: i32 = name[0] as i32;
+
+    // native family first: t<width> balanced-ternary units ("trit" itself
+    // has a non-numeric suffix and falls through to the scalar handling).
+    if (c0 == 116) {
+        let w: i32 = common.num_parse_uint_suffix(name, 1);
+        if (t_units.t_unit_valid(w) == 1) {
+            return td_from_common(t_units.t_unit_descriptor_named(name, w));
+        }
+    }
+
+    if (c0 == 105) {
+        let w: i32 = common.num_parse_uint_suffix(name, 1);
+        if (i_units.i_unit_valid(w) == 1) {
+            return td_from_common(i_units.i_unit_descriptor_named(name, w));
+        }
+    }
+    if (c0 == 117) {
+        let w: i32 = common.num_parse_uint_suffix(name, 1);
+        if (u_units.u_unit_valid(w) == 1) {
+            return td_from_common(u_units.u_unit_descriptor_named(name, w));
+        }
+    }
+
+    if (@strEq(name, "f16"))  { return td_from_common(fp_units.fp_descriptor_f16()); }
+    if (@strEq(name, "f32"))  { return td_from_common(fp_units.fp_descriptor_f32()); }
+    if (@strEq(name, "f64"))  { return td_from_common(fp_units.fp_descriptor_f64()); }
+    if (@strEq(name, "f80"))  { return td_from_common(fp_units.fp_descriptor_f80()); }
+    if (@strEq(name, "f128")) { return td_from_common(fp_units.fp_descriptor_f128()); }
+    if (@strEq(name, "p8"))   { return td_from_common(posit.posit_descriptor_p8()); }
+    if (@strEq(name, "p16"))  { return td_from_common(posit.posit_descriptor_p16()); }
+    if (@strEq(name, "p32"))  { return td_from_common(posit.posit_descriptor_p32()); }
+    if (@strEq(name, "p64"))  { return td_from_common(posit.posit_descriptor_p64()); }
+    if (@strEq(name, "quire")) { return td_from_common(posit.posit_descriptor_quire()); }
+
+    if (@strEq(name, "sat_i8"))  { return td_from_common(sat.sat_descriptor_sat_i8()); }
+    if (@strEq(name, "sat_i16")) { return td_from_common(sat.sat_descriptor_sat_i16()); }
+    if (@strEq(name, "sat_i32")) { return td_from_common(sat.sat_descriptor_sat_i32()); }
+    if (@strEq(name, "sat_i64")) { return td_from_common(sat.sat_descriptor_sat_i64()); }
+
+    if (@strEq(name, "fixed_8_8"))   { return td_from_common(fixed.fixed_descriptor_8_8()); }
+    if (@strEq(name, "fixed_16_16")) { return td_from_common(fixed.fixed_descriptor_16_16()); }
+    if (@strEq(name, "fixed_32_32")) { return td_from_common(fixed.fixed_descriptor_32_32()); }
+
+    if (@strEq(name, "u11"))          { return td_from_common(special.special_descriptor_u11()); }
+    if (@strEq(name, "u_any"))        { return td_from_common(special.special_descriptor_u_any()); }
+    if (@strEq(name, "i_any"))        { return td_from_common(special.special_descriptor_i_any()); }
+    if (@strEq(name, "rns_3"))        { return td_from_common(special.special_descriptor_rns_3()); }
+    if (@strEq(name, "l32"))          { return td_from_common(special.special_descriptor_l32()); }
+    if (@strEq(name, "l16"))          { return td_from_common(special.special_descriptor_l16()); }
+    if (@strEq(name, "bf16"))         { return td_from_common(special.special_descriptor_bf16()); }
+    if (@strEq(name, "mx_fp8"))       { return td_from_common(special.special_descriptor_mx_fp8()); }
+    if (@strEq(name, "mx_fp4"))       { return td_from_common(special.special_descriptor_mx_fp4()); }
+    if (@strEq(name, "vsa_b<256>"))   { return td_from_common(special.special_descriptor_vsa_b256()); }
+    if (@strEq(name, "vsa_b<4096>"))  { return td_from_common(special.special_descriptor_vsa_b4096()); }
+
+    return null;
+}

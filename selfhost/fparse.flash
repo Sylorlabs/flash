@@ -1,0 +1,821 @@
+// selfhost/fparse.flash.zag — full-language Flash parser, written in Flash.
+//
+// Stage-1 port of flash/compiler/flash_parse.zag over the self-hosted full
+// lexer (flex.flash.zag). AST nodes live in a flat pool (ArrayList[FNode])
+// referenced by i32 indices — no unions, no null pointers, so the parser is
+// expressible in the same Flash subset it parses (self-compilation closure).
+//
+// Node codes mirror flash_node_code(): 1 fn, 2 let, 3 return, 4 if, 5 while,
+// 7 assign, 8 estmt, 10 import, 11 trit, 12 int, 13 float, 14 str, 15 ident,
+// 16 bin, 17 un, 18 call, 19 cast, 20 field, 21 index, 22 struct-lit,
+// 26 slice, 30 struct decl.
+//
+// Field reuse per code:
+//   text — literal text / ident / op / field name / cast target / decl name / import path
+//   ty   — let dty / fn ret / import alias
+//   a,b,c — child indices (l/r, callee, base, cond, lo/hi, target/value)
+//   kids  — args / then-body / fn body / struct-lit values
+//   kids2 — else-body; fn/struct decls: [0]=leading annot count, [1]=trailing (fn only)
+//   names2 — fn/struct: leading annots, then tparams, then trailing fn annots
+//   names/types — call targs / params / struct fields / struct-lit field names
+//   flag/flag2 — has_dty|has_els|has_alias|has_hi|is_pub / has_init|has_expr|is_extern
+//   33 error-set decl (text="__flash_errors", names=members)
+//   34 group block (kids=body, text=optional name, flag=has_name)
+//   35 defer stmt (a=deferred statement)
+
+@import("flex.flash")
+
+struct FNode {
+    code:  i32,
+    line:  i32,
+    text:  []u8,
+    ty:    []u8,
+    a:     i32,
+    b:     i32,
+    c:     i32,
+    flag:  i32,
+    flag2: i32,
+    kids:  ArrayList[i32],
+    kids2: ArrayList[i32],
+    names: ArrayList[[]u8],
+    names2: ArrayList[[]u8],
+    types: ArrayList[[]u8],
+}
+
+struct FPr {
+    toks: ArrayList[FxToken],
+    i:    i32,
+    err:  i32,
+    pool: *ArrayList[FNode],
+}
+
+struct FpResult {
+    decls: ArrayList[i32],
+    err:   i32,
+}
+
+fn fn_blank(code: i32, line: i32) FNode {
+    return FNode{
+        .code = code, .line = line, .text = "", .ty = "",
+        .a = 0, .b = 0, .c = 0, .flag = 0, .flag2 = 0,
+        .kids = make[i32](2), .kids2 = make[i32](2),
+        .names = make[[]u8](2), .names2 = make[[]u8](2), .types = make[[]u8](2),
+    };
+}
+
+fn fpp_push(p: *FPr, n: FNode) i32 {
+    push[FNode](p.*.pool, n);
+    return len[FNode](p.*.pool.*) - 1;
+}
+
+fn fpp_mk_leaf(p: *FPr, code: i32, text: []u8) i32 {
+    let n: FNode = fn_blank(code, 0);
+    n.text = text;
+    return fpp_push(p, n);
+}
+
+fn fpp_cur(p: *FPr) FxToken {
+    return get[FxToken](p.*.toks, p.*.i);
+}
+
+fn fpp_at(p: *FPr, kind: i32) i32 {
+    if (fpp_cur(p).kind == kind) { return 1; }
+    return 0;
+}
+
+fn fpp_at_op(p: *FPr, s: []u8) i32 {
+    let t: FxToken = fpp_cur(p);
+    if (t.kind == fx_op() && @strEq(t.text, s) == 1) { return 1; }
+    return 0;
+}
+
+fn fpp_err_at(p: *FPr, msg: []u8, line: i32) void {
+    _zag_print("flashc1 parse error (line ");
+    _zag_print(_zag_i64_to_str(line as i64));
+    _zag_print("): ");
+    _zag_println(msg);
+    p.*.err = 1;
+}
+
+fn fpp_adv(p: *FPr) FxToken {
+    let t: FxToken = fpp_cur(p);
+    if (t.kind == fx_err()) {
+        fpp_err_at(p, "invalid character in source", t.line);
+    }
+    p.*.i = p.*.i + 1;
+    return t;
+}
+
+fn fpp_eat_semi(p: *FPr) void {
+    if (fpp_at(p, fx_semi()) == 1) {
+        let _t: FxToken = fpp_adv(p);
+    }
+}
+
+fn fpp_eat_pub(p: *FPr) i32 {
+    if (fpp_at(p, fx_kw_pub()) == 1) {
+        let _t: FxToken = fpp_adv(p);
+        return 1;
+    }
+    return 0;
+}
+
+// Collect leading @annot tokens into n.names2.
+fn fpp_collect_annots(p: *FPr, n: *FNode) void {
+    while (fpp_at(p, fx_annot()) == 1) {
+        push[[]u8](&n.*.names2, fpp_adv(p).text);
+    }
+}
+
+// Peek past leading @annotations and optional pub to see the next keyword.
+fn fpp_after_annots_kw_is(p: *FPr, kind: i32) i32 {
+    let save: i32 = p.*.i;
+    while (fpp_at(p, fx_annot()) == 1) {
+        let _a: FxToken = fpp_adv(p);
+    }
+    if (fpp_at(p, fx_kw_pub()) == 1) {
+        let _pub: FxToken = fpp_adv(p);
+    }
+    let hit: i32 = 0;
+    if (fpp_at(p, kind) == 1) { hit = 1; }
+    p.*.i = save;
+    return hit;
+}
+
+// Top-level `error` may arrive as fx_kw_error or fx_ident depending on host codegen.
+fn fpp_is_error_kw(p: *FPr) i32 {
+    if (fpp_at(p, fx_kw_error()) == 1) { return 1; }
+    let t: FxToken = fpp_cur(p);
+    if (@strEq(t.text, "error") == 1) { return 1; }
+    return 0;
+}
+
+fn fpp_parse_type(p: *FPr) []u8 {
+    if (fpp_at_op(p, "*") == 1) {
+        let _t: FxToken = fpp_adv(p);
+        return _zag_str_concat("*", fpp_parse_type(p));
+    }
+    if (fpp_at_op(p, "?") == 1) {
+        let _t: FxToken = fpp_adv(p);
+        return _zag_str_concat("?", fpp_parse_type(p));
+    }
+    if (fpp_at_op(p, "!") == 1) {
+        let _t: FxToken = fpp_adv(p);
+        return _zag_str_concat("!", fpp_parse_type(p));
+    }
+    if (fpp_at(p, fx_lbracket()) == 1) {
+        let _o: FxToken = fpp_adv(p);
+        let _c: FxToken = fpp_adv(p);
+        return _zag_str_concat("[]", fpp_parse_type(p));
+    }
+    let nm: []u8 = fpp_adv(p).text;
+    if (fpp_at(p, fx_lbracket()) == 1) {
+        let _ob: FxToken = fpp_adv(p);
+        let s: []u8 = _zag_str_concat(nm, "[");
+        let count: i32 = 0;
+        while (fpp_at(p, fx_rbracket()) == 0) {
+            if (count > 0) { s = _zag_str_concat(s, ","); }
+            s = _zag_str_concat(s, fpp_parse_type(p));
+            count = count + 1;
+            if (fpp_at(p, fx_comma()) == 1) { let _cm: FxToken = fpp_adv(p); }
+        }
+        let _rb: FxToken = fpp_adv(p);
+        return _zag_str_concat(s, "]");
+    }
+    return nm;
+}
+
+fn fpp_prec(op: []u8) i32 {
+    if (@strEq(op, "||") == 1) { return 1; }
+    if (@strEq(op, "&&") == 1) { return 2; }
+    if (@strEq(op, "==") == 1 || @strEq(op, "!=") == 1) { return 3; }
+    if (@strEq(op, "<") == 1 || @strEq(op, ">") == 1 || @strEq(op, "<=") == 1 || @strEq(op, ">=") == 1) { return 4; }
+    if (@strEq(op, "+") == 1 || @strEq(op, "-") == 1) { return 5; }
+    if (@strEq(op, "*") == 1 || @strEq(op, "/") == 1 || @strEq(op, "%") == 1) { return 6; }
+    return 0;
+}
+
+fn fpp_expr(p: *FPr) i32 {
+    let e: i32 = fpp_bin(p, 1);
+    if (fpp_at(p, fx_kw_orelse()) == 1) {
+        let _o: FxToken = fpp_adv(p);
+        let n: FNode = fn_blank(16, 0);
+        n.text = "orelse";
+        n.a = e;
+        n.b = fpp_bin(p, 1);
+        return fpp_push(p, n);
+    }
+    if (fpp_at(p, fx_kw_catch()) == 1) {
+        let _c: FxToken = fpp_adv(p);
+        if (fpp_at(p, fx_pipe()) == 1) {
+            let _p1: FxToken = fpp_adv(p);
+            let cap: []u8 = fpp_adv(p).text;
+            let _p2: FxToken = fpp_adv(p);
+            let fb: i32 = fpp_bin(p, 1);
+            let cn: FNode = fn_blank(18, 0);
+            cn.a = fpp_mk_leaf(p, 15, "__catchc");
+            push[i32](&cn.kids, e);
+            push[i32](&cn.kids, fpp_mk_leaf(p, 15, cap));
+            push[i32](&cn.kids, fb);
+            return fpp_push(p, cn);
+        }
+        let fb: i32 = fpp_bin(p, 1);
+        let cn: FNode = fn_blank(18, 0);
+        cn.a = fpp_mk_leaf(p, 15, "__catch");
+        push[i32](&cn.kids, e);
+        push[i32](&cn.kids, fb);
+        return fpp_push(p, cn);
+    }
+    return e;
+}
+
+fn fpp_bin(p: *FPr, min: i32) i32 {
+    let left: i32 = fpp_unary(p);
+    let go: i32 = 1;
+    while (go == 1) {
+        if (fpp_at(p, fx_op()) == 1) {
+            let op: []u8 = fpp_cur(p).text;
+            let prec: i32 = fpp_prec(op);
+            if (prec > 0 && prec >= min) {
+                let _t: FxToken = fpp_adv(p);
+                let right: i32 = fpp_bin(p, prec + 1);
+                let n: FNode = fn_blank(16, 0);
+                n.text = op;
+                n.a = left;
+                n.b = right;
+                left = fpp_push(p, n);
+            } else {
+                go = 0;
+            }
+        } else {
+            go = 0;
+        }
+    }
+    return left;
+}
+
+fn fpp_unary(p: *FPr) i32 {
+    if (fpp_at(p, fx_kw_try()) == 1) {
+        let _t: FxToken = fpp_adv(p);
+        let e: i32 = fpp_unary(p);
+        let n: FNode = fn_blank(17, 0);
+        n.text = "try";
+        n.a = e;
+        return fpp_push(p, n);
+    }
+    if (fpp_at_op(p, "-") == 1 || fpp_at_op(p, "!") == 1 || fpp_at_op(p, "&") == 1) {
+        let op: []u8 = fpp_adv(p).text;
+        let e: i32 = fpp_unary(p);
+        let n: FNode = fn_blank(17, 0);
+        n.text = op;
+        n.a = e;
+        return fpp_push(p, n);
+    }
+    return fpp_postfix(p);
+}
+
+fn fpp_matching_bracket(p: *FPr, open: i32) i32 {
+    let depth: i32 = 0;
+    let k: i32 = open;
+    let n: i32 = len[FxToken](p.*.toks);
+    while (k < n) {
+        let kc: i32 = get[FxToken](p.*.toks, k).kind;
+        if (kc == fx_lbracket()) {
+            depth = depth + 1;
+        } else if (kc == fx_rbracket()) {
+            depth = depth - 1;
+            if (depth == 0) { return k; }
+        }
+        k = k + 1;
+    }
+    return -1;
+}
+
+fn fpp_kind_at(p: *FPr, idx: i32) i32 {
+    if (idx < 0 || idx >= len[FxToken](p.*.toks)) { return fx_eof(); }
+    return get[FxToken](p.*.toks, idx).kind;
+}
+
+fn fpp_call_args(p: *FPr, n: *FNode) void {
+    let _o: FxToken = fpp_adv(p);
+    while (fpp_at(p, fx_rp()) == 0) {
+        push[i32](&n.*.kids, fpp_expr(p));
+        if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    }
+    let _r: FxToken = fpp_adv(p);
+}
+
+fn fpp_postfix(p: *FPr) i32 {
+    let e: i32 = fpp_primary(p);
+    let go: i32 = 1;
+    while (go == 1) {
+        if (fpp_at(p, fx_ident()) == 1 && @strEq(fpp_cur(p).text, "as") == 1) {
+            let _as: FxToken = fpp_adv(p);
+            let n: FNode = fn_blank(19, 0);
+            n.a = e;
+            n.text = fpp_parse_type(p);
+            e = fpp_push(p, n);
+        } else if (fpp_at(p, fx_lp()) == 1) {
+            let n: FNode = fn_blank(18, 0);
+            n.a = e;
+            fpp_call_args(p, &n);
+            e = fpp_push(p, n);
+        } else if (fpp_at(p, fx_lbracket()) == 1) {
+            let close: i32 = fpp_matching_bracket(p, p.*.i);
+            if (fpp_kind_at(p, close + 1) == fx_lp()) {
+                let n: FNode = fn_blank(18, 0);
+                n.a = e;
+                let _ob: FxToken = fpp_adv(p);
+                while (fpp_at(p, fx_rbracket()) == 0) {
+                    push[[]u8](&n.names, fpp_parse_type(p));
+                    if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+                }
+                let _rb: FxToken = fpp_adv(p);
+                fpp_call_args(p, &n);
+                e = fpp_push(p, n);
+            } else {
+                let _o: FxToken = fpp_adv(p);
+                let lo: i32 = fpp_expr(p);
+                if (fpp_at(p, fx_dotdot()) == 1) {
+                    let _dd: FxToken = fpp_adv(p);
+                    let n: FNode = fn_blank(26, 0);
+                    n.a = e;
+                    n.b = lo;
+                    if (fpp_at(p, fx_rbracket()) == 0) {
+                        n.c = fpp_expr(p);
+                        n.flag = 1;
+                    }
+                    let _r: FxToken = fpp_adv(p);
+                    e = fpp_push(p, n);
+                } else {
+                    let _r: FxToken = fpp_adv(p);
+                    let n: FNode = fn_blank(21, 0);
+                    n.a = e;
+                    n.b = lo;
+                    e = fpp_push(p, n);
+                }
+            }
+        } else if (fpp_at(p, fx_dot()) == 1) {
+            let _d: FxToken = fpp_adv(p);
+            let n: FNode = fn_blank(20, 0);
+            n.a = e;
+            n.text = fpp_adv(p).text;
+            e = fpp_push(p, n);
+        } else {
+            go = 0;
+        }
+    }
+    return e;
+}
+
+fn fpp_struct_lit(p: *FPr, name: []u8) i32 {
+    let _o: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(22, 0);
+    n.text = name;
+    while (fpp_at(p, fx_rbrace()) == 0) {
+        let _dot: FxToken = fpp_adv(p);
+        push[[]u8](&n.names, fpp_adv(p).text);
+        let _eq: FxToken = fpp_adv(p);
+        push[i32](&n.kids, fpp_expr(p));
+        if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    }
+    let _r: FxToken = fpp_adv(p);
+    return fpp_push(p, n);
+}
+
+// Switch arms are pool nodes with code 90: names=tags, text=cap,
+// flag=has_cap, kids=body. The switch node (code 9) holds a=subject,
+// kids=arm indices, kids2=else body, flag=has_els.
+fn fpp_arm_body(p: *FPr) ArrayList[i32] {
+    if (fpp_at(p, fx_lbrace()) == 1) { return fpp_block(p); }
+    let body: ArrayList[i32] = make[i32](1);
+    let e: i32 = fpp_expr(p);
+    let n: FNode = fn_blank(8, 0);
+    n.a = e;
+    push[i32](&body, fpp_push(p, n));
+    if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    return body;
+}
+
+fn fpp_parse_switch(p: *FPr) i32 {
+    let _sw: FxToken = fpp_adv(p);
+    let _o: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(9, 0);
+    n.a = fpp_expr(p);
+    let _c: FxToken = fpp_adv(p);
+    let _lb: FxToken = fpp_adv(p);
+    while (fpp_at(p, fx_rbrace()) == 0 && fpp_at(p, fx_eof()) == 0) {
+        if (fpp_at(p, fx_kw_else()) == 1) {
+            let _e: FxToken = fpp_adv(p);
+            let _arrow: FxToken = fpp_adv(p);
+            n.kids2 = fpp_arm_body(p);
+            n.flag = 1;
+        } else {
+            let arm: FNode = fn_blank(90, 0);
+            let more: i32 = 1;
+            while (more == 1) {
+                if (fpp_at(p, fx_dot()) == 1) { let _dot: FxToken = fpp_adv(p); }
+                push[[]u8](&arm.names, fpp_adv(p).text);
+                if (fpp_at(p, fx_comma()) == 1) { let _cm: FxToken = fpp_adv(p); }
+                else { more = 0; }
+            }
+            let _arrow: FxToken = fpp_adv(p);
+            if (fpp_at(p, fx_pipe()) == 1) {
+                let _p1: FxToken = fpp_adv(p);
+                arm.text = fpp_adv(p).text;
+                arm.flag = 1;
+                let _p2: FxToken = fpp_adv(p);
+            }
+            arm.kids = fpp_arm_body(p);
+            push[i32](&n.kids, fpp_push(p, arm));
+        }
+    }
+    let _rb: FxToken = fpp_adv(p);
+    return fpp_push(p, n);
+}
+
+fn fpp_primary(p: *FPr) i32 {
+    if (fpp_at(p, fx_kw_switch()) == 1) { return fpp_parse_switch(p); }
+    if (fpp_at(p, fx_tritlit()) == 1) { return fpp_mk_leaf(p, 11, fpp_adv(p).text); }
+    if (fpp_at(p, fx_int()) == 1)     { return fpp_mk_leaf(p, 12, fpp_adv(p).text); }
+    if (fpp_at(p, fx_float()) == 1)   { return fpp_mk_leaf(p, 13, fpp_adv(p).text); }
+    if (fpp_at(p, fx_str()) == 1)     { return fpp_mk_leaf(p, 14, fpp_adv(p).text); }
+    if (fpp_at(p, fx_kw_true()) == 1)  { let _t: FxToken = fpp_adv(p); return fpp_mk_leaf(p, 12, "1"); }
+    if (fpp_at(p, fx_kw_false()) == 1) { let _t: FxToken = fpp_adv(p); return fpp_mk_leaf(p, 12, "0"); }
+    if (fpp_at(p, fx_annot()) == 1)   { return fpp_mk_leaf(p, 15, fpp_adv(p).text); }
+    if (fpp_at(p, fx_kw_null()) == 1)  { let _t: FxToken = fpp_adv(p); return fpp_mk_leaf(p, 15, "null"); }
+    if (fpp_is_error_kw(p) == 1) { let _t: FxToken = fpp_adv(p); return fpp_mk_leaf(p, 15, "error"); }
+    if (fpp_at(p, fx_ident()) == 1 || fpp_at(p, fx_type()) == 1) {
+        let name: []u8 = fpp_adv(p).text;
+        if (fpp_at(p, fx_lbracket()) == 1) {
+            let close: i32 = fpp_matching_bracket(p, p.*.i);
+            if (close >= 0 && fpp_kind_at(p, close + 1) == fx_lbrace()) {
+                let n: FNode = fn_blank(22, 0);
+                n.text = name;
+                let _ob: FxToken = fpp_adv(p);
+                while (fpp_at(p, fx_rbracket()) == 0) {
+                    push[[]u8](&n.names2, fpp_adv(p).text);
+                    if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+                }
+                let _rb: FxToken = fpp_adv(p);
+                let _lb: FxToken = fpp_adv(p);
+                while (fpp_at(p, fx_rbrace()) == 0) {
+                    let _dot: FxToken = fpp_adv(p);
+                    push[[]u8](&n.names, fpp_adv(p).text);
+                    let _eq: FxToken = fpp_adv(p);
+                    push[i32](&n.kids, fpp_expr(p));
+                    if (fpp_at(p, fx_comma()) == 1) { let _cm: FxToken = fpp_adv(p); }
+                }
+                let _rb2: FxToken = fpp_adv(p);
+                return fpp_push(p, n);
+            }
+        }
+        if (fpp_at(p, fx_lbrace()) == 1) { return fpp_struct_lit(p, name); }
+        return fpp_mk_leaf(p, 15, name);
+    }
+    if (fpp_at(p, fx_lp()) == 1) {
+        let _o: FxToken = fpp_adv(p);
+        let e: i32 = fpp_expr(p);
+        let _c: FxToken = fpp_adv(p);
+        return e;
+    }
+    // Stage-0 parity: any other token (e.g. the trit/wave keywords used as
+    // runtime constructor names) falls back to an identifier.
+    return fpp_mk_leaf(p, 15, fpp_adv(p).text);
+}
+
+fn fpp_parse_group_stmt(p: *FPr) i32 {
+    let gtok: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(34, gtok.line);
+    if (fpp_at(p, fx_ident()) == 1) {
+        n.text = fpp_adv(p).text;
+        n.flag = 1;
+    }
+    n.kids = fpp_block(p);
+    return fpp_push(p, n);
+}
+
+fn fpp_parse_defer_stmt(p: *FPr) i32 {
+    let dtok: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(35, dtok.line);
+    n.a = fpp_stmt(p);
+    return fpp_push(p, n);
+}
+
+fn fpp_block(p: *FPr) ArrayList[i32] {
+    let _o: FxToken = fpp_adv(p);
+    let stmts: ArrayList[i32] = make[i32](8);
+    while (fpp_at(p, fx_rbrace()) == 0 && fpp_at(p, fx_eof()) == 0) {
+        push[i32](&stmts, fpp_stmt(p));
+    }
+    let _c: FxToken = fpp_adv(p);
+    return stmts;
+}
+
+fn fpp_stmt(p: *FPr) i32 {
+    if (fpp_at(p, fx_kw_switch()) == 1) { return fpp_parse_switch(p); }
+    if (fpp_at(p, fx_kw_let()) == 1) {
+        let _t: FxToken = fpp_adv(p);
+        let n: FNode = fn_blank(2, 0);
+        n.text = fpp_adv(p).text;
+        if (fpp_at(p, fx_colon()) == 1) {
+            let _c: FxToken = fpp_adv(p);
+            n.ty = fpp_parse_type(p);
+            n.flag = 1;
+        }
+        if (fpp_at_op(p, "=") == 1) {
+            let _eq: FxToken = fpp_adv(p);
+            n.a = fpp_expr(p);
+            n.flag2 = 1;
+        }
+        fpp_eat_semi(p);
+        return fpp_push(p, n);
+    }
+    if (fpp_at(p, fx_kw_return()) == 1) {
+        let _t: FxToken = fpp_adv(p);
+        let n: FNode = fn_blank(3, 0);
+        if (fpp_at(p, fx_semi()) == 0) {
+            n.a = fpp_expr(p);
+            n.flag2 = 1;
+        }
+        fpp_eat_semi(p);
+        return fpp_push(p, n);
+    }
+    if (fpp_at(p, fx_kw_if()) == 1) {
+        let _t: FxToken = fpp_adv(p);
+        let _o: FxToken = fpp_adv(p);
+        let n: FNode = fn_blank(4, 0);
+        n.a = fpp_expr(p);
+        let _c: FxToken = fpp_adv(p);
+        if (fpp_at(p, fx_pipe()) == 1) {
+            let _p1: FxToken = fpp_adv(p);
+            n.text = fpp_adv(p).text;
+            n.flag2 = 1;
+            let _p2: FxToken = fpp_adv(p);
+        }
+        n.kids = fpp_block(p);
+        if (fpp_at(p, fx_kw_else()) == 1) {
+            let _e: FxToken = fpp_adv(p);
+            n.flag = 1;
+            if (fpp_at(p, fx_kw_if()) == 1) {
+                push[i32](&n.kids2, fpp_stmt(p));
+            } else {
+                n.kids2 = fpp_block(p);
+            }
+        }
+        return fpp_push(p, n);
+    }
+    if (fpp_at(p, fx_kw_while()) == 1) {
+        let _t: FxToken = fpp_adv(p);
+        let _o: FxToken = fpp_adv(p);
+        let n: FNode = fn_blank(5, 0);
+        n.a = fpp_expr(p);
+        let _c: FxToken = fpp_adv(p);
+        n.kids = fpp_block(p);
+        return fpp_push(p, n);
+    }
+    if (fpp_at(p, fx_kw_group()) == 1) { return fpp_parse_group_stmt(p); }
+    if (fpp_at(p, fx_kw_defer()) == 1) { return fpp_parse_defer_stmt(p); }
+    let e: i32 = fpp_expr(p);
+    if (fpp_at_op(p, "=") == 1) {
+        let _eq: FxToken = fpp_adv(p);
+        let n: FNode = fn_blank(7, 0);
+        n.a = e;
+        n.b = fpp_expr(p);
+        fpp_eat_semi(p);
+        return fpp_push(p, n);
+    }
+    fpp_eat_semi(p);
+    let n: FNode = fn_blank(8, 0);
+    n.a = e;
+    return fpp_push(p, n);
+}
+
+fn fpp_parse_fn(p: *FPr) i32 {
+    let n: FNode = fn_blank(1, 0);
+    let leading_annots: i32 = 0;
+    fpp_collect_annots(p, &n);
+    leading_annots = len[[]u8](n.names2);
+    let is_pub: i32 = fpp_eat_pub(p);
+    let is_extern: i32 = 0;
+    if (fpp_at(p, fx_kw_extern()) == 1) {
+        let _e: FxToken = fpp_adv(p);
+        is_extern = 1;
+    }
+    let ftok: FxToken = fpp_adv(p);
+    n.line = ftok.line;
+    n.flag = is_pub;
+    n.flag2 = is_extern;
+    let recv_name: []u8 = "";
+    let recv_ty: []u8 = "";
+    let is_method: i32 = 0;
+    if (fpp_at(p, fx_lp()) == 1) {
+        let _rp1: FxToken = fpp_adv(p);
+        recv_name = fpp_adv(p).text;
+        let _rc: FxToken = fpp_adv(p);
+        recv_ty = fpp_parse_type(p);
+        let _rp2: FxToken = fpp_adv(p);
+        is_method = 1;
+    }
+    let bare: []u8 = fpp_adv(p).text;
+    n.text = bare;
+    if (is_method == 1) {
+        n.text = _zag_str_concat(_zag_str_concat(recv_ty, "_"), bare);
+    }
+    if (fpp_at(p, fx_lbracket()) == 1) {
+        let _ob: FxToken = fpp_adv(p);
+        while (fpp_at(p, fx_rbracket()) == 0) {
+            push[[]u8](&n.names2, fpp_adv(p).text);
+            if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+        }
+        let _rb: FxToken = fpp_adv(p);
+    }
+    let _o: FxToken = fpp_adv(p);
+    if (is_method == 1) {
+        push[[]u8](&n.names, recv_name);
+        push[[]u8](&n.types, recv_ty);
+    }
+    while (fpp_at(p, fx_rp()) == 0) {
+        push[[]u8](&n.names, fpp_adv(p).text);
+        let _co: FxToken = fpp_adv(p);
+        push[[]u8](&n.types, fpp_parse_type(p));
+        if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    }
+    let _r: FxToken = fpp_adv(p);
+    n.ty = fpp_parse_type(p);
+    let trailing_start: i32 = len[[]u8](n.names2);
+    fpp_collect_annots(p, &n);
+    let trailing_annots: i32 = len[[]u8](n.names2) - trailing_start;
+    if (leading_annots > 0) {
+        push[i32](&n.kids2, leading_annots);
+    }
+    if (trailing_annots > 0) {
+        push[i32](&n.kids2, trailing_annots);
+    }
+    if (is_extern == 0) {
+        n.kids = fpp_block(p);
+    } else {
+        fpp_eat_semi(p);
+    }
+    return fpp_push(p, n);
+}
+
+fn fpp_parse_struct(p: *FPr) i32 {
+    let n: FNode = fn_blank(30, 0);
+    fpp_collect_annots(p, &n);
+    let leading_annots: i32 = len[[]u8](n.names2);
+    let is_pub: i32 = fpp_eat_pub(p);
+    let stok: FxToken = fpp_adv(p);
+    n.line = stok.line;
+    n.flag = is_pub;
+    if (leading_annots > 0) {
+        push[i32](&n.kids2, leading_annots);
+    }
+    n.text = fpp_adv(p).text;
+    if (fpp_at(p, fx_lbracket()) == 1) {
+        let _ob: FxToken = fpp_adv(p);
+        while (fpp_at(p, fx_rbracket()) == 0) {
+            push[[]u8](&n.names2, fpp_adv(p).text);
+            if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+        }
+        let _rb: FxToken = fpp_adv(p);
+    }
+    let _lb: FxToken = fpp_adv(p);
+    while (fpp_at(p, fx_rbrace()) == 0) {
+        push[[]u8](&n.names, fpp_adv(p).text);
+        if (fpp_at(p, fx_colon()) == 1) {
+            let _co: FxToken = fpp_adv(p);
+            push[[]u8](&n.types, fpp_parse_type(p));
+        } else {
+            push[[]u8](&n.types, "void");
+        }
+        if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    }
+    let _rb: FxToken = fpp_adv(p);
+    return fpp_push(p, n);
+}
+
+fn fpp_parse_enum(p: *FPr) i32 {
+    let is_pub: i32 = fpp_eat_pub(p);
+    let etok: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(31, etok.line);
+    n.flag = is_pub;
+    n.text = fpp_adv(p).text;
+    let _lb: FxToken = fpp_adv(p);
+    while (fpp_at(p, fx_rbrace()) == 0 && fpp_at(p, fx_eof()) == 0) {
+        push[[]u8](&n.names, fpp_adv(p).text);
+        if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    }
+    let _rb: FxToken = fpp_adv(p);
+    return fpp_push(p, n);
+}
+
+fn fpp_parse_union(p: *FPr) i32 {
+    let utok: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(32, utok.line);
+    n.text = fpp_adv(p).text;
+    let _lb: FxToken = fpp_adv(p);
+    while (fpp_at(p, fx_rbrace()) == 0 && fpp_at(p, fx_eof()) == 0) {
+        push[[]u8](&n.names, fpp_adv(p).text);
+        if (fpp_at(p, fx_colon()) == 1) {
+            let _co: FxToken = fpp_adv(p);
+            push[[]u8](&n.types, fpp_parse_type(p));
+        } else {
+            push[[]u8](&n.types, "void");
+        }
+        if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    }
+    let _rb: FxToken = fpp_adv(p);
+    return fpp_push(p, n);
+}
+
+fn fpp_strip_quotes(s: []u8) []u8 {
+    if (s.len >= 2) { return s[1..s.len - 1]; }
+    return s;
+}
+
+fn fpp_parse_error(p: *FPr) i32 {
+    let etok: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(33, etok.line);
+    n.text = "__flash_errors";
+    if (fpp_at(p, fx_lbrace()) == 1) {
+        let _lb: FxToken = fpp_adv(p);
+        while (fpp_at(p, fx_rbrace()) == 0) {
+            push[[]u8](&n.names, fpp_adv(p).text);
+            if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+        }
+        let _rb: FxToken = fpp_adv(p);
+        fpp_eat_semi(p);
+    } else {
+        push[[]u8](&n.names, fpp_adv(p).text);
+        fpp_eat_semi(p);
+    }
+    return fpp_push(p, n);
+}
+
+fn fpp_parse_import(p: *FPr) i32 {
+    let itok: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(10, itok.line);
+    let _lp: FxToken = fpp_adv(p);
+    n.text = fpp_strip_quotes(fpp_adv(p).text);
+    let _rp: FxToken = fpp_adv(p);
+    if (fpp_at(p, fx_ident()) == 1 && @strEq(fpp_cur(p).text, "as") == 1) {
+        let _as: FxToken = fpp_adv(p);
+        n.ty = fpp_adv(p).text;
+        n.flag = 1;
+    }
+    fpp_eat_semi(p);
+    return fpp_push(p, n);
+}
+
+// Parse one full-language source into the shared pool; returns decl indices.
+fn fpp_parse_into(src: []u8, pool: *ArrayList[FNode]) FpResult {
+    let toks: ArrayList[FxToken] = flex(src);
+    let p: FPr = FPr{ .toks = toks, .i = 0, .err = 0, .pool = pool };
+    let decls: ArrayList[i32] = make[i32](16);
+    while (fpp_at(&p, fx_eof()) == 0) {
+        if (fpp_at(&p, fx_err()) == 1) {
+            let bad: FxToken = fpp_adv(&p);
+            fpp_err_at(&p, "invalid character in source", bad.line);
+        } else if (fpp_at(&p, fx_annot()) == 1 && @strEq(fpp_cur(&p).text, "@import") == 1) {
+            push[i32](&decls, fpp_parse_import(&p));
+        } else if (fpp_at(&p, fx_kw_pub()) == 1) {
+            let nk: i32 = fpp_kind_at(&p, p.i + 1);
+            if (nk == fx_kw_struct()) {
+                push[i32](&decls, fpp_parse_struct(&p));
+            } else if (nk == fx_kw_enum()) {
+                push[i32](&decls, fpp_parse_enum(&p));
+            } else if (nk == fx_kw_fn() || nk == fx_kw_extern()) {
+                push[i32](&decls, fpp_parse_fn(&p));
+            } else {
+                let bad: FxToken = fpp_adv(&p);
+                fpp_err_at(&p, "pub must prefix fn, extern fn, struct, or enum", bad.line);
+            }
+        } else if (fpp_is_error_kw(&p) == 1) {
+            push[i32](&decls, fpp_parse_error(&p));
+        } else if (fpp_at(&p, fx_annot()) == 1 && @strEq(fpp_cur(&p).text, "@import") == 0) {
+            if (fpp_after_annots_kw_is(&p, fx_kw_struct()) == 1) {
+                push[i32](&decls, fpp_parse_struct(&p));
+            } else if (fpp_after_annots_kw_is(&p, fx_kw_enum()) == 1) {
+                push[i32](&decls, fpp_parse_enum(&p));
+            } else if (fpp_after_annots_kw_is(&p, fx_kw_fn()) == 1 || fpp_after_annots_kw_is(&p, fx_kw_extern()) == 1) {
+                push[i32](&decls, fpp_parse_fn(&p));
+            } else {
+                let bad: FxToken = fpp_adv(&p);
+                fpp_err_at(&p, "annotation must prefix fn, extern fn, struct, or enum", bad.line);
+            }
+        } else if (fpp_at(&p, fx_kw_struct()) == 1 || fpp_after_annots_kw_is(&p, fx_kw_struct()) == 1) {
+            push[i32](&decls, fpp_parse_struct(&p));
+        } else if (fpp_at(&p, fx_kw_enum()) == 1) {
+            push[i32](&decls, fpp_parse_enum(&p));
+        } else if (fpp_at(&p, fx_kw_union()) == 1) {
+            push[i32](&decls, fpp_parse_union(&p));
+        } else if (fpp_at(&p, fx_kw_extern()) == 1 || fpp_at(&p, fx_kw_fn()) == 1 || fpp_after_annots_kw_is(&p, fx_kw_fn()) == 1 || fpp_after_annots_kw_is(&p, fx_kw_extern()) == 1) {
+            push[i32](&decls, fpp_parse_fn(&p));
+        } else {
+            let bad: FxToken = fpp_adv(&p);
+            fpp_err_at(&p, "unsupported top-level declaration in stage-1", bad.line);
+        }
+    }
+    return FpResult{ .decls = decls, .err = p.err };
+}

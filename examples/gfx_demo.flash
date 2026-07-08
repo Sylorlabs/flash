@@ -1,0 +1,44 @@
+// examples/gfx_demo.flash.zag — graphical compute via the softgpu fallback driver.
+//
+// Renders a ternary interference field with raster overlays through the
+// engine dispatch layer (CPU fallback today; GPU routes log and defer to
+// softgpu until Vulkan lands), then presents through the device abstraction
+// — PPM file here so the output is portable and testable; on a live console
+// the same call path can blit /dev/fb0, and native ternary display drivers
+// slot in as new device kinds later.
+
+@import("../flash/driver/engine.flash")
+
+fn main() i32 {
+    let dev: EngineDevice = engine_detect();
+    engine_report(dev);
+
+    let fb: SoftFb = softgpu_new(96, 64);
+
+    engine_dispatch_kernel(&fb, softgpu_kernel_ternary(), dev);
+    softgpu_fill_rect(&fb, 6, 6, 20, 12, 255, 255, 255);
+    softgpu_line(&fb, 0, 0, 95, 63, 255, 64, 64);
+    softgpu_line(&fb, 0, 63, 95, 0, 64, 255, 64);
+
+    let x: i32 = 40;
+    while (x < 56) {
+        softgpu_trit_pixel(&fb, x, 32, softgpu_bal3(x));
+        x = x + 1;
+    }
+
+    let dev: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/gfx_demo.ppm" };
+    let rc: i32 = softgpu_present(dev, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL gfx present");
+        return 1;
+    }
+
+    _zag_print("gfx=");
+    _zag_print(_zag_i64_to_str(fb.w as i64));
+    _zag_print("x");
+    _zag_println(_zag_i64_to_str(fb.h as i64));
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("gfx_demo: ok");
+    return 0;
+}

@@ -1,0 +1,207 @@
+// selfhost/lib/spatial_probe.flash.zag — spatial/manifest API sweep (Flash ports).
+//
+// Machine-generated twin of tests/portparity/spatial_probe0.zag over the
+// Flash-ported libraries ( symbols). The port-parity test diffs the two
+// programs' outputs byte-for-byte.
+
+@import("flash_to_zag.flash")
+
+fn pp_i(v: i32) void { _zag_print(_zag_i64_to_str(v as i64)); }
+fn pp_s(s: []u8) void { _zag_print(s); }
+fn pp_nl() void { _zag_println(""); }
+
+fn pp_vox(v: VoxelLocal) void {
+    pp_s("(");
+    pp_i(v.x);
+    pp_s(",");
+    pp_i(v.y);
+    pp_s(",");
+    pp_i(v.z);
+    pp_s(")");
+}
+
+fn pp_cham(c: ChamberCoord) void {
+    pp_s("(");
+    pp_i(c.x);
+    pp_s(",");
+    pp_i(c.y);
+    pp_s(",");
+    pp_i(c.z);
+    pp_s(")");
+}
+
+fn axis_code(a: LaserAxis) i32 {
+    if (a == LaserAxis.Vertical) { return 0; }
+    if (a == LaserAxis.HorizontalX) { return 1; }
+    return 2;
+}
+
+fn markers_from_sig(s: i32) OrientationMarkers {
+    let b0: i32 = s % 2;
+    let b1: i32 = (s / 2) % 2;
+    let b2: i32 = (s / 4) % 2;
+    let b3: i32 = (s / 8) % 2;
+    return OrientationMarkers{
+        .wall_pos_x = b0 * 2 - 1,
+        .wall_pos_y = b1 * 2 - 1,
+        .floor      = b2 * 2 - 1,
+        .ceiling    = b3 * 2 - 1,
+    };
+}
+
+fn probe_rotation() void {
+    let deg: i32 = 0;
+    while (deg < 360) {
+        let rot: RotationState = rotation_from_deg(deg);
+        pp_s("remap deg=");
+        pp_i(deg);
+        pp_s(" a=");
+        pp_vox(remap_voxel_local(voxel_local(1, 2, 3), rot));
+        pp_s(" b=");
+        pp_vox(remap_voxel_local(voxel_local(7, 0, 4), rot));
+        pp_s(" inv=");
+        pp_vox(inverse_remap_voxel_local(voxel_local(1, 2, 3), rot));
+        pp_s(" axX=");
+        pp_i(axis_code(remap_laser_axis(LaserAxis.HorizontalX, rot)));
+        pp_s(" pc=");
+        pp_i(remap_path_coord(3, LaserAxis.HorizontalX, rot));
+        pp_s(" next=");
+        pp_i(rotation_to_deg(rotation_next(rot)));
+        pp_nl();
+        deg = deg + 90;
+    }
+    pp_s("compose=");
+    pp_i(rotation_to_deg(compose_rotation(RotationState.R90, RotationState.R270)));
+    pp_s(",");
+    pp_i(rotation_to_deg(compose_rotation(RotationState.R180, RotationState.R270)));
+    pp_s(",");
+    pp_i(rotation_to_deg(invert_rotation(RotationState.R90)));
+    pp_nl();
+    let s: i32 = 0;
+    while (s < 16) {
+        let m: OrientationMarkers = markers_from_sig(s);
+        pp_s("sig=");
+        pp_i(s);
+        pp_s(" det=");
+        pp_i(rotation_to_deg(detect_rotation_from_markers(m)));
+        pp_s(" mm=");
+        pp_i(rotation_mismatch(m, RotationState.R90));
+        pp_nl();
+        s = s + 1;
+    }
+}
+
+fn probe_grid() void {
+    let g: LatticeGrid = lattice_new(3, 2, 2);
+    pp_s("cap=");
+    pp_i(lattice_voxel_capacity(g));
+    pp_s(" count=");
+    pp_i(g.count);
+    pp_nl();
+    let v1: VoxelGlobal = VoxelGlobal{ .chamber = chamber_coord(1, 1, 0), .local = voxel_local(3, 4, 5) };
+    let v2: VoxelGlobal = VoxelGlobal{ .chamber = chamber_coord(2, 0, 1), .local = voxel_local(7, 7, 7) };
+    pp_s("mm1=");
+    pp_cham(voxel_mm_offset(g, v1));
+    pp_s(" mm2=");
+    pp_cham(voxel_mm_offset(g, v2));
+    pp_nl();
+    let lin: i32 = voxel_global_linear(g, v1);
+    let back: VoxelGlobal = voxel_global_from_linear(g, lin);
+    pp_s("lin=");
+    pp_i(lin);
+    pp_s(" back=");
+    pp_cham(back.chamber);
+    pp_vox(back.local);
+    pp_nl();
+    pp_s("bounds=");
+    if (chamber_in_bounds(g.dims, chamber_coord(2, 1, 1))) { pp_i(1); } else { pp_i(0); }
+    if (chamber_in_bounds(g.dims, chamber_coord(3, 0, 0))) { pp_i(1); } else { pp_i(0); }
+    if (voxel_in_bounds(voxel_local(7, 7, 7))) { pp_i(1); } else { pp_i(0); }
+    if (voxel_in_bounds(voxel_local(8, 0, 0))) { pp_i(1); } else { pp_i(0); }
+    pp_nl();
+    // NOTE: grid's enum-Trit helpers (grid_trit_from_i32/grid_trit_to_i32) are not
+    // probed: this binary also imports stdlib trit.zag (struct Trit), and znc
+    // silently accepts the duplicate type name but miscompiles the enum
+    // helpers (segfault). Tracked as a Zag issue; the helpers are vestigial.
+    lattice_free(&g);
+}
+
+fn probe_manager() void {
+    let m: HardwareManager = manager_new(3, 2, 1, 2);
+    let mp: *HardwareManager = &m;
+    seat_nano_block(mp, chamber_coord(0, 0, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(1, 0, 0), RotationState.R90);
+    seat_nano_block(mp, chamber_coord(2, 1, 0), RotationState.R270);
+    pp_s("lanes=");
+    pp_i(m.stripe_pool.lane_count);
+    pp_s(" poolcap=");
+    pp_i(pool_capacity_bytes(m.stripe_pool));
+    pp_nl();
+    let off: i32 = 0;
+    while (off < 14) {
+        pp_s("off=");
+        pp_i(off);
+        if (resolve_logical_address_mgr(mp, off)) |a| {
+            pp_s(" ch=");
+            pp_cham(a.chamber);
+            pp_s(" vox=");
+            pp_vox(a.voxel);
+            pp_s(" lane=");
+            pp_i(a.lane);
+            pp_s(" rot=");
+            pp_i(rotation_to_deg(a.rot));
+            pp_s(" back=");
+            pp_i(physical_to_logical(m.stripe_pool, a));
+        } else {
+            pp_s(" none");
+        }
+        pp_nl();
+        off = off + 1;
+    }
+    let entries: ArrayList[CoordinateManifestEntry] = make[CoordinateManifestEntry](64);
+    pp_s("cm_entries=");
+    pp_i(emit_coordinate_manifest(mp, &entries));
+    pp_nl();
+    let e0: CoordinateManifestEntry = get[CoordinateManifestEntry](entries, 100);
+    pp_s("cm100=");
+    pp_cham(e0.chamber);
+    pp_vox(e0.voxel);
+    pp_s(" rot=");
+    pp_i(e0.rotation_deg);
+    pp_s(" mm=(");
+    pp_i(e0.mm_x);
+    pp_s(",");
+    pp_i(e0.mm_y);
+    pp_s(",");
+    pp_i(e0.mm_z);
+    pp_s(")");
+    pp_nl();
+    let groups: ArrayList[ChamberCoord] = chambers_in_lane_group(m.stripe_pool, 1);
+    pp_s("group1=");
+    pp_i(len[ChamberCoord](groups));
+    pp_nl();
+    pp_s("resolve_mm5=");
+    let c5: Coord = resolve_mm_coord(mp, 5);
+    pp_i(c5.x as i32);
+    pp_s(",");
+    pp_i(c5.y as i32);
+    pp_s(",");
+    pp_i(c5.z as i32);
+    pp_nl();
+    manager_free(mp);
+}
+
+fn probe_manifest() void {
+    let mani: CoordinateManifest = compile_ternary_program("probe");
+    _zag_print(manifest_write(&mani));
+}
+
+fn main() i32 {
+    probe_rotation();
+    probe_grid();
+    probe_manager();
+    probe_manifest();
+    _zag_println("spatial_probe: ok");
+    return 0;
+}
+

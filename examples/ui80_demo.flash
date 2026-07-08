@@ -1,0 +1,90 @@
+// examples/ui80_demo.flash.zag — a 1980s desktop UI rendered by softgpu.
+//
+// Classic 1-bit workstation look, entirely in Flash on the CPU: dithered
+// desktop, menu bar, double-framed window with a lined title bar and close
+// box, drop shadow, body text, a default button, and a progress gauge.
+
+@import("../flash/driver/softgpu.flash")
+
+fn ui_window(fb: *SoftFb, x: i32, y: i32, w: i32, h: i32, title: []u8) void {
+    // drop shadow
+    softgpu_fill_rect(fb, x + 3, y + 3, w, h, 0, 0, 0);
+    // body + frame
+    softgpu_fill_rect(fb, x, y, w, h, 255, 255, 255);
+    softgpu_frame_rect(fb, x, y, w, h, 0, 0, 0);
+    // title bar: horizontal pinstripes, gap behind centered title
+    let ty: i32 = y + 2;
+    while (ty < y + 12) {
+        softgpu_line(fb, x + 2, ty, x + w - 3, ty, 0, 0, 0);
+        ty = ty + 2;
+    }
+    let tw: i32 = title.len * 6 + 8;
+    let tx: i32 = x + (w - tw) / 2;
+    softgpu_fill_rect(fb, tx, y + 1, tw, 12, 255, 255, 255);
+    softgpu_text(fb, tx + 4, y + 3, title, 0, 0, 0);
+    // close box
+    softgpu_fill_rect(fb, x + 7, y + 3, 9, 9, 255, 255, 255);
+    softgpu_frame_rect(fb, x + 7, y + 3, 9, 9, 0, 0, 0);
+    // title bar separator
+    softgpu_line(fb, x, y + 13, x + w - 1, y + 13, 0, 0, 0);
+}
+
+fn ui_button(fb: *SoftFb, x: i32, y: i32, w: i32, h: i32, label: []u8, is_default: i32) void {
+    softgpu_fill_rect(fb, x, y, w, h, 255, 255, 255);
+    softgpu_frame_rect(fb, x, y, w, h, 0, 0, 0);
+    if (is_default == 1) {
+        softgpu_frame_rect(fb, x - 3, y - 3, w + 6, h + 6, 0, 0, 0);
+        softgpu_frame_rect(fb, x - 4, y - 4, w + 8, h + 8, 0, 0, 0);
+    }
+    let lx: i32 = x + (w - label.len * 6) / 2;
+    softgpu_text(fb, lx, y + (h - 7) / 2, label, 0, 0, 0);
+}
+
+fn main() i32 {
+    let fb: SoftFb = softgpu_new(320, 200);
+
+    // desktop: 50% dither over black
+    softgpu_clear(&fb, 0, 0, 0);
+    softgpu_dither_rect(&fb, 0, 0, 320, 200, 255, 255, 255);
+
+    // menu bar
+    softgpu_fill_rect(&fb, 0, 0, 320, 12, 255, 255, 255);
+    softgpu_line(&fb, 0, 12, 319, 12, 0, 0, 0);
+    softgpu_text(&fb, 8, 3, "FLASH  FILE  EDIT  VIEW  SPECIAL", 0, 0, 0);
+
+    // main window
+    ui_window(&fb, 34, 28, 236, 138, "TERNARY SYSTEM 1.0");
+    softgpu_text(&fb, 48, 50, "WELCOME TO FLASH OS", 0, 0, 0);
+    softgpu_text(&fb, 48, 64, "TRITS: -1 0 +1", 0, 0, 0);
+    softgpu_text(&fb, 48, 78, "CHAMBERS: 12 OF 16 SEATED", 0, 0, 0);
+    softgpu_text(&fb, 48, 92, "LASER: 1250 MW  POL: V", 0, 0, 0);
+
+    // progress gauge
+    softgpu_frame_rect(&fb, 48, 108, 176, 12, 0, 0, 0);
+    softgpu_dither_rect(&fb, 50, 110, 128, 8, 0, 0, 0);
+    softgpu_text(&fb, 232, 110, "72/100", 0, 0, 0);
+
+    // buttons
+    ui_button(&fb, 66, 134, 60, 18, "CANCEL", 0);
+    ui_button(&fb, 172, 134, 60, 18, "OK", 1);
+
+    // trit status strip along the bottom of the desktop
+    let x: i32 = 8;
+    while (x < 312) {
+        softgpu_trit_pixel(&fb, x, 192, softgpu_bal3(x / 3));
+        softgpu_trit_pixel(&fb, x, 193, softgpu_bal3(x / 3));
+        x = x + 1;
+    }
+
+    let dev: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/ui80_demo.ppm" };
+    let rc: i32 = softgpu_present(dev, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL ui80 present");
+        return 1;
+    }
+
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("ui80_demo: ok");
+    return 0;
+}

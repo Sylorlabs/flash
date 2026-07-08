@@ -1,0 +1,159 @@
+// flash/compiler/flash_to_zag.zag — Flash ternary ops → Zag spatial coordinate rules.
+//
+// Each Flash op lowers to a PathSegment: X/Y/Z waypoints, laser power, and
+// polarization derived from trit values.  Wave/beam/phase carriers adjust the
+// routing geometry and power envelope.  Coordinates come from the hardware
+// lattice (mm offsets) and stripe-lane resolution via HardwareManager.
+
+@import("../stdlib/trit.zag")
+@import("../stdlib/photon.zag")
+@import("manifest.zag")
+@import("../lib/pcm_emit.zag")
+@import("../../zag-spatial/hardware_manager.zag")
+
+// Routing context tracks logical stripe byte offset while lowering ops.
+struct RouteCtx {
+    byte_offset: i32,
+    base_power_mw: f32,
+}
+
+fn route_ctx_new() RouteCtx {
+    return RouteCtx{
+        .byte_offset = 0,
+        .base_power_mw = 1.0,
+    };
+}
+
+fn coord_from_mm(mm_x: i32, mm_y: i32, mm_z: i32) Coord {
+    return coord(mm_x as f32, mm_y as f32, mm_z as f32);
+}
+
+fn coord_from_manifest_entry(e: CoordinateManifestEntry) Coord {
+    return coord_from_mm(e.mm_x, e.mm_y, e.mm_z);
+}
+
+// Pointer-based wrapper: stripe-map via logical_to_physical (the same path
+// resolve_logical_address uses) then lift to manifest entries. Historical note:
+// this shape originally worked around a znc frame under-reservation fault when
+// passing HardwareManager by value through an if-let on a big optional; fixed
+// upstream in znc's pre-scan (ncodegen.zag optional scratch sizing, 2026-07-02).
+// Kept pointer-based — it avoids a 9-word copy per call.
+fn resolve_logical_address_mgr(mgr: *HardwareManager, byte_offset: i32) ?PhysicalAddress {
+    return logical_to_physical(mgr.*.stripe_pool, mgr.*.lattice, byte_offset);
+}
+
+fn resolve_mm_coord(mgr: *HardwareManager, byte_offset: i32) Coord {
+    let fallback: Coord = coord(0.0, 0.0, 0.0);
+    if (resolve_logical_address_mgr(mgr, byte_offset)) |addr| {
+        let global: VoxelGlobal = VoxelGlobal{ .chamber = addr.chamber, .local = addr.voxel };
+        let mm: ChamberCoord = voxel_mm_offset(mgr.*.lattice, global);
+        let entry: CoordinateManifestEntry = CoordinateManifestEntry{
+            .chamber      = addr.chamber,
+            .rotation_deg = rotation_to_deg(addr.rot),
+            .occupied     = 1,
+            .lane_id      = addr.lane,
+            .voxel        = addr.voxel,
+            .laser_axis   = LaserAxis.Vertical,
+            .mm_x         = mm.x,
+            .mm_y         = mm.y,
+            .mm_z         = mm.z,
+        };
+        return coord_from_manifest_entry(entry);
+    }
+    return fallback;
+}
+
+fn trit_to_pol(t: Trit) i32 {
+    return t.val;
+}
+
+// Lower a ternary arithmetic op into a routed path segment at stripe lanes.
+fn lower_trit_op(
+    mgr: *HardwareManager,
+    ctx: *RouteCtx,
+    op: []u8,
+    a: Trit,
+    b: Trit,
+    result: Trit,
+) PathSegment {
+    let from_off: i32 = ctx.*.byte_offset;
+    let to_off: i32 = from_off + 1;
+    let from_c: Coord = resolve_mm_coord(mgr, from_off);
+    let to_c: Coord = resolve_mm_coord(mgr, to_off);
+    ctx.*.byte_offset = to_off + 1;
+    let power: f32 = ctx.*.base_power_mw + (a.val * a.val + b.val * b.val) as f32 * 0.25;
+    let base: PathSegment = path_segment_new(from_c, to_c, power, trit_to_pol(result), op);
+    let pcm: PcmFields = pcm_for_trit_op(op, a, b, result, from_off);
+    return path_segment_apply_pcm(base, pcm);
+}
+
+// Wave carrier: route between resolved stripe voxels along lattice mm offsets.
+fn lower_wave(mgr: *HardwareManager, ctx: *RouteCtx, w: Wave) PathSegment {
+    let from_off: i32 = ctx.*.byte_offset;
+    let to_off: i32 = from_off + 1;
+    let from_c: Coord = resolve_mm_coord(mgr, from_off);
+    let to_c: Coord = resolve_mm_coord(mgr, to_off);
+    ctx.*.byte_offset = to_off + 1;
+    return path_segment_new(from_c, to_c, w.amplitude * ctx.*.base_power_mw, 0, "wave");
+}
+
+// Beam carrier: direct routing between lane-resolved chamber coordinates.
+fn lower_beam(mgr: *HardwareManager, ctx: *RouteCtx, b: Beam) PathSegment {
+    let from_off: i32 = ctx.*.byte_offset;
+    let to_off: i32 = from_off + 1;
+    let from_c: Coord = resolve_mm_coord(mgr, from_off);
+    let to_c: Coord = resolve_mm_coord(mgr, to_off);
+    ctx.*.byte_offset = to_off + 1;
+    return path_segment_new(from_c, to_c, b.power_mw, trit_to_pol(b.polarization), "beam");
+}
+
+// Phase carrier: spin polarization between resolved stripe addresses.
+fn lower_phase(mgr: *HardwareManager, ctx: *RouteCtx, p: Phase) PathSegment {
+    let from_off: i32 = ctx.*.byte_offset;
+    let to_off: i32 = from_off + 1;
+    let from_c: Coord = resolve_mm_coord(mgr, from_off);
+    let to_c: Coord = resolve_mm_coord(mgr, to_off);
+    ctx.*.byte_offset = to_off + 1;
+    let spin: Trit = phase_spin(p);
+    return path_segment_new(from_c, to_c, ctx.*.base_power_mw, trit_to_pol(spin), "phase");
+}
+
+// Compile a ternary program using a live hardware manager and lattice manifest.
+fn compile_with_hardware(name: []u8, mgr: *HardwareManager) CoordinateManifest {
+    let m: CoordinateManifest = manifest_new(name, "0.1.0");
+    let ctx: RouteCtx = route_ctx_new();
+
+    let a: Trit = trit(1);
+    let b: Trit = trit(-1);
+    let sum: Trit = trit_add(a, b);
+    let prod: Trit = trit_mul(a, b);
+    let gate: Trit = trit_nand(a, b);
+
+    manifest_push_seg(&m, lower_trit_op(mgr, &ctx, "trit_add", a, b, sum));
+    manifest_push_seg(&m, lower_trit_op(mgr, &ctx, "trit_mul", a, b, prod));
+    manifest_push_seg(&m, lower_trit_op(mgr, &ctx, "trit_nand", a, b, gate));
+
+    let w: Wave = wave_default();
+    let beam: Beam = beam_default();
+    let ph: Phase = phase_default();
+
+    manifest_push_seg(&m, lower_wave(mgr, &ctx, w));
+    manifest_push_seg(&m, lower_beam(mgr, &ctx, beam));
+    manifest_push_seg(&m, lower_phase(mgr, &ctx, ph));
+
+    manifest_set_pol(&m, sum.val);
+    return m;
+}
+
+// Default entry: 2×2×1 lattice with all chambers seated.
+fn compile_ternary_program(name: []u8) CoordinateManifest {
+    let mgr: HardwareManager = manager_new(2, 2, 1, 2);
+    let mp: *HardwareManager = &mgr;
+    seat_nano_block(mp, chamber_coord(0, 0, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(1, 0, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(0, 1, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(1, 1, 0), RotationState.R0);
+    let manifest: CoordinateManifest = compile_with_hardware(name, mp);
+    manager_free(mp);
+    return manifest;
+}

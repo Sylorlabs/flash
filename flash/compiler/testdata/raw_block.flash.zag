@@ -1,0 +1,10 @@
+// flash/compiler/testdata/raw_block.flash.zag — raw { } hardware extern block.
+program raw_block
+
+trit gate = 0
+
+raw {
+    target_voxel(0, 1, 2);
+    set_laser_mw(0, 0, 1.5);
+    manual_polarity(0, 0, 0, 1.0);
+}

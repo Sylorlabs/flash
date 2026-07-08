@@ -1,0 +1,40 @@
+name: Flash
+
+on:
+  push:
+    paths:
+      - 'flash/**'
+      - 'examples/**'
+      - 'tests/**'
+      - 'selfhost/**'
+      - 'build.sh'
+      - 'flash.mod'
+      - '.github/workflows/flash.yml'
+  pull_request:
+    paths:
+      - 'flash/**'
+      - 'examples/**'
+      - 'tests/**'
+      - 'selfhost/**'
+      - 'build.sh'
+      - 'flash.mod'
+      - '.github/workflows/flash.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout flash
+        uses: actions/checkout@v4
+
+      - name: Verify bundled toolchain
+        run: |
+          FLASHZ="flash/toolchain/flashz"
+          if [[ ! -x "$FLASHZ" ]]; then
+            echo "::error::Bundled flashz not found at $FLASHZ"
+            exit 1
+          fi
+          echo "Found flashz at $FLASHZ"
+
+      - name: Build flashc and run tests
+        run: ./build.sh

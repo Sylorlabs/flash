@@ -1,0 +1,102 @@
+// examples/engine_control.flash.zag — vgpu v2 showcase: the Engine console.
+//
+// Exercises the second wave of the vector layer: affine transforms (rotated
+// ternary badges), radial gradients (core glow), a real separable box-blur
+// drop shadow, arc/donut gauges, dashed strokes, and scalable dot-matrix
+// text — all CPU-rendered Flash, routed through the platform layer.
+
+@import("../flash/driver/vgpu.flash")
+
+fn tri_badge(fb: *SoftFb, cx: f32, cy: f32, rad: f32, rot: f32, r: i32, g: i32, b: i32, a: i32) void {
+    let p: VPath = vg_path_new();
+    vg_move_to(&p, 0.0, 0.0 - rad);
+    vg_line_to(&p, rad * 0.866, rad * 0.5);
+    vg_line_to(&p, 0.0 - rad * 0.866, rad * 0.5);
+    vg_close(&p);
+    let m: VgXf = vg_xf_mul(vg_xf_translate(cx, cy), vg_xf_rotate(rot));
+    vg_path_transform(&p, m);
+    vg_fill(fb, &p, r, g, b, a);
+}
+
+fn main() i32 {
+    let dev: EngineDevice = engine_detect();
+    engine_report(dev);
+
+    let fb: SoftFb = softgpu_new(480, 320);
+
+    // background gradient
+    let bg: VPath = vg_path_new();
+    vg_move_to(&bg, 0.0, 0.0);
+    vg_line_to(&bg, 480.0, 0.0);
+    vg_line_to(&bg, 480.0, 320.0);
+    vg_line_to(&bg, 0.0, 320.0);
+    vg_close(&bg);
+    vg_fill_linear(&fb, &bg, 0.0, 0.0, 0.0, 320.0, 12, 14, 32, 255, 40, 26, 66, 255);
+
+    // heading in scalable dot-matrix
+    vg_text_dots(&fb, 26.0, 22.0, "ENGINE CONTROL", 2.4, 240, 240, 250, 255);
+    softgpu_text(&fb, 28, 46, "UNIFIED CPU-GPU-BOARD UNIT", 140, 140, 170);
+
+    // dashed separator
+    let sep: VPath = vg_path_new();
+    vg_move_to(&sep, 26.0, 62.0);
+    vg_line_to(&sep, 454.0, 62.0);
+    vg_stroke_dash(&fb, &sep, 2.0, 8.0, 6.0, 96, 90, 160, 255);
+
+    // ── engine core: radial glow + ring + rotated ternary badges ────────────
+    let glow: VPath = vg_path_new();
+    vg_circle(&glow, 140.0, 175.0, 80.0);
+    vg_fill_radial(&fb, &glow, 140.0, 175.0, 80.0, 255, 176, 32, 200, 255, 120, 40, 0);
+
+    let core: VPath = vg_path_new();
+    vg_circle(&core, 140.0, 175.0, 34.0);
+    vg_fill_radial(&fb, &core, 132.0, 167.0, 44.0, 255, 240, 200, 255, 255, 150, 40, 255);
+
+    let ring: VPath = vg_path_new();
+    vg_circle(&ring, 140.0, 175.0, 52.0);
+    vg_stroke(&fb, &ring, 3.0, 235, 220, 255, 255);
+
+    // three badges at 0/120/240 degrees — one per trit
+    tri_badge(&fb, 140.0, 109.0, 11.0, 0.0, 255, 176, 32, 255);
+    tri_badge(&fb, 197.0, 208.0, 11.0, 2.0944, 32, 200, 255, 255);
+    tri_badge(&fb, 83.0, 208.0, 11.0, 4.1888, 150, 150, 175, 255);
+
+    softgpu_text(&fb, 104, 246, "CORE: IGNITED", 220, 200, 160);
+
+    // ── throughput donut gauge (trit-colored segments) ──────────────────────
+    let gx: f32 = 356.0;
+    let gy: f32 = 160.0;
+    let seg1: VPath = vg_path_new();
+    vg_donut(&seg1, gx, gy, 62.0, 42.0, 0.0 - 1.5708, 1.2);
+    vg_fill(&fb, &seg1, 255, 176, 32, 255);
+    let seg2: VPath = vg_path_new();
+    vg_donut(&seg2, gx, gy, 62.0, 42.0, 1.2, 2.6);
+    vg_fill(&fb, &seg2, 32, 200, 255, 255);
+    let seg3: VPath = vg_path_new();
+    vg_donut(&seg3, gx, gy, 62.0, 42.0, 2.6, 4.7124);
+    vg_fill(&fb, &seg3, 70, 70, 100, 255);
+    vg_text_dots(&fb, gx - 17.0, gy - 8.0, "72", 2.6, 245, 245, 255, 255);
+    softgpu_text(&fb, 310, 234, "THROUGHPUT INDEX", 140, 140, 170);
+
+    // ── status card with a real blurred drop shadow ──────────────────────────
+    let sh: VPath = vg_path_new();
+    vg_rounded_rect(&sh, 32.0, 272.0, 416.0, 34.0, 10.0);
+    vg_fill(&fb, &sh, 0, 0, 0, 170);
+    vg_blur_region(&fb, 20, 262, 440, 56, 5);
+
+    let card: VPath = vg_path_new();
+    vg_rounded_rect(&card, 28.0, 266.0, 416.0, 34.0, 10.0);
+    vg_fill(&fb, &card, 244, 244, 250, 250);
+    softgpu_text(&fb, 44, 279, "LATTICE 4X4X1  LANES 16  POL V  1250 MW", 60, 60, 84);
+
+    let out: SoftGpuDevice = SoftGpuDevice{ .kind = 0, .path = "examples/engine_control.ppm" };
+    let rc: i32 = softgpu_present(out, &fb);
+    if (rc != 0) {
+        _zag_println("FAIL engine_control present");
+        return 1;
+    }
+    _zag_print("checksum=");
+    _zag_println(_zag_i64_to_str(softgpu_checksum(&fb) as i64));
+    _zag_println("engine_control: ok");
+    return 0;
+}

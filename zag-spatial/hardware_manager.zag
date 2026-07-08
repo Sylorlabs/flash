@@ -1,0 +1,243 @@
+// hardware_manager.zag — Grid + stripe pool + rotation orchestration
+//
+// HardwareManager ties lattice geometry, orientation auto-detection, parallel
+// striping, and coordinate manifest emission into one compiler-facing module.
+//
+//   @import("hardware_manager.zag") as hw
+//   let mgr: hw.HardwareManager = hw.manager_new(4, 4, 1, 4);
+//   hw.auto_detect_rotation(&mgr, chamber_coord(0, 0, 0), markers);
+//   hw.emit_coordinate_manifest(&mgr, &entries);
+
+@import("grid.zag")
+@import("rotation.zag")
+@import("stripe_pool.zag")
+@import("../flash/toolchain/zag-poc/std/list.zag")
+@import("../flash/toolchain/zag-poc/std/rt.zag")
+
+// ── manifest entries ──────────────────────────────────────────────────────────
+
+struct CoordinateManifestEntry {
+    chamber:      ChamberCoord,
+    rotation_deg: i32,
+    occupied:     i32,
+    lane_id:      i32,
+    voxel:        VoxelLocal,
+    laser_axis:   LaserAxis,
+    mm_x:         i32,
+    mm_y:         i32,
+    mm_z:         i32,
+}
+
+struct HardwareManager {
+    lattice:      LatticeGrid,
+    stripe_pool:  StripePool,
+    stripe_width: i32,
+}
+
+// ── lifecycle ───────────────────────────────────────────────────────────────
+
+fn manager_new(width: i32, height: i32, depth: i32, stripe_width: i32) HardwareManager {
+    let g: LatticeGrid = lattice_new(width, height, depth);
+    let gp: *LatticeGrid = &g;
+    let sp: StripePool = pool_new(gp, stripe_width);
+    return HardwareManager{
+        .lattice      = g,
+        .stripe_pool  = sp,
+        .stripe_width = stripe_width,
+    };
+}
+
+fn manager_free(m: *HardwareManager) void {
+    pool_free(&m.*.stripe_pool);
+    lattice_free(&m.*.lattice);
+}
+
+fn manager_rebuild_pool(m: *HardwareManager) void {
+    pool_free(&m.*.stripe_pool);
+    m.*.stripe_pool = pool_new(&m.*.lattice, m.*.stripe_width);
+}
+
+// ── chamber setup ─────────────────────────────────────────────────────────────
+
+fn seat_nano_block(m: *HardwareManager, c: ChamberCoord, rot: RotationState) i32 {
+    let ok: i32 = set_chamber_occupied(&m.*.lattice, c, 1);
+    if (ok == 0) { return 0; }
+    set_chamber_rotation(&m.*.lattice, c, rot);
+    manager_rebuild_pool(m);
+    return 1;
+}
+
+fn remove_nano_block(m: *HardwareManager, c: ChamberCoord) i32 {
+    let ok: i32 = set_chamber_occupied(&m.*.lattice, c, 0);
+    if (ok == 0) { return 0; }
+    set_chamber_rotation(&m.*.lattice, c, RotationState.R0);
+    manager_rebuild_pool(m);
+    return 1;
+}
+
+// ── rotation auto-detect ──────────────────────────────────────────────────────
+
+fn auto_detect_rotation(
+    m: *HardwareManager,
+    c: ChamberCoord,
+    markers: OrientationMarkers,
+) RotationState {
+    let detected: RotationState = detect_rotation_from_markers(markers);
+    set_chamber_rotation(&m.*.lattice, c, detected);
+    return detected;
+}
+
+fn auto_detect_all(m: *HardwareManager, markers: *OrientationMarkers) i32 {
+    let updated: i32 = 0;
+    let i: i32 = 0;
+    while (i < m.*.lattice.count) {
+        if (m.*.lattice.cells[i].occupied == 1) {
+            let c: ChamberCoord = m.*.lattice.cells[i].coord;
+            let rot: RotationState = auto_detect_rotation(m, c, markers[i]);
+            m.*.lattice.cells[i].rotation = rot;
+            updated = updated + 1;
+        }
+        i = i + 1;
+    }
+    manager_rebuild_pool(m);
+    return updated;
+}
+
+// ── parallel striping ─────────────────────────────────────────────────────────
+
+fn parallel_stripe_write(
+    m: *HardwareManager,
+    data: *i8,
+    data_len: i32,
+    base_offset: i32,
+    scratch: *i8,
+    scratch_cap: i32,
+) StripeWriteResult {
+    return stripe_write_cycle(
+        &m.*.stripe_pool,
+        &m.*.lattice,
+        data,
+        data_len,
+        base_offset,
+        scratch,
+        scratch_cap,
+    );
+}
+
+fn resolve_logical_address(m: HardwareManager, byte_offset: i32) ?PhysicalAddress {
+    return logical_to_physical(m.stripe_pool, m.lattice, byte_offset);
+}
+
+// ── coordinate manifest emission ──────────────────────────────────────────────
+
+fn manifest_entry_for_address(
+    m: HardwareManager,
+    addr: PhysicalAddress,
+) CoordinateManifestEntry @realtime {
+    let global: VoxelGlobal = VoxelGlobal{ .chamber = addr.chamber, .local = addr.voxel };
+    let mm: ChamberCoord = voxel_mm_offset(m.lattice, global);
+    return CoordinateManifestEntry{
+        .chamber      = addr.chamber,
+        .rotation_deg = rotation_to_deg(addr.rot),
+        .occupied     = 1,
+        .lane_id      = addr.lane,
+        .voxel        = addr.voxel,
+        .laser_axis   = LaserAxis.Vertical,
+        .mm_x         = mm.x,
+        .mm_y         = mm.y,
+        .mm_z         = mm.z,
+    };
+}
+
+fn emit_coordinate_manifest(
+    m: *HardwareManager,
+    out: *ArrayList[CoordinateManifestEntry],
+) i32 {
+    let emitted: i32 = 0;
+    let i: i32 = 0;
+    while (i < m.*.lattice.count) {
+        let cell: ChamberCell = m.*.lattice.cells[i];
+        if (cell.occupied != 0) {
+        let edge: i32 = NANO_VOXELS_EDGE();
+        let lz: i32 = 0;
+        while (lz < edge) {
+            let ly: i32 = 0;
+            while (ly < edge) {
+                let lx: i32 = 0;
+                while (lx < edge) {
+                    let local: VoxelLocal = voxel_local(lx, ly, lz);
+                    let mapped: VoxelLocal = remap_voxel_local(local, cell.rotation);
+                    let global: VoxelGlobal = VoxelGlobal{
+                        .chamber = cell.coord,
+                        .local   = mapped,
+                    };
+                    let mm: ChamberCoord = voxel_mm_offset(m.*.lattice, global);
+                    let entry: CoordinateManifestEntry = CoordinateManifestEntry{
+                        .chamber      = cell.coord,
+                        .rotation_deg = rotation_to_deg(cell.rotation),
+                        .occupied     = 1,
+                        .lane_id      = 0,
+                        .voxel        = mapped,
+                        .laser_axis   = remap_laser_axis(LaserAxis.Vertical, cell.rotation),
+                        .mm_x         = mm.x,
+                        .mm_y         = mm.y,
+                        .mm_z         = mm.z,
+                    };
+                    push[CoordinateManifestEntry](out, entry);
+                    emitted = emitted + 1;
+                    lx = lx + 1;
+                }
+                ly = ly + 1;
+            }
+            lz = lz + 1;
+        }
+        }
+        i = i + 1;
+    }
+    return emitted;
+}
+
+fn emit_stripe_manifest(
+    m: *HardwareManager,
+    out: *ArrayList[CoordinateManifestEntry],
+    max_entries: i32,
+) i32 {
+    let emitted: i32 = 0;
+    let limit: i32 = max_entries;
+    if (limit < 1) { limit = m.*.stripe_pool.lane_count; }
+    let i: i32 = 0;
+    while (i < limit && i < m.*.stripe_pool.lane_count) {
+        if (logical_to_physical(m.*.stripe_pool, m.*.lattice, i)) |phys| {
+            let entry: CoordinateManifestEntry = manifest_entry_for_address(m.*, phys);
+            push[CoordinateManifestEntry](out, entry);
+            emitted = emitted + 1;
+        }
+        i = i + 1;
+    }
+    return emitted;
+}
+
+// Summary for compiler diagnostics (chambers, lanes, voxel capacity).
+struct HardwareSummary {
+    chambers:       i32,
+    occupied:       i32,
+    stripe_lanes:   i32,
+    voxel_capacity: i32,
+    pool_capacity:  i32,
+}
+
+fn manager_summary(m: HardwareManager) HardwareSummary @realtime {
+    let occ: i32 = 0;
+    let i: i32 = 0;
+    while (i < m.lattice.count) {
+        if (m.lattice.cells[i].occupied == 1) { occ = occ + 1; }
+        i = i + 1;
+    }
+    return HardwareSummary{
+        .chambers       = m.lattice.count,
+        .occupied       = occ,
+        .stripe_lanes   = m.stripe_pool.lane_count,
+        .voxel_capacity = lattice_voxel_capacity(m.lattice),
+        .pool_capacity  = pool_capacity_bytes(m.stripe_pool),
+    };
+}

@@ -1,0 +1,249 @@
+// flash/ir/flash_ir.flash — hardware-ready Flash IR nodes (post-emit, pre-machine).
+//
+// FIMG and flasht backends lower these nodes to .fimg or PPU32 opcodes.
+
+@import("../../selfhost/lib/manifest.flash")
+
+enum FirOpKind {
+    TritValue,
+    PcmShift,
+    LatticeRoute,
+    RawExtern,
+    TritAlu,
+}
+
+struct FirTritValue {
+    wire: i32,
+}
+
+struct FirPcmShift {
+    row: i32,
+    col: i32,
+    phase_a_rad: f32,
+    phase_b_rad: f32,
+    phase_result_rad: f32,
+    lattice_op: i32,
+}
+
+struct FirLatticeRoute {
+    from_x: f32,
+    from_y: f32,
+    from_z: f32,
+    to_x: f32,
+    to_y: f32,
+    to_z: f32,
+    power_mw: f32,
+    polarization: i32,
+    op_tag: []u8,
+    pcm: FirPcmShift,
+}
+
+struct FirRawExtern {
+    symbol: []u8,
+}
+
+struct FirTritAlu {
+    op: []u8,
+    dst_reg: i32,
+    src_a: i32,
+    src_b: i32,
+}
+
+struct FirNode {
+    kind: FirOpKind,
+    route: FirLatticeRoute,
+    pcm: FirPcmShift,
+    raw_sym: []u8,
+    alu_op: []u8,
+}
+
+fn fir_pcm_from_segment(seg: PathSegment) FirPcmShift {
+    return FirPcmShift{
+        .row = seg.pcm_row,
+        .col = seg.pcm_col,
+        .phase_a_rad = seg.phase_a_rad,
+        .phase_b_rad = seg.phase_b_rad,
+        .phase_result_rad = seg.phase_result_rad,
+        .lattice_op = seg.lattice_op,
+    };
+}
+
+fn fir_route_from_segment(seg: PathSegment) FirLatticeRoute {
+    return FirLatticeRoute{
+        .from_x = seg.from.x,
+        .from_y = seg.from.y,
+        .from_z = seg.from.z,
+        .to_x = seg.to.x,
+        .to_y = seg.to.y,
+        .to_z = seg.to.z,
+        .power_mw = seg.laser_power_mw,
+        .polarization = seg.polarization,
+        .op_tag = seg.op_tag,
+        .pcm = fir_pcm_from_segment(seg),
+    };
+}
+
+fn fir_op_is_trit_alu(op: []u8) i32 {
+    if (@strEq(op, "trit_add") == 1) { return 1; }
+    if (@strEq(op, "trit_mul") == 1) { return 1; }
+    if (@strEq(op, "trit_nand") == 1) { return 1; }
+    if (@strEq(op, "trit_neg") == 1) { return 1; }
+    return 0;
+}
+
+fn fir_kind_name(k: FirOpKind) []u8 {
+    if (k == FirOpKind.LatticeRoute) { return "route"; }
+    if (k == FirOpKind.PcmShift) { return "pcm"; }
+    if (k == FirOpKind.TritAlu) { return "trit_alu"; }
+    if (k == FirOpKind.RawExtern) { return "raw_extern"; }
+    return "trit_value";
+}
+
+// Lower manifest path segments into hardware-ready FIR nodes.
+fn fir_lower_manifest(m: *CoordinateManifest) ArrayList[FirNode] {
+    let cap: i32 = len[PathSegment](m.*.segments) * 3;
+    if (cap < 8) { cap = 8; }
+    let nodes: ArrayList[FirNode] = make[FirNode](cap);
+    let i: i32 = 0;
+    let n: i32 = len[PathSegment](m.*.segments);
+    while (i < n) {
+        let seg: PathSegment = get[PathSegment](m.*.segments, i);
+        let pcm: FirPcmShift = fir_pcm_from_segment(seg);
+        let route: FirLatticeRoute = fir_route_from_segment(seg);
+        let route_node: FirNode = FirNode{
+            .kind = FirOpKind.LatticeRoute,
+            .route = route,
+            .pcm = pcm,
+            .raw_sym = "",
+            .alu_op = "",
+        };
+        push[FirNode](&nodes, route_node);
+        if (seg.lattice_op != 0) {
+            let pcm_node: FirNode = FirNode{
+                .kind = FirOpKind.PcmShift,
+                .route = route,
+                .pcm = pcm,
+                .raw_sym = "",
+                .alu_op = "",
+            };
+            push[FirNode](&nodes, pcm_node);
+        }
+        if (fir_op_is_trit_alu(seg.op_tag) == 1) {
+            let alu_node: FirNode = FirNode{
+                .kind = FirOpKind.TritAlu,
+                .route = route,
+                .pcm = pcm,
+                .raw_sym = "",
+                .alu_op = seg.op_tag,
+            };
+            push[FirNode](&nodes, alu_node);
+        }
+        i = i + 1;
+    }
+    return nodes;
+}
+
+fn fir_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) { push[u8](out, s[i]); i = i + 1; }
+}
+
+fn fir_app_i32(out: *ArrayList[u8], v: i32) void {
+    fir_app(out, _zag_i64_to_str(v as i64));
+}
+
+fn fir_app_f32_mw(out: *ArrayList[u8], v: f32) void {
+    let scaled: i32 = (v * 1000.0) as i32;
+    fir_app_i32(out, scaled);
+    fir_app(out, "m");
+}
+
+fn fir_app_phase_rad(out: *ArrayList[u8], v: f32) void {
+    let scaled: i32 = (v * 1000000.0) as i32;
+    fir_app_i32(out, scaled);
+    fir_app(out, "u");
+}
+
+fn fir_write_pcm_fields(out: *ArrayList[u8], pcm: FirPcmShift) void {
+    fir_app(out, ", pcm_row = ");
+    fir_app_i32(out, pcm.row);
+    fir_app(out, ", pcm_col = ");
+    fir_app_i32(out, pcm.col);
+    fir_app(out, ", phase_a_rad = ");
+    fir_app_phase_rad(out, pcm.phase_a_rad);
+    fir_app(out, ", phase_b_rad = ");
+    fir_app_phase_rad(out, pcm.phase_b_rad);
+    fir_app(out, ", phase_result_rad = ");
+    fir_app_phase_rad(out, pcm.phase_result_rad);
+    fir_app(out, ", lattice_op = ");
+    fir_app_i32(out, pcm.lattice_op);
+}
+
+fn fir_write_route_node(out: *ArrayList[u8], idx: i32, n: FirNode) void {
+    fir_app(out, "node ");
+    fir_app_i32(out, idx);
+    fir_app(out, " { kind = \"route\", op = \"");
+    fir_app(out, n.route.op_tag);
+    fir_app(out, "\", from = (");
+    fir_app_f32_mw(out, n.route.from_x);
+    fir_app(out, ", ");
+    fir_app_f32_mw(out, n.route.from_y);
+    fir_app(out, ", ");
+    fir_app_f32_mw(out, n.route.from_z);
+    fir_app(out, "), to = (");
+    fir_app_f32_mw(out, n.route.to_x);
+    fir_app(out, ", ");
+    fir_app_f32_mw(out, n.route.to_y);
+    fir_app(out, ", ");
+    fir_app_f32_mw(out, n.route.to_z);
+    fir_app(out, "), power_mw = ");
+    fir_app_f32_mw(out, n.route.power_mw);
+    fir_app(out, ", pol = ");
+    fir_app_i32(out, n.route.polarization);
+    fir_write_pcm_fields(out, n.pcm);
+    fir_app(out, " }\n");
+}
+
+fn fir_write_pcm_node(out: *ArrayList[u8], idx: i32, n: FirNode) void {
+    fir_app(out, "node ");
+    fir_app_i32(out, idx);
+    fir_app(out, " { kind = \"pcm\"");
+    fir_write_pcm_fields(out, n.pcm);
+    fir_app(out, " }\n");
+}
+
+fn fir_write_alu_node(out: *ArrayList[u8], idx: i32, n: FirNode) void {
+    fir_app(out, "node ");
+    fir_app_i32(out, idx);
+    fir_app(out, " { kind = \"trit_alu\", op = \"");
+    fir_app(out, n.alu_op);
+    fir_app(out, "\"");
+    fir_write_pcm_fields(out, n.pcm);
+    fir_app(out, " }\n");
+}
+
+fn fir_write_node(out: *ArrayList[u8], idx: i32, n: FirNode) void {
+    if (n.kind == FirOpKind.PcmShift) {
+        fir_write_pcm_node(out, idx, n);
+        return;
+    }
+    if (n.kind == FirOpKind.TritAlu) {
+        fir_write_alu_node(out, idx, n);
+        return;
+    }
+    fir_write_route_node(out, idx, n);
+}
+
+// Serialize lowered FIR nodes as an [ir] section (line-oriented, mmap-friendly).
+fn fir_write_ir_section(nodes: *ArrayList[FirNode]) []u8 {
+    let out: ArrayList[u8] = make[u8](512);
+    fir_app(&out, "[ir]\n");
+    let i: i32 = 0;
+    let n: i32 = len[FirNode](nodes.*);
+    while (i < n) {
+        let node: FirNode = get[FirNode](nodes.*, i);
+        fir_write_node(&out, i, node);
+        i = i + 1;
+    }
+    return out.data[0..out.len];
+}

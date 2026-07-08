@@ -1,0 +1,16 @@
+// examples/raw_chamber.flash.zag — raw { } chamber hardware block demo.
+//
+// Exercises target_voxel, fire_shield, inject_phase, set_laser_mw, and
+// manual_polarity coordinate manifest paths.
+
+program raw_chamber
+
+wave probe = default
+
+raw {
+    target_voxel(2, 1, 0);
+    fire_shield(2, 1, 0, 1.5);
+    inject_phase(2, 1, 0, 1.5708);
+    set_laser_mw(2, 1, 2.5);
+    manual_polarity(1, 0, 0, 1.0);
+}

@@ -1,0 +1,21 @@
+// selfhost/std/process.flash — process services for the native Zag runtime.
+//
+// Flash stdlib port of zag/zag-poc/selfhost/std/process.zag. No imports: the
+// shim runtime provides _zag_* builtins. `process_run_shell` invokes /bin/sh
+// and returns its exit status; use it only when shell interpretation is wanted.
+
+fn process_arg_count() i32 {
+    return _zag_argc();
+}
+
+fn process_arg(index: i32) []u8 {
+    return _zag_arg(index);
+}
+
+fn process_run_shell(command: []u8) i32 {
+    return _zag_exec_cmd(command);
+}
+
+fn process_exit(code: i32) void {
+    _zag_exit(code);
+}

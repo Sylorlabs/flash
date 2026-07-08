@@ -1,0 +1,42 @@
+// selfhost/fimg_emit.flash — wrap manifest text into FIMG v1 hardware image.
+
+fn fimg_app(out: *ArrayList[u8], s: []u8) void {
+    let i: i32 = 0;
+    while (i < s.len) { push[u8](out, s[i]); i = i + 1; }
+}
+
+fn fimg_path_from_src(src_path: []u8) []u8 {
+    let stem: []u8 = flash_path_stem(src_path);
+    let dir: []u8 = flash_path_dir(src_path);
+    let base: []u8 = _zag_str_concat(stem, ".fimg");
+    if (@strEq(dir, ".") == 1) { return base; }
+    return _zag_str_concat(_zag_str_concat(dir, "/"), base);
+}
+
+fn fimg_wrap_manifest(manifest_text: []u8, target: []u8, name: []u8) []u8 {
+    let out: ArrayList[u8] = make[u8](1024);
+    fimg_app(&out, "# flash image v1\n");
+    fimg_app(&out, "target = \"");
+    fimg_app(&out, target);
+    fimg_app(&out, "\"\n");
+    fimg_app(&out, "name = \"");
+    fimg_app(&out, name);
+    fimg_app(&out, "\"\n");
+    fimg_app(&out, "format = \"fimg-v1\"\n");
+    fimg_app(&out, "[manifest]\n");
+    fimg_app(&out, manifest_text);
+    if (manifest_text.len > 0 && manifest_text[manifest_text.len - 1] != '\n') {
+        fimg_app(&out, "\n");
+    }
+    fimg_app(&out, "[extern]\n");
+    fimg_app(&out, "_flash_raw_mode_enter\n");
+    fimg_app(&out, "_flash_raw_mode_exit\n");
+    fimg_app(&out, "_flash_raw_fire_shield\n");
+    fimg_app(&out, "_flash_raw_inject_phase\n");
+    fimg_app(&out, "_flash_raw_set_laser_mw\n");
+    fimg_app(&out, "_flash_raw_target_voxel\n");
+    fimg_app(&out, "_flash_raw_set_polarity\n");
+    fimg_app(&out, "_flash_stream_up\n");
+    fimg_app(&out, "_flash_read_voxel\n");
+    return out.data[0..out.len];
+}

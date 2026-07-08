@@ -1,0 +1,29 @@
+// examples/grouping_demo.flash — group { } blocks and numeric underscore literals.
+
+fn main() i32 {
+    let outer: i32 = 1;
+
+    group {
+        let inner: i32 = 2;
+        outer = outer + inner;
+    }
+
+    group setup {
+        let x: i32 = 10;
+        outer = outer + x;
+    }
+
+    let million: i32 = 1_000_000;
+    let mask: i32 = 0x_FF;
+
+    defer _zag_println("cleanup");
+
+    _zag_print("sum=");
+    _zag_println(_zag_i64_to_str(outer as i64));
+    _zag_print("million=");
+    _zag_println(_zag_i64_to_str(million as i64));
+    _zag_print("mask=");
+    _zag_println(_zag_i64_to_str(mask as i64));
+    _zag_println("grouping_demo: ok");
+    return 0;
+}

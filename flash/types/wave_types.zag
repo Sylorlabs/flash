@@ -1,0 +1,129 @@
+// flash/types/wave_types.zag — chamber-level wave types for vertical/horizontal lasers
+//
+// Builds on flash/types/{wave,beam,phase}.zag and flash/ternary/trit.zag.
+// Balanced-ternary polarization wire values (i8):
+//   0  = neutral / off
+//  +1  = vertical floor-to-glass stream
+//  -1  = horizontal chamber-wall beam
+//
+// DEPENDENCY: wave.zag, beam.zag, phase.zag, ../ternary/trit.zag
+
+@import("wave.zag") as optic
+@import("beam.zag") as optic_beam
+@import("phase.zag") as optic_phase
+@import("../ternary/trit.zag") as trit
+
+// ── polarity aliases (ternary wire encoding) ──────────────────────────────────
+
+fn POL_OFF() i8 { return trit.trit_zero_val(); }
+fn POL_VERT() i8 { return trit.trit_pos_val(); }
+fn POL_HORZ() i8 { return trit.trit_neg_val(); }
+
+fn polarity_to_i8(p: trit.Trit) i8 {
+    return trit.to_i8(p);
+}
+
+fn i8_to_polarity(v: i8) !trit.Trit {
+    return try trit.from_i8(v);
+}
+
+fn ternary_add(a: i8, b: i8) i8 {
+    let s: i32 = (a as i32) + (b as i32);
+    return trit.clamp_i8(s as i8);
+}
+
+// ── chamber geometry ──────────────────────────────────────────────────────────
+
+struct VoxelCoord {
+    x: i32,   // column along chamber width
+    y: i32,   // depth into glass block stack
+    z: i32,   // height (floor = 0, stream_up increases z)
+}
+
+struct BeamId {
+    wall: i32,   // 0=N, 1=E, 2=S, 3=W
+    slot: i32,   // emitter index on that wall
+}
+
+// ── voxel register view (hardware decode/encode surface) ──────────────────────
+
+struct WaveSample {
+    amp:     f32,
+    phase:   f32,
+    pol:     i8,    // balanced ternary axis tag
+    payload: u64,   // data word carried by vertical stream
+}
+
+struct HorizontalBeam {
+    origin:  VoxelCoord,
+    target:  VoxelCoord,
+    power:   f32,       // laser power, milliwatts
+    phase:   f32,
+    pol:     i8,        // always POL_HORZ for wall emitters
+    beam_id: BeamId,
+    optic:   optic_beam.Beam,
+}
+
+struct VerticalPipeline {
+    column:  i32,
+    depth:   i32,
+    head_z:  i32,
+    active:  i32,
+}
+
+struct CollisionResult {
+    out:      WaveSample,
+    absorbed: i32,
+    split:    i32,
+}
+
+// ── constructors ──────────────────────────────────────────────────────────────
+
+fn voxel(x: i32, y: i32, z: i32) VoxelCoord {
+    return VoxelCoord{ .x = x, .y = y, .z = z };
+}
+
+fn wave_neutral() WaveSample {
+    return WaveSample{ .amp = 0.0, .phase = 0.0, .pol = POL_OFF(), .payload = 0 };
+}
+
+fn wave_vertical(amp: f32, phase: f32, payload: u64) WaveSample {
+    return WaveSample{ .amp = amp, .phase = phase, .pol = POL_VERT(), .payload = payload };
+}
+
+fn wave_horizontal(amp: f32, phase: f32) WaveSample {
+    return WaveSample{ .amp = amp, .phase = phase, .pol = POL_HORZ(), .payload = 0 };
+}
+
+fn pipeline_new(column: i32, depth: i32) VerticalPipeline {
+    return VerticalPipeline{ .column = column, .depth = depth, .head_z = 0, .active = 0 };
+}
+
+fn horizontal_beam(origin: VoxelCoord, target: VoxelCoord, power: f32, wall: i32, slot: i32) HorizontalBeam {
+    let w: optic.Wave = optic.from_trit(1.0, 193414489.0, POL_HORZ());
+    let b: optic_beam.Beam = optic_beam.launch(w, origin.x, origin.y);
+    return HorizontalBeam{
+        .origin  = origin,
+        .target  = target,
+        .power   = power,
+        .phase   = 0.0,
+        .pol     = POL_HORZ(),
+        .beam_id = BeamId{ .wall = wall, .slot = slot },
+        .optic   = b,
+    };
+}
+
+// ── bridges to optic primitives ───────────────────────────────────────────────
+
+fn sample_to_wave(s: WaveSample) optic.Wave {
+    return optic.from_trit(s.amp, 193414489.0, s.pol);
+}
+
+fn wave_to_sample(w: optic.Wave, payload: u64) WaveSample {
+    return WaveSample{
+        .amp     = w.amplitude,
+        .phase   = w.phase.radians,
+        .pol     = w.phase.trit_wire,
+        .payload = payload,
+    };
+}

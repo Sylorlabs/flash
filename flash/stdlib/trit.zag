@@ -1,0 +1,66 @@
+// flash/stdlib/trit.zag — balanced-ternary (-1, 0, +1) primitives for Flash.
+//
+// Trit values encode photonic polarization lanes:
+//   -1 = horizontal (H)   0 = idle / beam-split   +1 = vertical (V)
+//
+// Arithmetic delegates to trit_math.zag (znc-safe mirror of ternary/arithmetic.zag).
+// NAND delegates to trit_math.zag (mirror of ternary/truth_tables.zag).
+// Wire values are i8 {-1,0,+1}; struct Trit wraps i32 for stdlib linkage.
+
+@import("trit_math.zag") as tm
+
+struct Trit { val: i32 }
+
+fn trit_wire(v: i32) i8 {
+    if (v > 1) { return 1; }
+    if (v < 0 - 1) { return 0 - 1; }
+    return v as i8;
+}
+
+fn trit(v: i32) Trit {
+    return Trit{ .val = trit_wire(v) as i32 };
+}
+
+fn trit_norm(v: i32) i32 {
+    return trit_wire(v) as i32;
+}
+
+fn trit_val(t: Trit) i32 {
+    return t.val;
+}
+
+fn trit_neg(t: Trit) Trit {
+    let w: i8 = trit_wire(t.val);
+    let n: i8 = tm.ternary_not(w);
+    return Trit{ .val = n as i32 };
+}
+
+// Balanced-ternary add: returns sum trit only (carry discarded at single-trit lane).
+// e.g. add(+1,+1) → sum -1 with carry +1 (1+1=2 → 2-3=-1, carry +1).
+fn trit_add(a: Trit, b: Trit) Trit {
+    let av: i8 = trit_wire(a.val);
+    let bv: i8 = trit_wire(b.val);
+    let step: tm.TritAddResult = tm.add(av, bv, 0);
+    return Trit{ .val = step.sum as i32 };
+}
+
+fn trit_mul(a: Trit, b: Trit) Trit {
+    let av: i8 = trit_wire(a.val);
+    let bv: i8 = trit_wire(b.val);
+    let step: tm.TritMulResult = tm.mul(av, bv);
+    return Trit{ .val = step.product as i32 };
+}
+
+// Balanced-ternary NAND: ¬(a ∧ b) via truth-table min + unary NOT.
+fn trit_nand(a: Trit, b: Trit) Trit {
+    let av: i8 = trit_wire(a.val);
+    let bv: i8 = trit_wire(b.val);
+    let andv: i8 = tm.ternary_and(av, bv);
+    let nv: i8 = tm.ternary_not(andv);
+    return Trit{ .val = nv as i32 };
+}
+
+fn trit_eq(a: Trit, b: Trit) i32 {
+    if (a.val == b.val) { return 1; }
+    return 0;
+}

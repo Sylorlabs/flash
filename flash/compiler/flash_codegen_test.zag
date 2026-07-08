@@ -1,0 +1,64 @@
+// flash/compiler/flash_codegen_test.zag — codegen smoke: lower fn returning trit.
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("../toolchain/zag-poc/std/list.zag")
+@import("flash_ast.zag")
+@import("flash_codegen.zag")
+@import("../../zag-spatial/hardware_manager.zag")
+
+fn build_ret_trit_fn() TypedFn {
+    let body: ArrayList[*FlashNode] = make[*FlashNode](1);
+    push[*FlashNode](&body, flash_mk_ret(1, flash_mk_trit("1")));
+
+    let decl: FnDecl = FnDecl{
+        .name      = "ret_trit_one",
+        .bare_name = "ret_trit_one",
+        .tparams   = make[[]u8](1),
+        .params    = make[Param](1),
+        .ret       = "trit",
+        .annots    = make[[]u8](1),
+        .body      = body,
+        .is_method = 0,
+        .recv_name = "",
+        .recv_ty   = "",
+        .line      = 1,
+    };
+
+    return TypedFn{ .decl = decl, .ret_ty = "trit" };
+}
+
+fn main() i32 {
+    _zag_println("flash_codegen_test: start");
+
+    let mgr: HardwareManager = manager_new(4, 4, 1, 4);
+    let mp: *HardwareManager = &mgr;
+    seat_nano_block(mp, chamber_coord(0, 0, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(1, 0, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(0, 1, 0), RotationState.R0);
+    seat_nano_block(mp, chamber_coord(1, 1, 0), RotationState.R0);
+
+    let tf: TypedFn = build_ret_trit_fn();
+    let res: CodegenResult = codegen_lower_fn(mp, "ret_trit_one", tf);
+
+    let n: i32 = codegen_segment_count(res);
+    print_i32(n);
+
+    if (n < 1) {
+        _zag_println("FAIL flash_codegen_test: expected segment count > 0");
+        manager_free(mp);
+        return 1;
+    }
+
+    let hw_n: i32 = len[CoordinateManifestEntry](res.hw_entries);
+    print_i32(hw_n);
+
+    if (res.manifest.dominant_pol != 1) {
+        _zag_println("FAIL flash_codegen_test: dominant_pol want 1");
+        manager_free(mp);
+        return 1;
+    }
+
+    manager_free(mp);
+    _zag_println("flash_codegen_test: ok");
+    return 0;
+}

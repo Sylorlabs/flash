@@ -1,0 +1,67 @@
+// harsh_error_sema.zag — stage-1 fsema --check on error-set / decl sugar.
+
+@import("../../flash/toolchain/zag-poc/std/rt.zag")
+@import("../../flash/toolchain/zag-poc/selfhost/std/process.zag")
+
+fn hes_fail(msg: []u8) void {
+    _zag_print("FAIL ");
+    _zag_println(msg);
+    process_exit(1);
+}
+
+fn hes_pass(name: []u8) void {
+    _zag_print("PASS ");
+    _zag_println(name);
+}
+
+fn hes_run_expect_ok(cmd: []u8, label: []u8) void {
+    let rc: i32 = process_run_shell(cmd);
+    if (rc != 0) {
+        _zag_print("FAIL expected pass: ");
+        _zag_println(label);
+        process_exit(1);
+    }
+    hes_pass(label);
+}
+
+fn hes_run_expect_fail(cmd: []u8, label: []u8) void {
+    let rc: i32 = process_run_shell(cmd);
+    if (rc == 0) {
+        _zag_print("FAIL expected reject: ");
+        _zag_println(label);
+        process_exit(1);
+    }
+    hes_pass(label);
+}
+
+fn main() i32 {
+    _zag_println("harsh_error_sema: running");
+
+    let root: []u8 = ".";
+    if (_zag_file_exists("flash.mod") == 0) {
+        if (_zag_file_exists("../flash.mod") == 1) { root = ".."; }
+    }
+
+    if (_zag_file_exists(_zag_str_concat(root, "/.test_bin/flashc1")) == 0
+        && _zag_file_exists(_zag_str_concat(root, "/flashc")) == 0) {
+        hes_fail("flashc1 / flashc not found — run build.sh first");
+    }
+
+    let flashc: []u8 = _zag_str_concat(root, "/.test_bin/flashc1");
+    if (_zag_file_exists(flashc) == 0) {
+        flashc = _zag_str_concat(root, "/flashc");
+    }
+
+    let ok_src: []u8 = _zag_str_concat(root, "/tests/critic/harsh_error_sugar.flash");
+    let ok_cmd: []u8 = _zag_str_concat(_zag_str_concat(flashc, " "), ok_src);
+    ok_cmd = _zag_str_concat(ok_cmd, " --check");
+    hes_run_expect_ok(ok_cmd, "accept_error_sugar");
+
+    let bad_src: []u8 = _zag_str_concat(root, "/tests/critic/harsh_error_catch.flash");
+    let bad_cmd: []u8 = _zag_str_concat(_zag_str_concat(flashc, " "), bad_src);
+    bad_cmd = _zag_str_concat(bad_cmd, " --check");
+    hes_run_expect_fail(bad_cmd, "reject_unknown_error_member");
+
+    _zag_println("harsh_error_sema: ok");
+    return 0;
+}

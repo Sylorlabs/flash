@@ -1,0 +1,29 @@
+// examples/hello_photon.zag — minimal Flash photonic program through Zag spatial lowering.
+//
+// Demonstrates: trit arithmetic → coordinate paths → manifest emission.
+
+@import("../../zag/zag-poc/std/rt.zag")
+@import("../flash/stdlib/trit.zag")
+@import("../flash/stdlib/photon.zag")
+@import("../flash/compiler/flash_to_zag.zag")
+@import("../flash/compiler/manifest.zag")
+
+fn main() i32 {
+    _zag_println("hello_photon: Flash → Zag spatial compile");
+
+    let a: Trit = trit(1);
+    let b: Trit = trit(0);
+    let c: Trit = trit_add(a, b);
+
+    print_i32(trit_val(c));
+
+    let manifest: CoordinateManifest = compile_ternary_program("hello_photon");
+    let n: i32 = len[PathSegment](manifest.segments);
+    print_i32(n);
+
+    let w: Wave = wave_default();
+    let phase: f32 = wave_phase_delta(w, 1.0);
+    print_i32((phase * 1000.0) as i32);
+
+    return 0;
+}

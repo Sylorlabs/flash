@@ -1,0 +1,450 @@
+// selfhost/sparse.flash.zag — Flash surface parser library, written in Flash.
+//
+// Stage-1 port of flash/compiler/parse.zag over the self-hosted lexer
+// (slex.flash.zag), plus the surface validation pass from
+// flash_sema_surface.zag. Library file (no main); the self-test lives in
+// parser.flash.zag and the stage-1 driver in flashc1.flash.zag.
+
+@import("slex.flash")
+
+// ── statement kinds ──────────────────────────────────────────────────────────
+fn spk_trit_bind() i32 { return 1; }
+fn spk_wave_bind() i32 { return 2; }
+fn spk_p32_bind() i32  { return 3; }
+fn spk_sat_bind() i32  { return 4; }
+fn spk_trit_op() i32   { return 5; }
+fn spk_raw_block() i32 { return 6; }
+fn spk_mat3_op() i32   { return 7; }
+
+struct SpRawCall {
+    name: []u8,
+    args: ArrayList[f32],
+}
+
+struct SpStmt {
+    kind:      i32,
+    line:      i32,
+    name:      []u8,
+    trit_lit:  i32,
+    num_f32:   f32,
+    num_text:  []u8,
+    op_name:   []u8,
+    op_a:      []u8,
+    op_b:      []u8,
+    op_c:      []u8,
+    op_d:      []u8,
+    op_argc:   i32,
+    op_dst:    []u8,
+    raw_calls: i32,
+    raws:      ArrayList[SpRawCall],
+}
+
+struct SpProgram {
+    name:  []u8,
+    stmts: ArrayList[SpStmt],
+    err:   i32,
+}
+
+struct SParser {
+    toks: ArrayList[SfToken],
+    pos:  i32,
+    err:  i32,
+}
+
+fn sp_mk_stmt(kind: i32, line: i32) SpStmt {
+    return SpStmt{
+        .kind = kind, .line = line, .name = "", .trit_lit = 0,
+        .num_f32 = 0.0, .num_text = "", .op_name = "", .op_a = "",
+        .op_b = "", .op_c = "", .op_d = "", .op_argc = 0, .op_dst = "",
+        .raw_calls = 0, .raws = make[SpRawCall](2),
+    };
+}
+
+fn sp_peek(p: *SParser) SfToken {
+    return get[SfToken](p.*.toks, p.*.pos);
+}
+
+fn sp_advance(p: *SParser) SfToken {
+    let t: SfToken = sp_peek(p);
+    if (t.kind != sfk_eof()) { p.*.pos = p.*.pos + 1; }
+    return t;
+}
+
+fn sp_expect(p: *SParser, kind: i32) SfToken {
+    let t: SfToken = sp_advance(p);
+    if (t.kind != kind) {
+        _zag_print("flashc1 parse error: unexpected token at line ");
+        _zag_println(_zag_i64_to_str(t.line as i64));
+        p.*.err = 1;
+    }
+    return t;
+}
+
+fn sp_match(p: *SParser, kind: i32) i32 {
+    if (sp_peek(p).kind == kind) {
+        let _t: SfToken = sp_advance(p);
+        return 1;
+    }
+    return 0;
+}
+
+fn sp_skip_semi(p: *SParser) void {
+    let _s: i32 = sp_match(p, sfk_semi());
+}
+
+fn sp_trit_lit(t: SfToken) i32 {
+    if (t.kind == sfk_ident() && @strEq(t.text, "T") == 1) { return -1; }
+    if (t.kind == sfk_int() && @strEq(t.text, "+1") == 1)  { return 1; }
+    if (t.kind == sfk_int() && @strEq(t.text, "-1") == 1)  { return -1; }
+    if (t.kind == sfk_int() && @strEq(t.text, "0") == 1)   { return 0; }
+    if (t.kind == sfk_int() && @strEq(t.text, "1") == 1)   { return 1; }
+    return 99;
+}
+
+fn sp_dot_index(s: []u8) i32 {
+    let i: i32 = 0;
+    while (i < s.len) {
+        if (s[i] == '.') { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+// Port of fp_parse_float — token text → f32 via the exact same arithmetic.
+fn sp_parse_float(t: SfToken) f32 {
+    if (t.kind == sfk_int()) {
+        return _zag_str_to_i64(t.text) as f32;
+    }
+    if (t.kind == sfk_float()) {
+        let dot: i32 = sp_dot_index(t.text);
+        if (dot < 0) {
+            return _zag_str_to_i64(t.text) as f32;
+        }
+        let whole: f32 = _zag_str_to_i64(t.text[0..dot]) as f32;
+        let frac_s: []u8 = t.text[dot + 1..];
+        let frac: f32 = _zag_str_to_i64(frac_s) as f32;
+        let denom: f32 = 1.0;
+        let fi: i32 = 0;
+        while (fi < frac_s.len) {
+            denom = denom * 10.0;
+            fi = fi + 1;
+        }
+        return whole + frac / denom;
+    }
+    return 0.0;
+}
+
+fn sp_raw_call_known(name: []u8) i32 {
+    if (@strEq(name, "fire_shield") == 1)     { return 1; }
+    if (@strEq(name, "inject_phase") == 1)    { return 1; }
+    if (@strEq(name, "set_laser_mw") == 1)    { return 1; }
+    if (@strEq(name, "target_voxel") == 1)    { return 1; }
+    if (@strEq(name, "manual_polarity") == 1) { return 1; }
+    return 0;
+}
+
+fn sp_raw_arg_count(name: []u8) i32 {
+    if (@strEq(name, "set_laser_mw") == 1) { return 3; }
+    if (@strEq(name, "target_voxel") == 1) { return 3; }
+    return 4;
+}
+
+fn sp_parse_trit_bind(p: *SParser) SpStmt {
+    let nm: SfToken = sp_expect(p, sfk_ident());
+    let _e: SfToken = sp_expect(p, sfk_eq());
+    let lit: SfToken = sp_advance(p);
+    sp_skip_semi(p);
+    let st: SpStmt = sp_mk_stmt(spk_trit_bind(), nm.line);
+    st.name = nm.text;
+    st.trit_lit = sp_trit_lit(lit);
+    return st;
+}
+
+fn sp_parse_wave_bind(p: *SParser) SpStmt {
+    let nm: SfToken = sp_expect(p, sfk_ident());
+    let _e: SfToken = sp_expect(p, sfk_eq());
+    let _d: SfToken = sp_expect(p, sfk_kw_default());
+    sp_skip_semi(p);
+    let st: SpStmt = sp_mk_stmt(spk_wave_bind(), nm.line);
+    st.name = nm.text;
+    return st;
+}
+
+fn sp_parse_p32_bind(p: *SParser) SpStmt {
+    let nm: SfToken = sp_expect(p, sfk_ident());
+    let _e: SfToken = sp_expect(p, sfk_eq());
+    let lit: SfToken = sp_advance(p);
+    sp_skip_semi(p);
+    let st: SpStmt = sp_mk_stmt(spk_p32_bind(), nm.line);
+    st.name = nm.text;
+    st.num_f32 = sp_parse_float(lit);
+    st.num_text = lit.text;
+    return st;
+}
+
+fn sp_parse_sat_bind(p: *SParser) SpStmt {
+    let nm: SfToken = sp_expect(p, sfk_ident());
+    let _e: SfToken = sp_expect(p, sfk_eq());
+    let lit: SfToken = sp_advance(p);
+    sp_skip_semi(p);
+    let st: SpStmt = sp_mk_stmt(spk_sat_bind(), nm.line);
+    st.name = nm.text;
+    st.trit_lit = _zag_str_to_i64(lit.text) as i32;
+    st.num_text = lit.text;
+    return st;
+}
+
+fn sp_parse_raw_call(p: *SParser) SpRawCall {
+    let name_tok: SfToken = sp_expect(p, sfk_ident());
+    if (sp_raw_call_known(name_tok.text) == 0) {
+        _zag_print("flashc1 parse error: unknown raw call ");
+        _zag_println(name_tok.text);
+        p.*.err = 1;
+    }
+    let _lp: SfToken = sp_expect(p, sfk_lp());
+    let args: ArrayList[f32] = make[f32](6);
+    let need: i32 = sp_raw_arg_count(name_tok.text);
+    let ai: i32 = 0;
+    while (ai < need) {
+        let at: SfToken = sp_advance(p);
+        push[f32](&args, sp_parse_float(at));
+        if (ai + 1 < need) {
+            let _c: SfToken = sp_expect(p, sfk_comma());
+        }
+        ai = ai + 1;
+    }
+    let _rp: SfToken = sp_expect(p, sfk_rp());
+    sp_skip_semi(p);
+    return SpRawCall{ .name = name_tok.text, .args = args };
+}
+
+fn sp_parse_raw_block(p: *SParser) SpStmt {
+    let hdr: SfToken = sp_peek(p);
+    let _lb: SfToken = sp_expect(p, sfk_lbrace());
+    let st: SpStmt = sp_mk_stmt(spk_raw_block(), hdr.line);
+    while (sp_peek(p).kind != sfk_rbrace() && sp_peek(p).kind != sfk_eof()) {
+        let rc: SpRawCall = sp_parse_raw_call(p);
+        push[SpRawCall](&st.raws, rc);
+        st.raw_calls = st.raw_calls + 1;
+    }
+    let _rb: SfToken = sp_expect(p, sfk_rbrace());
+    return st;
+}
+
+fn sp_is_mat3_op(name: []u8) i32 {
+    if (name.len < 5) { return 0; }
+    if (name[0] == 'm' && name[1] == 'a' && name[2] == 't' && name[3] == '3' && name[4] == '_') {
+        return 1;
+    }
+    return 0;
+}
+
+fn sp_parse_mat3_op(p: *SParser) SpStmt {
+    let op: SfToken = sp_expect(p, sfk_ident());
+    let _lp: SfToken = sp_expect(p, sfk_lp());
+    let st: SpStmt = sp_mk_stmt(spk_mat3_op(), op.line);
+    st.op_name = op.text;
+    if (@strEq(op.text, "mat3_identity") == 1 || @strEq(op.text, "mat3_rotation_xy_90") == 1) {
+        st.op_argc = 0;
+    } else if (@strEq(op.text, "mat3_mul") == 1) {
+        let a: SfToken = sp_expect(p, sfk_ident());
+        st.op_a = a.text;
+        let _c1: SfToken = sp_expect(p, sfk_comma());
+        let b: SfToken = sp_expect(p, sfk_ident());
+        st.op_b = b.text;
+        st.op_argc = 2;
+    } else if (@strEq(op.text, "mat3_apply") == 1) {
+        let a: SfToken = sp_expect(p, sfk_ident());
+        st.op_a = a.text;
+        let _c1: SfToken = sp_expect(p, sfk_comma());
+        let b: SfToken = sp_expect(p, sfk_ident());
+        st.op_b = b.text;
+        let _c2: SfToken = sp_expect(p, sfk_comma());
+        let c: SfToken = sp_expect(p, sfk_ident());
+        st.op_c = c.text;
+        let _c3: SfToken = sp_expect(p, sfk_comma());
+        let d: SfToken = sp_expect(p, sfk_ident());
+        st.op_d = d.text;
+        st.op_argc = 4;
+    } else {
+        _zag_print("flashc1 parse error: unknown optical op ");
+        _zag_println(op.text);
+        p.*.err = 1;
+    }
+    let _rp: SfToken = sp_expect(p, sfk_rp());
+    let _e: SfToken = sp_expect(p, sfk_eq());
+    let dst: SfToken = sp_expect(p, sfk_ident());
+    sp_skip_semi(p);
+    st.op_dst = dst.text;
+    return st;
+}
+
+fn sp_parse_trit_op(p: *SParser) SpStmt {
+    if (sp_is_mat3_op(sp_peek(p).text) == 1) {
+        return sp_parse_mat3_op(p);
+    }
+    let op: SfToken = sp_expect(p, sfk_ident());
+    let _lp: SfToken = sp_expect(p, sfk_lp());
+    let a: SfToken = sp_expect(p, sfk_ident());
+    let _c: SfToken = sp_expect(p, sfk_comma());
+    let b: SfToken = sp_expect(p, sfk_ident());
+    let _rp: SfToken = sp_expect(p, sfk_rp());
+    let _e: SfToken = sp_expect(p, sfk_eq());
+    let dst: SfToken = sp_expect(p, sfk_ident());
+    sp_skip_semi(p);
+    let st: SpStmt = sp_mk_stmt(spk_trit_op(), op.line);
+    st.op_name = op.text;
+    st.op_a = a.text;
+    st.op_b = b.text;
+    st.op_argc = 2;
+    st.op_dst = dst.text;
+    return st;
+}
+
+fn sp_parse_stmt(p: *SParser) SpStmt {
+    let t: SfToken = sp_peek(p);
+    if (t.kind == sfk_kw_trit()) {
+        let _k: SfToken = sp_advance(p);
+        return sp_parse_trit_bind(p);
+    }
+    if (t.kind == sfk_kw_wave()) {
+        let _k: SfToken = sp_advance(p);
+        return sp_parse_wave_bind(p);
+    }
+    if (t.kind == sfk_kw_p32()) {
+        let _k: SfToken = sp_advance(p);
+        return sp_parse_p32_bind(p);
+    }
+    if (t.kind == sfk_kw_sat_i16()) {
+        let _k: SfToken = sp_advance(p);
+        return sp_parse_sat_bind(p);
+    }
+    if (t.kind == sfk_kw_raw()) {
+        let _k: SfToken = sp_advance(p);
+        return sp_parse_raw_block(p);
+    }
+    if (t.kind == sfk_kw_optical()) {
+        let _k: SfToken = sp_advance(p);
+        return sp_parse_mat3_op(p);
+    }
+    if (t.kind == sfk_kw_let() || t.kind == sfk_ident()) {
+        if (t.kind == sfk_kw_let()) {
+            let _k: SfToken = sp_advance(p);
+        }
+        return sp_parse_trit_op(p);
+    }
+    _zag_print("flashc1 parse error: unexpected statement at line ");
+    _zag_println(_zag_i64_to_str(t.line as i64));
+    p.*.err = 1;
+    let _bad: SfToken = sp_advance(p);
+    return sp_mk_stmt(spk_trit_bind(), t.line);
+}
+
+fn sp_parse_program(src: []u8) SpProgram {
+    let toks: ArrayList[SfToken] = slex_surface(src);
+    let p: SParser = SParser{ .toks = toks, .pos = 0, .err = 0 };
+    let prog: SpProgram = SpProgram{
+        .name = "flash_program",
+        .stmts = make[SpStmt](16),
+        .err = 0,
+    };
+
+    if (sp_peek(&p).kind == sfk_kw_program()) {
+        let _k: SfToken = sp_advance(&p);
+        let nm: SfToken = sp_advance(&p);
+        if (nm.kind == sfk_ident() || nm.kind == sfk_str()) {
+            prog.name = nm.text;
+        }
+        sp_skip_semi(&p);
+    }
+
+    while (sp_peek(&p).kind != sfk_eof()) {
+        if (sp_peek(&p).kind == sfk_err()) {
+            let bad: SfToken = sp_advance(&p);
+            _zag_print("flashc1 parse error: invalid character at line ");
+            _zag_println(_zag_i64_to_str(bad.line as i64));
+            p.err = 1;
+        } else {
+            let st: SpStmt = sp_parse_stmt(&p);
+            push[SpStmt](&prog.stmts, st);
+        }
+    }
+    prog.err = p.err;
+    return prog;
+}
+
+// ── surface validation (port of fss_surface_validate) ───────────────────────
+
+fn spv_err(line: i32, msg: []u8) void {
+    _zag_print("flashc1 surface error (line ");
+    _zag_print(_zag_i64_to_str(line as i64));
+    _zag_print("): ");
+    _zag_println(msg);
+}
+
+fn spv_has(names: *ArrayList[[]u8], name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](names.*)) {
+        if (@strEq(get[[]u8](names.*, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn sp_validate(prog: *SpProgram) i32 {
+    let names: ArrayList[[]u8] = make[[]u8](16);
+    let trit_names: ArrayList[[]u8] = make[[]u8](16);
+    let errs: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[SpStmt](prog.*.stmts)) {
+        let st: SpStmt = get[SpStmt](prog.*.stmts, i);
+        if (st.kind == spk_trit_bind()) {
+            if (st.trit_lit != -1 && st.trit_lit != 0 && st.trit_lit != 1) {
+                spv_err(st.line, "invalid trit literal in surface binding");
+                errs = errs + 1;
+            }
+            if (spv_has(&names, st.name) == 1) {
+                spv_err(st.line, "duplicate surface binding name");
+                errs = errs + 1;
+            } else {
+                push[[]u8](&names, st.name);
+                push[[]u8](&trit_names, st.name);
+            }
+        } else if (st.kind == spk_wave_bind() || st.kind == spk_p32_bind() || st.kind == spk_sat_bind()) {
+            if (st.kind == spk_sat_bind() && (st.trit_lit < -32768 || st.trit_lit > 32767)) {
+                spv_err(st.line, "sat_i16 surface binding out of range");
+                errs = errs + 1;
+            }
+            if (spv_has(&names, st.name) == 1) {
+                spv_err(st.line, "duplicate surface binding name");
+                errs = errs + 1;
+            } else {
+                push[[]u8](&names, st.name);
+            }
+        } else if (st.kind == spk_trit_op()) {
+            if (spv_has(&names, st.op_a) == 0 || spv_has(&names, st.op_b) == 0) {
+                spv_err(st.line, "unknown identifier in surface trit op");
+                errs = errs + 1;
+            } else if (spv_has(&trit_names, st.op_a) == 0 || spv_has(&trit_names, st.op_b) == 0) {
+                spv_err(st.line, "expected trit binding in surface trit op");
+                errs = errs + 1;
+            }
+            if (spv_has(&names, st.op_dst) == 1) {
+                spv_err(st.line, "duplicate surface binding name");
+                errs = errs + 1;
+            } else {
+                push[[]u8](&names, st.op_dst);
+                push[[]u8](&trit_names, st.op_dst);
+            }
+        } else if (st.kind == spk_mat3_op()) {
+            if (spv_has(&names, st.op_dst) == 1) {
+                spv_err(st.line, "duplicate surface binding name");
+                errs = errs + 1;
+            } else {
+                push[[]u8](&names, st.op_dst);
+            }
+        }
+        i = i + 1;
+    }
+    return errs;
+}
