@@ -1,0 +1,9 @@
+union Choice {
+    integer: i32,
+    ternary: t27,
+}
+
+fn main() i32 {
+    let _selected: Choice = Choice{ .ternary = 9 as t27 };
+    return 0;
+}

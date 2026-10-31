@@ -1,0 +1,19 @@
+// examples/bounds_oob_set.flash — must panic at runtime (OOB set).
+
+extern fn _zag_print(s: []u8) void;
+extern fn _zag_println(s: []u8) void;
+extern fn _zag_i64_to_str(v: i64) []u8;
+
+@import("std/list.flash")
+
+fn main() i32 {
+    let xs: ArrayList[i32] = make[i32](4);
+    push[i32](&xs, 1);
+    // Valid write first to prove the list works.
+    set[i32](&xs, 0, 42);
+    _zag_println(_zag_i64_to_str(get[i32](xs, 0) as i64));
+    // Deliberate OOB: set index 10 on a len-1 list.
+    set[i32](&xs, 10, 99);
+    free[i32](&xs);
+    return 0;
+}

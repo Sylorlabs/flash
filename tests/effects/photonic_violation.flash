@@ -1,0 +1,23 @@
+// tests/effects/photonic_violation.flash — W8: @photonic effect checking (violation).
+//
+// A non-@photonic fn that calls fire_shield should fail --check with F0003.
+// This test is expected to FAIL --check.
+
+program photonic_violation
+
+@import("photonic_stubs.flash")
+@import("std/photonic.flash")
+@import("std/flash_std.flash")
+
+// NOT @photonic — calling fire_shield should be a violation
+fn bad_pulse(v: FlashVoxel, pw: FlashPower) i32 {
+    return fire_shield(v, pw);
+}
+
+fn main() i32 {
+    let v: FlashVoxel = voxel(2, 1, 0);
+    let pw: FlashPower = mw(1.5);
+    let r: i32 = bad_pulse(v, pw);
+    flash_println_str_int("bad_pulse=", r as i64);
+    return 0;
+}

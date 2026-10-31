@@ -26,15 +26,16 @@
 
 // Port of fc_rel_path — relativize known roots so shim import depth is right.
 fn f1_rel_path(path: []u8) []u8 {
-    let ex: i32 = flash_str_index_of(path, "examples/");
-    if (ex >= 0) { return path[ex..]; }
-    let sh: i32 = flash_str_index_of(path, "selfhost/");
-    if (sh >= 0) { return path[sh..]; }
-    let td: i32 = flash_str_index_of(path, "flash/compiler/testdata/");
-    if (td >= 0) { return path[td..]; }
-    let fc: i32 = flash_str_index_of(path, "flash/compiler/");
-    if (fc >= 0) { return path[fc..]; }
-    if (path.len >= 2 && path[0] == '.' && path[1] == '/') {
+    // External packages pass FLASH_HOME and need their absolute source path
+    // preserved. Stripping an arbitrary `examples/` or `selfhost/` component
+    // would redirect the compiler into Flash's own checkout.
+    if (_zag_getenv("FLASH_HOME").len > 0) { return path; }
+    if (flash_str_index_of(path, "examples/")) |ex| { return path[ex..]; }
+    if (flash_str_index_of(path, "tests/")) |ts| { return path[ts..]; }
+    if (flash_str_index_of(path, "selfhost/")) |sh| { return path[sh..]; }
+    if (flash_str_index_of(path, "flash/compiler/testdata/")) |td| { return path[td..]; }
+    if (flash_str_index_of(path, "flash/compiler/")) |fc| { return path[fc..]; }
+    if (path.len >= 2 && path[0] == 46 && path[1] == 47) {
         return path[2..];
     }
     return path;
@@ -56,6 +57,14 @@ fn f1_target_name() []u8 {
     let v: []u8 = f1_flag_value("--target");
     if (v.len > 0) { return v; }
     return f1_target_default();
+}
+
+fn f1_target_valid(target: []u8) i32 {
+    if (@strEq(target, "x86_64-emul") == 1) { return 1; }
+    if (@strEq(target, "fimg") == 1) { return 1; }
+    if (@strEq(target, "ppu32") == 1) { return 1; }
+    if (@strEq(target, "engine") == 1) { return 1; }
+    return 0;
 }
 
 fn f1_target_skips_zag() i32 {
@@ -99,9 +108,9 @@ fn f1_flag_value(name: []u8) []u8 {
 }
 
 fn f1_is_word_char(c: i32) i32 {
-    if (c >= 'a' && c <= 'z') { return 1; }
-    if (c >= 'A' && c <= 'Z') { return 1; }
-    if (c == '_') { return 1; }
+    if (c >= 97 && c <= 122) { return 1; }
+    if (c >= 65 && c <= 90) { return 1; }
+    if (c == 95) { return 1; }
     return 0;
 }
 
@@ -111,10 +120,10 @@ fn f1_is_surface(text: []u8) i32 {
     let n: i32 = text.len;
     while (i < n) {
         let c: i32 = text[i] as i32;
-        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+        if (c == 32 || c == 9 || c == 13 || c == 10) {
             i = i + 1;
-        } else if (c == '/' && i + 1 < n && (text[i + 1] as i32) == '/') {
-            while (i < n && (text[i] as i32) != '\n') { i = i + 1; }
+        } else if (c == 47 && i + 1 < n && (text[i + 1] as i32) == 47) {
+            while (i < n && (text[i] as i32) != 10) { i = i + 1; }
         } else {
             let start: i32 = i;
             while (i < n && f1_is_word_char(text[i] as i32) == 1) { i = i + 1; }
@@ -125,17 +134,115 @@ fn f1_is_surface(text: []u8) i32 {
     return 0;
 }
 
-// Port of fc_collect_decls: splice *.flash.zag imports, dedupe files and
-// verbatim Zag imports, preserving stage-0 declaration order exactly.
+fn f1_alias_word(c: i32) i32 {
+    if (c >= 'a' && c <= 'z') { return 1; }
+    if (c >= 'A' && c <= 'Z') { return 1; }
+    if (c >= '0' && c <= '9') { return 1; }
+    if (c == '_') { return 1; }
+    return 0;
+}
+
+fn f1_alias_at(text: []u8, at: i32, alias: []u8) i32 {
+    if (alias.len == 0 || at < 0 || at + alias.len >= text.len) { return 0; }
+    if (at > 0 && f1_alias_word(text[at - 1] as i32) == 1) { return 0; }
+    let j: i32 = 0;
+    while (j < alias.len) {
+        if (text[at + j] != alias[j]) { return 0; }
+        j = j + 1;
+    }
+    if (text[at + alias.len] != '.') { return 0; }
+    return 1;
+}
+
+// Flatten one package alias before parsing. Replaced bytes become spaces so
+// diagnostics retain their original line/column positions. Strings, chars,
+// and line comments are never rewritten.
+fn f1_flatten_alias(text: []u8, alias: []u8) []u8 {
+    let out: ArrayList[u8] = make[u8](text.len);
+    let i: i32 = 0;
+    let mode: i32 = 0; // 0 code, 1 string, 2 char, 3 line comment
+    let escaped: i32 = 0;
+    while (i < text.len) {
+        let c: i32 = text[i] as i32;
+        if (mode == 3) {
+            push[u8](&out, text[i]);
+            if (c == 10) { mode = 0; }
+            i = i + 1;
+        } else if (mode == 1 || mode == 2) {
+            push[u8](&out, text[i]);
+            if (escaped == 1) {
+                escaped = 0;
+            } else if (c == 92) {
+                escaped = 1;
+            } else if ((mode == 1 && c == 34) || (mode == 2 && c == 39)) {
+                mode = 0;
+            }
+            i = i + 1;
+        } else if (c == 47 && i + 1 < text.len && text[i + 1] == '/') {
+            push[u8](&out, text[i]); push[u8](&out, text[i + 1]);
+            mode = 3; i = i + 2;
+        } else if (c == 34) {
+            push[u8](&out, text[i]); mode = 1; i = i + 1;
+        } else if (c == 39) {
+            push[u8](&out, text[i]); mode = 2; i = i + 1;
+        } else if (f1_alias_at(text, i, alias) == 1) {
+            let j: i32 = 0;
+            while (j <= alias.len) { push[u8](&out, 32 as u8); j = j + 1; }
+            i = i + alias.len + 1;
+        } else {
+            push[u8](&out, text[i]); i = i + 1;
+        }
+    }
+    return out.data[0..out.len];
+}
+
+fn f1_flatten_import_aliases(text: []u8) []u8 {
+    let scratch: ArrayList[FNode] = make[FNode](64);
+    let parsed: FpResult = fpp_parse_into(text, &scratch);
+    let out: []u8 = text;
+    let i: i32 = 0;
+    while (i < len[i32](parsed.decls)) {
+        let n: FNode = get[FNode](scratch, get[i32](parsed.decls, i));
+        if (n.code == 10 && n.flag == 1 && n.ty.len > 0) {
+            out = f1_flatten_alias(out, n.ty);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn f1_named_dep_source(name: []u8) []u8 {
+    if (_zag_file_exists("flash.mod") == 0) { return ""; }
+    let mod_: ZagMod = zagmod_parse(_zag_read_file("flash.mod"));
+    let i: i32 = 0;
+    while (i < len[Dep](mod_.deps)) {
+        let d: Dep = get[Dep](mod_.deps, i);
+        if (@strEq(d.name, name) == 1) {
+            let src: []u8 = _zag_str_concat(_zag_str_concat(
+                _zag_str_concat(d.path, "/src/"), name), ".flash");
+            if (_zag_file_exists(src) == 1) { return src; }
+            let direct: []u8 = _zag_str_concat(_zag_str_concat(d.path, "/"),
+                _zag_str_concat(name, ".flash"));
+            if (_zag_file_exists(direct) == 1) { return direct; }
+            return "";
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+// Port of fc_collect_decls: splice Flash imports and named package entrypoints,
+// dedupe files and verbatim Zag imports, preserving declaration order.
 fn f1_collect(
     path: []u8,
     pool: *ArrayList[FNode],
     out_decls: *ArrayList[i32],
+    out_files: *ArrayList[[]u8],
     seen_files: *ArrayList[[]u8],
     seen_imports: *ArrayList[[]u8],
 ) i32 {
     let canon: []u8 = flash_path_canonical(path);
-    if (flash_list_has(seen_files, canon) == 1) { return 0; }
+    if (flash_list_has(seen_files, canon)) { return 0; }
     push[[]u8](seen_files, canon);
 
     let text: []u8 = _zag_read_file(path);
@@ -144,7 +251,8 @@ fn f1_collect(
         _zag_println(path);
         return 1;
     }
-    let pr: FpResult = fpp_parse_into(text, pool);
+    let parse_text: []u8 = f1_flatten_import_aliases(text);
+    let pr: FpResult = fpp_parse_into(parse_text, pool);
     if (pr.err != 0) {
         _zag_print("flashc1: parse errors in ");
         _zag_println(path);
@@ -157,18 +265,35 @@ fn f1_collect(
     while (i < len[i32](pr.decls)) {
         let didx: i32 = get[i32](pr.decls, i);
         let d: FNode = get[FNode](pool.*, didx);
-        if (d.code == 10 && (flash_str_ends_with(d.text, "list.flash") == 1 || flash_str_ends_with(d.text, "list.zag") == 1)) {
+        if (d.code == 10 && (flash_str_ends_with(d.text, "list.flash") || flash_str_ends_with(d.text, "list.zag"))) {
             // ArrayList[T] comes from list.zag in the emitted shim header.
-        } else if (d.code == 10 && (flash_str_ends_with(d.text, ".flash.zag") == 1 || flash_str_ends_with(d.text, ".flash") == 1)) {
+        } else if (d.code == 10 && (flash_str_ends_with(d.text, ".flash.zag") || flash_str_ends_with(d.text, ".flash"))) {
             errs = errs + f1_collect(
-                flash_path_join(dir, d.text), pool, out_decls, seen_files, seen_imports);
+                flash_path_join(dir, d.text), pool, out_decls, out_files, seen_files, seen_imports);
+        } else if (d.code == 10 && d.flag == 1) {
+            let package_src: []u8 = f1_named_dep_source(d.text);
+            if (package_src.len == 0) {
+                _zag_print("flashc1: named dependency entrypoint not found for `");
+                _zag_print(d.text);
+                _zag_println("`");
+                errs = errs + 1;
+            } else {
+                errs = errs + f1_collect(package_src, pool, out_decls, out_files,
+                    seen_files, seen_imports);
+            }
         } else if (d.code == 10) {
-            if (flash_list_has(seen_imports, d.text) == 0) {
+            let package_src: []u8 = f1_named_dep_source(d.text);
+            if (package_src.len > 0) {
+                errs = errs + f1_collect(package_src, pool, out_decls, out_files,
+                    seen_files, seen_imports);
+            } else if (!flash_list_has(seen_imports, d.text)) {
                 push[[]u8](seen_imports, d.text);
                 push[i32](out_decls, didx);
+                push[[]u8](out_files, path);
             }
         } else {
             push[i32](out_decls, didx);
+            push[[]u8](out_files, path);
         }
         i = i + 1;
     }
@@ -221,21 +346,117 @@ fn f1_build_surface(text: []u8, shim_dir: []u8) F1Out {
     };
 }
 
+// Module graph: collision detection — scan the flat declaration pool for
+// duplicate function names and duplicate type names. Reports which files
+// contain the conflicting declarations.
+fn f1_check_collisions(pool: *ArrayList[FNode], decls: ArrayList[i32], decl_files: ArrayList[[]u8]) i32 {
+    let errs: i32 = 0;
+    let fn_seen: ArrayList[[]u8] = make[[]u8](64);
+    let fn_files: ArrayList[[]u8] = make[[]u8](64);
+    let type_seen: ArrayList[[]u8] = make[[]u8](32);
+    let type_files: ArrayList[[]u8] = make[[]u8](32);
+    let i: i32 = 0;
+    while (i < len[i32](decls)) {
+        let n: FNode = get[FNode](pool.*, get[i32](decls, i));
+        let file: []u8 = get[[]u8](decl_files, i);
+        if (n.code == 1) {
+            let j: i32 = 0;
+            let dup: i32 = 0;
+            while (j < len[[]u8](fn_seen)) {
+                if (@strEq(get[[]u8](fn_seen, j), n.text) == 1) { dup = 1; }
+                j = j + 1;
+            }
+            if (dup == 1) {
+                _zag_print("flashc1: module collision: duplicate function `");
+                _zag_print(n.text);
+                _zag_print("` defined in `");
+                _zag_print(get[[]u8](fn_files, 0));
+                _zag_print("` and `");
+                _zag_print(file);
+                _zag_println("`");
+                errs = errs + 1;
+            } else {
+                push[[]u8](&fn_seen, n.text);
+                push[[]u8](&fn_files, file);
+            }
+        }
+        if (n.code == 30 || n.code == 31 || n.code == 32) {
+            let j: i32 = 0;
+            let dup: i32 = 0;
+            while (j < len[[]u8](type_seen)) {
+                if (@strEq(get[[]u8](type_seen, j), n.text) == 1) { dup = 1; }
+                j = j + 1;
+            }
+            if (dup == 1) {
+                _zag_print("flashc1: module collision: duplicate type `");
+                _zag_print(n.text);
+                _zag_print("` defined in `");
+                _zag_print(get[[]u8](type_files, 0));
+                _zag_print("` and `");
+                _zag_print(file);
+                _zag_println("`");
+                errs = errs + 1;
+            } else {
+                push[[]u8](&type_seen, n.text);
+                push[[]u8](&type_files, file);
+            }
+        }
+        i = i + 1;
+    }
+    return errs;
+}
+
 // Full-language --check: parse + Flash imports + fsema.flash (stage-1 sema port).
+// In strict mode (--strict or --check on the self-host compiler), also runs the
+// Zag analyzer (--analyze-strict) to catch leaks, off-by-one, and ignored returns.
 fn f1_check_full(src: []u8) i32 {
     let pool: ArrayList[FNode] = make[FNode](512);
     let decls: ArrayList[i32] = make[i32](128);
+    let decl_files: ArrayList[[]u8] = make[[]u8](128);
     let seen_files: ArrayList[[]u8] = make[[]u8](8);
     let seen_imports: ArrayList[[]u8] = make[[]u8](8);
-    let errs: i32 = f1_collect(src, &pool, &decls, &seen_files, &seen_imports);
+    let errs: i32 = f1_collect(src, &pool, &decls, &decl_files, &seen_files, &seen_imports);
     if (errs > 0) {
         _zag_println("flashc1: parse errors — aborting");
         return 1;
     }
-    let verrs: i32 = fsema_check_pool(&pool, decls, src);
+    // Module graph: collision detection — scan for duplicate fn/type names
+    let coll_errs: i32 = f1_check_collisions(&pool, decls, decl_files);
+    if (coll_errs > 0) {
+        _zag_println("flashc1: module collision errors — aborting");
+        return 1;
+    }
+    let verrs: i32 = fsema_check_pool_files(&pool, decls, decl_files, src);
     if (verrs > 0) {
         _zag_println("flashc1: semantic errors — aborting");
         return 1;
+    }
+    // Strict mode: emit shim and run Zag analyzer (--analyze-strict)
+    // Only run the analyzer when --strict is explicitly passed, or when checking
+    // the self-host compiler itself (src contains "selfhost/").
+    let run_analyzer: i32 = f1_has_flag("--strict");
+    if (run_analyzer == 0) {
+        if (flash_str_index_of(src, "selfhost/")) |_| { run_analyzer = 1; }
+    }
+    if (run_analyzer == 1) {
+        let shim_dir: []u8 = flash_path_dir(f1_shim_path(src));
+        let stem: []u8 = flash_path_stem(src);
+        let built: F1Out = f1_build_full(src, shim_dir, stem);
+        if (built.err != 0) { return 1; }
+        let shim_path: []u8 = f1_shim_path(src);
+        if (f1_write_or_die(shim_path, built.shim_text) != 0) { return 1; }
+        let znc: []u8 = f1_znc_path();
+        if (znc.len > 0) {
+            let cmd: []u8 = _zag_str_concat(_zag_str_concat(_zag_str_concat(
+                _zag_str_concat(_zag_str_concat(f1_quote(znc), " "),
+                f1_quote(shim_path)), " --analyze-strict -o /dev/null"), " 2>&1"),
+                " 1>/dev/null");
+            let rc: i32 = process_run_shell(cmd);
+            if (rc != 0) {
+                _zag_println("flashc1: analyzer errors — aborting");
+                return 1;
+            }
+        }
     }
     return 0;
 }
@@ -243,15 +464,20 @@ fn f1_check_full(src: []u8) i32 {
 fn f1_build_full(src: []u8, shim_dir: []u8, stem: []u8) F1Out {
     let pool: ArrayList[FNode] = make[FNode](512);
     let decls: ArrayList[i32] = make[i32](128);
+    let decl_files: ArrayList[[]u8] = make[[]u8](128);
     let seen_files: ArrayList[[]u8] = make[[]u8](8);
     let seen_imports: ArrayList[[]u8] = make[[]u8](8);
-    let errs: i32 = f1_collect(src, &pool, &decls, &seen_files, &seen_imports);
+    let errs: i32 = f1_collect(src, &pool, &decls, &decl_files, &seen_files, &seen_imports);
     if (errs > 0) {
         _zag_println("flashc1: parse errors — aborting");
         return F1Out{ .shim_text = "", .manifest_text = "", .manifest = manifest_new("", "0.1.0"), .err = 1 };
     }
     // Semantic checking runs on --check (f1_check_full); build skips sema so the
     // self-hosted compiler can bootstrap when fsema lags behind emit coverage.
+
+    // Monomorphization pass: specialize user-defined generic functions with
+    // concrete type arguments, rewriting call sites to use mangled names.
+    fe_mono_pass(&pool, &decls);
 
     let out: ArrayList[u8] = make[u8](8192);
     scg_emit_header(&out, shim_dir);
@@ -289,7 +515,7 @@ fn f1_usage() void {
     _zag_println("usage: flashc1 <file.flash> <out_shim.zag> [--emit-manifest]");
     _zag_println("       flashc1 <file.flash> [-o output] [--emit-manifest] [--emit-zag]");
     _zag_println("               [--emit-fimg] [--emit-ir] [--target x86_64-emul|fimg|ppu32|engine]");
-    _zag_println("               [--check] [--run] [--znc <path-to-znc>]");
+    _zag_println("               [--check] [--strict] [--run] [--znc <path-to-znc>]");
 }
 
 // ── znc resolution: --znc flag → flash.mod [deps] zag → probe fallbacks ──────
@@ -331,7 +557,18 @@ fn f1_znc_path() []u8 {
         _zag_println(env);
         return "";
     }
-    // 3. flash.mod [deps] zag = { path = ... } → <path>/znc
+    // 3. FLASH_HOME names the authoritative Flash checkout for external
+    // packages. It must locate both runtime imports and the bundled backend so
+    // a build does not accidentally depend on the caller's working directory.
+    let flash_home: []u8 = _zag_getenv("FLASH_HOME");
+    if (flash_home.len > 0) {
+        let bundled: []u8 = _zag_str_concat(flash_home, "/flash/toolchain/flashz");
+        if (_zag_file_exists(bundled) == 1) { return bundled; }
+        _zag_print("flashc1: FLASH_HOME has no bundled flashz: ");
+        _zag_println(bundled);
+        return "";
+    }
+    // 4. flash.mod [deps] zag = { path = ... } → <path>/znc
     let dep: []u8 = f1_mod_zag_path();
     if (dep.len > 0) {
         let cand: []u8 = _zag_str_concat(dep, "/znc");
@@ -340,10 +577,10 @@ fn f1_znc_path() []u8 {
         _zag_print(dep);
         _zag_println(" but no znc binary there — trying fallbacks");
     }
-    // 4. Bundled Flash toolchain (standalone — no sibling zag repo).
+    // 5. Bundled Flash toolchain (standalone — no sibling zag repo).
     if (_zag_file_exists("flash/toolchain/flashz") == 1) { return "flash/toolchain/flashz"; }
     if (_zag_file_exists("../flash/toolchain/flashz") == 1) { return "../flash/toolchain/flashz"; }
-    // 5. Legacy fallbacks (dev trees with sibling zag).
+    // 6. Legacy fallbacks (dev trees with sibling zag).
     if (_zag_file_exists("../zag/zag-poc/znc") == 1) { return "../zag/zag-poc/znc"; }
     if (_zag_file_exists("zag/zag-poc/znc") == 1)    { return "zag/zag-poc/znc"; }
     if (_zag_file_exists("./znc") == 1)              { return "./znc"; }
@@ -357,7 +594,7 @@ fn f1_find_path(start: i32) []u8 {
     while (i < process_arg_count()) {
         let a: []u8 = process_arg(i);
         if (a.len > 0) {
-            if (a[0] != '-') { return a; }
+            if (a[0] != 45) { return a; }
         }
         i = i + 1;
     }
@@ -370,9 +607,9 @@ fn f1_positional_shim() []u8 {
     let i: i32 = 1;
     while (i < process_arg_count()) {
         let a: []u8 = process_arg(i);
-        if (a.len > 0 && a[0] != '-') {
+        if (a.len > 0 && a[0] != 45) {
             if (seen_src == 1) {
-                if (flash_str_ends_with(a, ".zag") == 1 && flash_str_ends_with(a, ".flash") == 0) {
+                if (flash_str_ends_with(a, ".zag") && !flash_str_ends_with(a, ".flash")) {
                     return a;
                 }
                 return "";
@@ -396,6 +633,17 @@ fn main() i32 {
         f1_usage();
         return 1;
     }
+    let requested_target: []u8 = f1_target_name();
+    if (f1_target_valid(requested_target) == 0) {
+        _zag_print("flashc1: unsupported target `");
+        _zag_print(requested_target);
+        _zag_println("`");
+        if (@strEq(requested_target, "rayos-ternary") == 1) {
+            _zag_println("flashc1: the RayOS freestanding kernel backend is not implemented; refusing a hosted or empty fallback");
+        }
+        _zag_println("flashc1: supported targets: x86_64-emul, fimg, ppu32, engine");
+        return 1;
+    }
 
     let legacy_shim: []u8 = f1_positional_shim();
     let shim_path: []u8 = f1_shim_path(src);
@@ -403,6 +651,7 @@ fn main() i32 {
     let shim_dir: []u8 = flash_path_dir(shim_path);
 
     if (f1_has_flag("--check") == 1) {
+        // --check implies --strict (S10: checking should be strict by default)
         let text: []u8 = _zag_read_file(src);
         if (text.len < 0) {
             _zag_print("flashc1: cannot read ");
@@ -454,6 +703,12 @@ fn main() i32 {
     }
 
     if (@strEq(f1_target_name(), "ppu32") == 1) {
+        if (len[PathSegment](built.manifest.segments) == 0
+            && f1_has_flag("--emit-zag") == 0) {
+            _zag_println("flashc1: ppu32 executable emission requires a photonic surface program with routed operations");
+            _zag_println("flashc1: general Flash functions and freestanding kernels are not yet lowered to PPU32; refusing an empty image");
+            return 1;
+        }
         let ppath: []u8 = ppu32_path_from_src(src);
         let ppu: []u8 = ppu32_from_manifest(&built.manifest, f1_target_name());
         if (f1_write_or_die(ppath, ppu) != 0) { return 1; }
@@ -501,7 +756,7 @@ fn main() i32 {
 
     if (f1_has_flag("--run") == 1) {
         let runcmd: []u8 = out_path;
-        if (out_path.len > 0 && out_path[0] != '/') {
+        if (out_path.len > 0 && out_path[0] != 47) {
             runcmd = _zag_str_concat("./", out_path);
         }
         _zag_println("flashc1: -- running --");

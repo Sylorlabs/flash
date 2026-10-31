@@ -1,0 +1,20 @@
+// examples/test_stdlib.flash — Flash 2.0 native stdlib test.
+
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    let x: i32 = 42;
+    let y: t9 = 9841;
+    
+    flash_print("x=");
+    flash_println_int(x as i64);
+    
+    flash_print("y=");
+    flash_println_int(y as i64);
+    
+    flash_println_str_int("combined=", x as i64);
+    
+    flash_newline();
+    flash_println("test_stdlib: ok");
+    return 0;
+}

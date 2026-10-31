@@ -1,0 +1,32 @@
+// tests/photonic/photonic_stubs.flash — stub implementations for testing.
+//
+// Provides no-op stubs for the _flash_raw_* externs so tests can run
+// without the actual photonic runtime.
+
+fn _flash_raw_fire_shield(x: i32, y: i32, z: i32, mw: f32) i32 {
+    return 1;
+}
+
+fn _flash_raw_inject_phase(x: i32, y: i32, z: i32, phase: f32) i32 {
+    return 1;
+}
+
+fn _flash_raw_set_laser_mw(wall: i32, slot: i32, mw: f32) i32 {
+    return 1;
+}
+
+fn _flash_raw_target_voxel(x: i32, y: i32, z: i32) i32 {
+    return 1;
+}
+
+fn _flash_raw_set_polarity(x: i32, y: i32, z: i32, pol: i32, value: i32) i32 {
+    return 1;
+}
+
+fn _flash_raw_mode_enter() i32 {
+    return 1;
+}
+
+fn _flash_raw_mode_exit() i32 {
+    return 1;
+}

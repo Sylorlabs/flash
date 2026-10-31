@@ -1,0 +1,12 @@
+fn main() i32 {
+    let i: i32 = 0;
+    let sum: i32 = 0;
+    while (i < 10) {
+        i = i + 1;
+        if (i == 3) { continue; }
+        if (i == 7) { break; }
+        sum = sum + i;
+    }
+    if (sum != 18) { return 1; }
+    return 0;
+}

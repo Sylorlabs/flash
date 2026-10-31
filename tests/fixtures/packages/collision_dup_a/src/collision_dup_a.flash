@@ -1,0 +1,4 @@
+pub fn collision() i32 {
+    return 1;
+}
+

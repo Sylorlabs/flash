@@ -1,0 +1,121 @@
+// flash/ui/interact.flash — interaction layer: hover, press, focus, scroll.
+//
+// A small state machine over the layout engine (layout.flash): resolves
+// pointer hover/press/click against laid-out element ids, tracks keyboard
+// focus with tab cycling, and clamps scroll offsets for overflow containers.
+// Apps read the state to draw hover highlights, focus rings, and scrolled
+// content instead of reinventing hit-testing each time.
+//
+//   let it: Interact = interact_new();
+//   interact_hover(&it, &L, mx, my);
+//   interact_press(&it, &L, mx, my);
+//   let clicked: i32 = interact_release(&it, &L, mx, my);   // id or -1
+
+@import("layout.flash")
+
+struct Interact {
+    hovered: i32,
+    pressed: i32,
+    focused: i32,
+}
+
+fn interact_new() Interact {
+    return Interact{ .hovered = 0 - 1, .pressed = 0 - 1, .focused = 0 - 1 };
+}
+
+// Update the hovered element from the pointer position.
+fn interact_hover(it: *Interact, L: *Layout, mx: i32, my: i32) void {
+    it.*.hovered = layout_hit(L, mx, my);
+}
+
+// Pointer went down: remember which element was pressed (also focuses it).
+fn interact_press(it: *Interact, L: *Layout, mx: i32, my: i32) void {
+    let id: i32 = layout_hit(L, mx, my);
+    it.*.pressed = id;
+    if (id >= 0) { it.*.focused = id; }
+}
+
+// Pointer released: returns the element id if the release lands on the same
+// element that was pressed (a real click), else -1.
+fn interact_release(it: *Interact, L: *Layout, mx: i32, my: i32) i32 {
+    let up: i32 = layout_hit(L, mx, my);
+    let clicked: i32 = 0 - 1;
+    if (up >= 0 && up == it.*.pressed) { clicked = up; }
+    it.*.pressed = 0 - 1;
+    return clicked;
+}
+
+fn interact_is_hovered(it: *Interact, id: i32) i32 {
+    if (it.*.hovered == id) { return 1; }
+    return 0;
+}
+fn interact_is_pressed(it: *Interact, id: i32) i32 {
+    if (it.*.pressed == id && it.*.hovered == id) { return 1; }
+    return 0;
+}
+fn interact_is_focused(it: *Interact, id: i32) i32 {
+    if (it.*.focused == id) { return 1; }
+    return 0;
+}
+
+// ── keyboard focus (tab cycling over element ids in tree order) ──────────────
+
+fn interact_focus_next(it: *Interact, L: *Layout) void {
+    let n: i32 = len[LayoutNode](L.*.nodes);
+    if (n < 1) { return; }
+    // find current index
+    let cur: i32 = 0 - 1;
+    let i: i32 = 0;
+    while (i < n) {
+        if (get[LayoutNode](L.*.nodes, i).id == it.*.focused) { cur = i; i = n; }
+        else { i = i + 1; }
+    }
+    let step: i32 = cur + 1;
+    if (step >= n) { step = 0; }
+    it.*.focused = get[LayoutNode](L.*.nodes, step).id;
+}
+
+fn interact_focus_prev(it: *Interact, L: *Layout) void {
+    let n: i32 = len[LayoutNode](L.*.nodes);
+    if (n < 1) { return; }
+    let cur: i32 = 0;
+    let i: i32 = 0;
+    while (i < n) {
+        if (get[LayoutNode](L.*.nodes, i).id == it.*.focused) { cur = i; i = n; }
+        else { i = i + 1; }
+    }
+    let step: i32 = cur - 1;
+    if (step < 0) { step = n - 1; }
+    it.*.focused = get[LayoutNode](L.*.nodes, step).id;
+}
+
+// ── scroll containers ────────────────────────────────────────────────────────
+
+// Clamp a scroll offset to [0, max(0, content - view)].
+fn interact_scroll_clamp(offset: i32, content_h: i32, view_h: i32) i32 {
+    let maxo: i32 = content_h - view_h;
+    if (maxo < 0) { maxo = 0; }
+    if (offset < 0) { return 0; }
+    if (offset > maxo) { return maxo; }
+    return offset;
+}
+
+// Apply a wheel/drag delta to a scroll offset (positive = down).
+fn interact_scroll(offset: i32, delta: i32, content_h: i32, view_h: i32) i32 {
+    return interact_scroll_clamp(offset + delta, content_h, view_h);
+}
+
+// Scrollbar thumb geometry for a vertical scrollbar of pixel height `track_h`.
+// Writes thumb top + height. Returns 1 if a thumb is needed (overflow).
+fn interact_scrollbar(offset: i32, content_h: i32, view_h: i32, track_h: i32,
+                      thumb_top: *i32, thumb_h: *i32) i32 {
+    if (content_h <= view_h) { thumb_top.* = 0; thumb_h.* = track_h; return 0; }
+    let th: i32 = (view_h * track_h) / content_h;
+    if (th < 16) { th = 16; }
+    let maxo: i32 = content_h - view_h;
+    let tt: i32 = 0;
+    if (maxo > 0) { tt = (offset * (track_h - th)) / maxo; }
+    thumb_top.* = tt;
+    thumb_h.* = th;
+    return 1;
+}

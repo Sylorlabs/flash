@@ -1,0 +1,954 @@
+@import("../../flash/runtime/linux.flash")
+
+fn receive_fd_expect(ok: i32, message: []u8) i32 {
+    if (ok == 0) { _zag_print("FAIL "); _zag_println(message); return 1; }
+    return 0;
+}
+
+fn receive_fd_socketpair(kind: i64) LinuxFdPair {
+    let fds: ArrayList[i64] = make[i64](1);
+    let rc: i64 = _zag_raw_syscall(linux_sys_socketpair(), linux_af_unix(), kind,
+        0, fds.data as i64, 0, 0);
+    let pair: LinuxFdPair = LinuxFdPair{ .first = 0 - 1, .second = 0 - 1, .ok = 0 };
+    if (rc == 0) {
+        let packed: i64 = fds.data[0];
+        pair.first = packed - (packed / 4294967296) * 4294967296;
+        pair.second = packed / 4294967296;
+        pair.ok = 1;
+    }
+    free[i64](&fds);
+    return pair;
+}
+
+// Every fixture receive is preceded by a bounded readiness check. A failed
+// sender therefore becomes an immediate test failure instead of an unbounded
+// blocking recv/read that hides the original errno.
+fn receive_fd_ready_after(send_ok: i32, fd: i64) i64 {
+    if (send_ok == 0) { return 0 - 5; }
+    let ready: i64 = linux_poll_event_status(fd, 1, 1000);
+    if (ready == 0) { return 0 - 110; }
+    return ready;
+}
+
+fn receive_fd_read_after(send_ok: i32, fd: i64,
+    out: *LinuxByteBuffer) i64 {
+    let ready: i64 = receive_fd_ready_after(send_ok, fd);
+    if (ready != 1) { return ready; }
+    return linux_read_into(fd, out);
+}
+
+fn receive_fd_one_after(send_ok: i32, fd: i64,
+    capacity: i32) LinuxReceiveFdResult {
+    let ready: i64 = receive_fd_ready_after(send_ok, fd);
+    if (ready == 1) { return linux_receive_buffer_fd(fd, capacity); }
+    let result: LinuxReceiveFdResult = linux_receive_buffer_fd(0 - 1, capacity);
+    result.error_code = ready;
+    return result;
+}
+
+fn receive_fds_after(send_ok: i32, fd: i64, capacity: i32,
+    accepted_fd_cap: t27) LinuxReceiveFdsResult {
+    let ready: i64 = receive_fd_ready_after(send_ok, fd);
+    if (ready == 1) {
+        return linux_receive_buffer_fds(fd, capacity, accepted_fd_cap);
+    }
+    let result: LinuxReceiveFdsResult = linux_receive_buffer_fds(
+        0 - 1, capacity, accepted_fd_cap);
+    result.error_code = ready;
+    return result;
+}
+
+fn receive_fds_fallback_after(send_ok: i32, fd: i64, capacity: i32,
+    accepted_fd_cap: t27) LinuxReceiveFdsResult {
+    let ready: i64 = receive_fd_ready_after(send_ok, fd);
+    if (ready == 1) {
+        return linux_receive_buffer_fds_with_cloexec_mode(
+            fd, capacity, accepted_fd_cap, 0);
+    }
+    let result: LinuxReceiveFdsResult = linux_receive_buffer_fds(
+        0 - 1, capacity, accepted_fd_cap);
+    result.error_code = ready;
+    return result;
+}
+
+// Test-only multi-descriptor sender. The production single-FD sender remains
+// intentionally narrow; this fixture exercises excess and truncated control
+// ownership with a real kernel SCM_RIGHTS message.
+fn receive_fd_send_many(socket_fd: i64, data: *LinuxByteBuffer, fds: *ArrayList[i64]) i64 {
+    let count: i32 = len[i64](fds.*);
+    if (socket_fd < 0 || data.*.len < 1 || count < 1 || count > 16) { return 0 - 22; }
+    let fd_i: i32 = 0;
+    while (fd_i < count) {
+        if (get[i64](fds.*, fd_i) < 0) { return 0 - 22; }
+        fd_i = fd_i + 1;
+    }
+    let iovec: LinuxByteBuffer = linux_buffer_new(16);
+    linux_buffer_set_u64(&iovec, 0, data.*.words.data as i64);
+    linux_buffer_set_u64(&iovec, 8, data.*.len as i64);
+    let cmsg_len: i64 = 16 + (count as i64) * 4;
+    let control_len: i32 = linux_cmsg_align(cmsg_len) as i32;
+    let control: LinuxByteBuffer = linux_buffer_new(control_len);
+    linux_buffer_set_u64(&control, 0, cmsg_len);
+    linux_buffer_set_u32(&control, 8, 1);
+    linux_buffer_set_u32(&control, 12, 1);
+    fd_i = 0;
+    while (fd_i < count) {
+        linux_buffer_set_u32(&control, 16 + fd_i * 4, get[i64](fds.*, fd_i));
+        fd_i = fd_i + 1;
+    }
+    control.len = control_len;
+    let message: LinuxByteBuffer = linux_buffer_new(56);
+    linux_buffer_zero_storage(&message);
+    linux_buffer_set_u64(&message, 16, iovec.words.data as i64);
+    linux_buffer_set_u64(&message, 24, 1);
+    linux_buffer_set_u64(&message, 32, control.words.data as i64);
+    linux_buffer_set_u64(&message, 40, control_len as i64);
+    message.len = 56;
+    let sent: i64 = _zag_raw_syscall(linux_sys_sendmsg(), socket_fd,
+        message.words.data as i64, 0, 0, 0, 0);
+    linux_buffer_free(&message); linux_buffer_free(&control); linux_buffer_free(&iovec);
+    return sent;
+}
+
+fn main() i32 {
+    let failures: i32 = 0;
+
+    let exact_capacity: LinuxByteBuffer = linux_buffer_new(2);
+    linux_buffer_set_byte(&exact_capacity, 0, 97);
+    linux_buffer_set_byte(&exact_capacity, 1, 98);
+    linux_buffer_set_byte(&exact_capacity, 2, 120);
+    failures = failures + receive_fd_expect(exact_capacity.capacity_bytes == 2
+        && exact_capacity.len == 2 && linux_buffer_byte(&exact_capacity, 0) == 97
+        && linux_buffer_byte(&exact_capacity, 1) == 98,
+        "packed storage preserves the caller's exact logical byte capacity");
+    linux_buffer_free(&exact_capacity);
+
+    let write_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(write_pair.ok == 1,
+        "exact-write socketpair");
+    if (write_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(11);
+        linux_buffer_set_byte(&outgoing, 0, 102); linux_buffer_set_byte(&outgoing, 1, 108);
+        linux_buffer_set_byte(&outgoing, 2, 97); linux_buffer_set_byte(&outgoing, 3, 115);
+        linux_buffer_set_byte(&outgoing, 4, 104); linux_buffer_set_byte(&outgoing, 5, 45);
+        linux_buffer_set_byte(&outgoing, 6, 119); linux_buffer_set_byte(&outgoing, 7, 114);
+        linux_buffer_set_byte(&outgoing, 8, 105); linux_buffer_set_byte(&outgoing, 9, 116);
+        linux_buffer_set_byte(&outgoing, 10, 101);
+        let written: LinuxWriteAllResult = linux_write_buffer_all_chunked(
+            write_pair.first, &outgoing, 3);
+        let incoming: LinuxByteBuffer = linux_buffer_new(11);
+        let got: i64 = receive_fd_read_after(written.complete == 1
+            && written.written == 11, write_pair.second, &incoming);
+        failures = failures + receive_fd_expect(written.complete == 1
+            && written.written == 11 && written.error_code == 0 && got == 11
+            && linux_buffer_byte(&incoming, 0) == 102
+            && linux_buffer_byte(&incoming, 5) == 45
+            && linux_buffer_byte(&incoming, 10) == 101,
+            "exact write retains progress and offsets across bounded chunks");
+        let socket_written: LinuxWriteAllResult = linux_send_buffer_all_chunked(
+            write_pair.first, &outgoing, 3);
+        let socket_incoming: LinuxByteBuffer = linux_buffer_new(11);
+        let socket_got: i64 = receive_fd_read_after(
+            socket_written.complete == 1 && socket_written.written == 11,
+            write_pair.second, &socket_incoming);
+        failures = failures + receive_fd_expect(socket_written.complete == 1
+            && socket_written.written == 11 && socket_written.error_code == 0
+            && socket_got == 11 && linux_buffer_byte(&socket_incoming, 0) == 102
+            && linux_buffer_byte(&socket_incoming, 10) == 101,
+            "bounded nonblocking socket send completes exact chunked payloads");
+        let aliased_fd: i64 = write_pair.first + 4294967296;
+        let aliased_write: LinuxWriteAllResult = linux_write_buffer_all(
+            aliased_fd, &outgoing);
+        failures = failures + receive_fd_expect(linux_close(aliased_fd) == (0 - 9)
+            && linux_fd_flags(aliased_fd) == (0 - 9)
+            && linux_write_buffer(aliased_fd, &outgoing) == (0 - 9)
+            && aliased_write.complete == 0 && aliased_write.written == 0
+            && aliased_write.error_code == (0 - 22)
+            && linux_fd_flags(write_pair.first) >= 0,
+            "out-of-range descriptor carriers cannot alias or close a live kernel FD");
+        let timed: LinuxWriteAllResult = linux_send_buffer_all_timeout_chunked(
+            write_pair.first, &outgoing, 1, 0);
+        let timed_incoming: LinuxByteBuffer = linux_buffer_new(1);
+        let timed_got: i64 = receive_fd_read_after(timed.written == 1,
+            write_pair.second, &timed_incoming);
+        failures = failures + receive_fd_expect(timed.complete == 0
+            && timed.written == 1 && timed.error_code == (0 - 110)
+            && timed_got == 1 && linux_buffer_byte(&timed_incoming, 0) == 102,
+            "positive send progress cannot extend work beyond a zero deadline");
+        let invalid: LinuxByteBuffer = linux_buffer_new(1);
+        invalid.len = invalid.capacity_bytes + 1;
+        let rejected: LinuxWriteAllResult = linux_write_buffer_all(
+            write_pair.first, &invalid);
+        failures = failures + receive_fd_expect(rejected.complete == 0
+            && rejected.written == 0 && rejected.error_code == (0 - 22),
+            "exact write rejects an invalid packed-buffer extent before syscall");
+        linux_buffer_free(&timed_incoming); linux_buffer_free(&socket_incoming);
+        linux_buffer_free(&invalid);
+        linux_buffer_free(&incoming); linux_buffer_free(&outgoing);
+        let _close_write_first: i64 = linux_close(write_pair.first);
+        let _close_write_second: i64 = linux_close(write_pair.second);
+    }
+
+    let closed_send_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(closed_send_pair.ok == 1,
+        "no-SIGPIPE socketpair");
+    if (closed_send_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 120);
+        let _close_send_peer: i64 = linux_close(closed_send_pair.second);
+        let rejected: LinuxWriteAllResult = linux_send_buffer_all(
+            closed_send_pair.first, &outgoing);
+        failures = failures + receive_fd_expect(rejected.complete == 0
+            && rejected.written == 0 && rejected.error_code == (0 - 32),
+            "socket exact send reports EPIPE without terminating the process");
+        linux_buffer_free(&outgoing);
+        let _close_send_first: i64 = linux_close(closed_send_pair.first);
+    }
+
+    let stalled_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(stalled_pair.ok == 1,
+        "bounded stalled-send socketpair");
+    if (stalled_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1048576);
+        outgoing.len = outgoing.capacity_bytes;
+        let stalled: LinuxWriteAllResult = linux_send_buffer_all_timeout(
+            stalled_pair.first, &outgoing, 0);
+        failures = failures + receive_fd_expect(stalled.complete == 0
+            && stalled.written >= 0 && stalled.written < outgoing.len as i64
+            && stalled.error_code == (0 - 110),
+            "non-reading socket peer returns a bounded timeout with exact progress");
+        linux_buffer_free(&outgoing);
+        let _close_stalled_first: i64 = linux_close(stalled_pair.first);
+        let _close_stalled_second: i64 = linux_close(stalled_pair.second);
+    }
+
+    let split_memory: LinuxSharedMemory = linux_shared_memory_create(1);
+    let split_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(split_memory.valid == 1
+        && split_pair.ok == 1, "split exact-FD fixture resources");
+    if (split_memory.valid == 1 && split_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(5);
+        linux_buffer_set_byte(&outgoing, 0, 102); linux_buffer_set_byte(&outgoing, 1, 114);
+        linux_buffer_set_byte(&outgoing, 2, 97); linux_buffer_set_byte(&outgoing, 3, 109);
+        linux_buffer_set_byte(&outgoing, 4, 101);
+        let sent: LinuxWriteAllResult = linux_send_buffer_fd_all_chunked(
+            split_pair.first, &outgoing, split_memory.fd, 1);
+        let first: LinuxReceiveFdResult = receive_fd_one_after(
+            sent.complete == 1 && sent.written == 5, split_pair.second, 1);
+        let tail: LinuxByteBuffer = linux_buffer_new(4);
+        let tail_got: i64 = receive_fd_read_after(first.ok == 1,
+            split_pair.second, &tail);
+        failures = failures + receive_fd_expect(sent.complete == 1 && sent.written == 5
+            && sent.error_code == 0 && first.ok == 1 && first.has_fd == 1
+            && first.fd_count == 1 && linux_buffer_byte(&first.data, 0) == 102
+            && tail_got == 4 && linux_buffer_byte(&tail, 0) == 114
+            && linux_buffer_byte(&tail, 3) == 101,
+            "partial descriptor send attaches authority once and completes with ordinary writes");
+        let rejected_fd: LinuxWriteAllResult = linux_send_buffer_fd_all(
+            split_pair.first, &outgoing, 4294967296);
+        failures = failures + receive_fd_expect(rejected_fd.complete == 0
+            && rejected_fd.written == 0 && rejected_fd.error_code == (0 - 22),
+            "SCM_RIGHTS rejects descriptors outside the signed kernel FD range");
+        if (first.received_fd >= 0) { let _close_split_received: i64 = linux_close(first.received_fd); }
+        linux_buffer_free(&tail); linux_buffer_free(&first.data); linux_buffer_free(&outgoing);
+    }
+    if (split_pair.ok == 1) {
+        let _close_split_first: i64 = linux_close(split_pair.first);
+        let _close_split_second: i64 = linux_close(split_pair.second);
+    }
+    if (split_memory.valid == 1) { linux_shared_memory_free(&split_memory); }
+
+    let closed_fd_memory: LinuxSharedMemory = linux_shared_memory_create(1);
+    let closed_fd_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(closed_fd_memory.valid == 1
+        && closed_fd_pair.ok == 1, "no-SIGPIPE descriptor fixture resources");
+    if (closed_fd_memory.valid == 1 && closed_fd_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 102);
+        let _close_fd_peer: i64 = linux_close(closed_fd_pair.second);
+        let rejected: LinuxWriteAllResult = linux_send_buffer_fd_all(
+            closed_fd_pair.first, &outgoing, closed_fd_memory.fd);
+        failures = failures + receive_fd_expect(rejected.complete == 0
+            && rejected.written == 0 && rejected.error_code == (0 - 32),
+            "descriptor send reports EPIPE without SIGPIPE termination");
+        linux_buffer_free(&outgoing);
+        let _close_fd_first: i64 = linux_close(closed_fd_pair.first);
+    }
+    if (closed_fd_memory.valid == 1) { linux_shared_memory_free(&closed_fd_memory); }
+
+    let data_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(data_pair.ok == 1, "data-only socketpair");
+    if (data_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 100);
+        let sent: i64 = linux_write_buffer(data_pair.first, &outgoing);
+        let received: LinuxReceiveFdResult = receive_fd_one_after(sent == 1,
+            data_pair.second, 1);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 1
+            && received.payload_received == 1 && received.has_fd == 0
+            && received.received_fd < 0 && received.fd_count == 0
+            && received.message_truncated == 0 && received.control_truncated == 0
+            && received.control_invalid == 0 && linux_buffer_byte(&received.data, 0) == 100,
+            "data-only recvmsg is successful without inventing an FD");
+        linux_buffer_free(&received.data); linux_buffer_free(&outgoing);
+        let _close_data_first: i64 = linux_close(data_pair.first);
+        let _close_data_second: i64 = linux_close(data_pair.second);
+    }
+
+    let invalid: LinuxReceiveFdResult = linux_receive_buffer_fd(0 - 1,
+        linux_receive_fd_max_payload() + 1);
+    failures = failures + receive_fd_expect(invalid.ok == 0 && invalid.payload_received == 0
+        && invalid.has_fd == 0 && invalid.error_code == (0 - 22),
+        "invalid and oversized receives fail before allocating or reading");
+    linux_buffer_free(&invalid.data);
+
+    let one_memory: LinuxSharedMemory = linux_shared_memory_create(9);
+    let one_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(one_memory.valid == 1 && one_pair.ok == 1,
+        "single-FD fixture resources");
+    if (one_memory.valid == 1 && one_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 102);
+        let sent: i64 = linux_send_buffer_fd(one_pair.first, &outgoing, one_memory.fd);
+        let received: LinuxReceiveFdResult = receive_fd_one_after(sent == 1,
+            one_pair.second, 1);
+        let received_flags: i64 = linux_fd_flags(received.received_fd);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 1
+            && received.payload_received == 1 && received.has_fd == 1
+            && received.fd_count == 1 && received.excess_fd_count == 0
+            && received.closed_fd_count == 0 && received.cloexec_applied == 1
+            && received_flags >= 0 && (received_flags % 2) == 1,
+            "one SCM_RIGHTS descriptor is retained with close-on-exec");
+        if (received.received_fd >= 0) { let _close_received: i64 = linux_close(received.received_fd); }
+        linux_buffer_free(&received.data); linux_buffer_free(&outgoing);
+    }
+    if (one_pair.ok == 1) {
+        let _close_one_first: i64 = linux_close(one_pair.first);
+        let _close_one_second: i64 = linux_close(one_pair.second);
+    }
+    if (one_memory.valid == 1) { linux_shared_memory_free(&one_memory); }
+
+    let mapping_memory: LinuxSharedMemory = linux_shared_memory_create(5);
+    let mapping_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(mapping_memory.valid == 1
+        && mapping_pair.ok == 1, "read-only mapping fixture resources");
+    if (mapping_memory.valid == 1 && mapping_pair.ok == 1) {
+        linux_shared_memory_set_byte(&mapping_memory, 0, 97);
+        linux_shared_memory_set_byte(&mapping_memory, 1, 98);
+        linux_shared_memory_set_byte(&mapping_memory, 2, 99);
+        linux_shared_memory_set_byte(&mapping_memory, 3, 100);
+        linux_shared_memory_set_byte(&mapping_memory, 4, 101);
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 109);
+        let sent: i64 = linux_send_buffer_fd(mapping_pair.first, &outgoing,
+            mapping_memory.fd);
+        let received: LinuxReceiveFdResult = receive_fd_one_after(sent == 1,
+            mapping_pair.second, 1);
+        let cursor: LinuxByteBuffer = linux_buffer_new(2);
+        cursor.capacity_bytes = 2;
+        let advanced: i64 = receive_fd_read_after(received.ok == 1
+            && received.has_fd == 1, received.received_fd, &cursor);
+        let mapped_fd: i64 = received.received_fd;
+        let mapping: LinuxReadOnlyMapping = linux_readonly_map_fd_take(
+            mapped_fd, 5, 5);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 1
+            && received.has_fd == 1 && advanced == 2
+            && linux_buffer_byte(&cursor, 0) == 97
+            && linux_buffer_byte(&cursor, 1) == 98
+            && mapping.valid == 1 && mapping.len == 5
+            && linux_readonly_mapping_byte(&mapping, 0) == 97
+            && linux_readonly_mapping_byte(&mapping, 2) == 99
+            && linux_readonly_mapping_byte(&mapping, 4) == 101,
+            "read-only mmap starts at offset zero despite a shared advanced FD cursor");
+        let mapping_freed: i32 = linux_readonly_mapping_free(&mapping);
+        failures = failures + receive_fd_expect(mapping_freed == 1
+            && mapping.valid == 0 && mapping.fd < 0
+            && linux_fd_flags(mapped_fd) == (0 - 9),
+            "read-only mapping releases its map and owned descriptor exactly once");
+
+        let short_sent: i64 = linux_send_buffer_fd(mapping_pair.first, &outgoing,
+            mapping_memory.fd);
+        let short_received: LinuxReceiveFdResult = receive_fd_one_after(
+            short_sent == 1, mapping_pair.second, 1);
+        let short_fd: i64 = short_received.received_fd;
+        let short_mapping: LinuxReadOnlyMapping = linux_readonly_map_fd_take(
+            short_fd, 7, 7);
+        failures = failures + receive_fd_expect(short_sent == 1
+            && short_received.ok == 1 && short_mapping.valid == 0
+            && short_mapping.error_code == (0 - 22) && short_mapping.fd < 0
+            && linux_fd_flags(short_fd) == (0 - 9),
+            "same-page advertised length beyond st_size is rejected before mmap");
+
+        let large_sent: i64 = linux_send_buffer_fd(mapping_pair.first, &outgoing,
+            mapping_memory.fd);
+        let large_received: LinuxReceiveFdResult = receive_fd_one_after(
+            large_sent == 1, mapping_pair.second, 1);
+        let large_fd: i64 = large_received.received_fd;
+        let large_mapping: LinuxReadOnlyMapping = linux_readonly_map_fd_take(
+            large_fd, 8192, 8192);
+        failures = failures + receive_fd_expect(large_sent == 1
+            && large_received.ok == 1 && large_mapping.valid == 0
+            && large_mapping.error_code == (0 - 22) && large_mapping.fd < 0
+            && linux_fd_flags(large_fd) == (0 - 9),
+            "multi-page advertised length beyond st_size is rejected before SIGBUS is possible");
+
+        linux_buffer_free(&large_received.data);
+        linux_buffer_free(&short_received.data);
+        linux_buffer_free(&cursor); linux_buffer_free(&received.data);
+        linux_buffer_free(&outgoing);
+    }
+    if (mapping_pair.ok == 1) {
+        let _close_mapping_first: i64 = linux_close(mapping_pair.first);
+        let _close_mapping_second: i64 = linux_close(mapping_pair.second);
+    }
+    if (mapping_memory.valid == 1) { linux_shared_memory_free(&mapping_memory); }
+
+    let nonmap_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(nonmap_pair.ok == 1,
+        "non-mappable descriptor fixture");
+    if (nonmap_pair.ok == 1) {
+        let nonmap_fd: i64 = nonmap_pair.first;
+        let rejected: LinuxReadOnlyMapping = linux_readonly_map_fd_take(
+            nonmap_fd, 1, 1);
+        failures = failures + receive_fd_expect(rejected.valid == 0
+            && rejected.fd < 0 && rejected.error_code < 0
+            && linux_fd_flags(nonmap_fd) == (0 - 9),
+            "read-only mmap rejects a socket promptly and closes the taken descriptor");
+        let _close_nonmap_second: i64 = linux_close(nonmap_pair.second);
+    }
+
+    let excess_first: LinuxSharedMemory = linux_shared_memory_create(3);
+    let excess_second: LinuxSharedMemory = linux_shared_memory_create(3);
+    let excess_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(excess_first.valid == 1 && excess_second.valid == 1
+        && excess_pair.ok == 1, "excess-FD fixture resources");
+    if (excess_first.valid == 1 && excess_second.valid == 1 && excess_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 101);
+        let fds: ArrayList[i64] = make[i64](2);
+        push[i64](&fds, excess_first.fd); push[i64](&fds, excess_second.fd);
+        let sent: i64 = receive_fd_send_many(excess_pair.first, &outgoing, &fds);
+        let received: LinuxReceiveFdResult = receive_fd_one_after(sent == 1,
+            excess_pair.second, 1);
+        let closed_flags: i64 = linux_fd_flags(received.last_closed_fd);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 1
+            && received.has_fd == 1 && received.fd_count == 2
+            && received.excess_fd_count == 1 && received.closed_fd_count == 1
+            && received.last_closed_fd >= 0 && closed_flags == (0 - 9),
+            "excess SCM_RIGHTS descriptors are closed before return");
+        if (received.received_fd >= 0) { let _close_retained: i64 = linux_close(received.received_fd); }
+        free[i64](&fds); linux_buffer_free(&received.data); linux_buffer_free(&outgoing);
+    }
+    if (excess_pair.ok == 1) {
+        let _close_excess_first: i64 = linux_close(excess_pair.first);
+        let _close_excess_second: i64 = linux_close(excess_pair.second);
+    }
+    if (excess_first.valid == 1) { linux_shared_memory_free(&excess_first); }
+    if (excess_second.valid == 1) { linux_shared_memory_free(&excess_second); }
+
+    let trunc_first: LinuxSharedMemory = linux_shared_memory_create(3);
+    let trunc_second: LinuxSharedMemory = linux_shared_memory_create(3);
+    let trunc_third: LinuxSharedMemory = linux_shared_memory_create(3);
+    let trunc_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(trunc_first.valid == 1 && trunc_second.valid == 1
+        && trunc_third.valid == 1 && trunc_pair.ok == 1, "truncated-control fixture resources");
+    if (trunc_first.valid == 1 && trunc_second.valid == 1 && trunc_third.valid == 1 && trunc_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 116);
+        let fds: ArrayList[i64] = make[i64](3);
+        push[i64](&fds, trunc_first.fd); push[i64](&fds, trunc_second.fd); push[i64](&fds, trunc_third.fd);
+        let sent: i64 = receive_fd_send_many(trunc_pair.first, &outgoing, &fds);
+        let received: LinuxReceiveFdResult = receive_fd_one_after(sent == 1,
+            trunc_pair.second, 1);
+        let closed_flags: i64 = linux_fd_flags(received.last_closed_fd);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 0
+            && received.payload_received == 1 && received.control_truncated == 1
+            && received.has_fd == 0 && received.received_fd < 0
+            && received.fd_count >= 1 && received.closed_fd_count == received.fd_count
+            && received.last_closed_fd >= 0 && closed_flags == (0 - 9),
+            "truncated SCM_RIGHTS control closes every installed descriptor");
+        free[i64](&fds); linux_buffer_free(&received.data); linux_buffer_free(&outgoing);
+    }
+    if (trunc_pair.ok == 1) {
+        let _close_trunc_first: i64 = linux_close(trunc_pair.first);
+        let _close_trunc_second: i64 = linux_close(trunc_pair.second);
+    }
+    if (trunc_first.valid == 1) { linux_shared_memory_free(&trunc_first); }
+    if (trunc_second.valid == 1) { linux_shared_memory_free(&trunc_second); }
+    if (trunc_third.valid == 1) { linux_shared_memory_free(&trunc_third); }
+
+    let datagram_pair: LinuxFdPair = receive_fd_socketpair(2);
+    failures = failures + receive_fd_expect(datagram_pair.ok == 1, "datagram truncation fixture");
+    if (datagram_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(2);
+        linux_buffer_set_byte(&outgoing, 0, 97); linux_buffer_set_byte(&outgoing, 1, 98);
+        let sent: i64 = linux_write_buffer(datagram_pair.first, &outgoing);
+        let received: LinuxReceiveFdResult = receive_fd_one_after(sent == 2,
+            datagram_pair.second, 1);
+        failures = failures + receive_fd_expect(sent == 2 && received.ok == 0
+            && received.payload_received == 1 && received.message_truncated == 1
+            && received.has_fd == 0 && linux_buffer_byte(&received.data, 0) == 97,
+            "truncated datagram payload is explicit and never reported successful");
+        linux_buffer_free(&received.data); linux_buffer_free(&outgoing);
+        let _close_datagram_first: i64 = linux_close(datagram_pair.first);
+        let _close_datagram_second: i64 = linux_close(datagram_pair.second);
+    }
+
+    let malformed_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(malformed_pair.ok == 1, "malformed-control fixture");
+    if (malformed_pair.ok == 1) {
+        let control: LinuxByteBuffer = linux_buffer_new(40);
+        linux_buffer_set_u64(&control, 0, 20);
+        linux_buffer_set_u32(&control, 8, 1); linux_buffer_set_u32(&control, 12, 1);
+        linux_buffer_set_u32(&control, 16, malformed_pair.first);
+        linux_buffer_set_u64(&control, 24, 15); // Invalid cmsghdr length after one valid owned FD.
+        control.len = 40;
+        let parsed: LinuxControlFdResult = linux_parse_scm_rights(&control, 40, 0);
+        failures = failures + receive_fd_expect(parsed.invalid == 1 && parsed.received_fd < 0
+            && parsed.fd_count == 1 && parsed.closed_fd_count == 1
+            && parsed.last_closed_fd == malformed_pair.first
+            && linux_fd_flags(malformed_pair.first) == (0 - 9),
+            "malformed trailing cmsghdr closes descriptors parsed before the fault");
+        linux_buffer_free(&control);
+        let _close_malformed_second: i64 = linux_close(malformed_pair.second);
+    }
+
+    failures = failures + receive_fd_expect(
+        linux_receive_fds_control_capacity(0) == 24
+        && linux_receive_fds_control_capacity(1) == 48
+        && linux_receive_fds_control_capacity(27) == 672
+        && linux_receive_fds_control_capacity(28) == 0,
+        "multi-FD ancillary storage is derived only from the validated small cap");
+
+    let many_invalid: LinuxReceiveFdsResult = linux_receive_buffer_fds(
+        0 - 1, linux_receive_fd_max_payload() + 1,
+        linux_receive_fds_max_count() + 1);
+    let many_invalid_error: i64 = many_invalid.error_code;
+    let many_invalid_data_capacity: i32 = many_invalid.data.capacity_bytes;
+    let many_invalid_word_capacity: i32 = many_invalid.data.words.cap;
+    let many_invalid_fds_capacity: i32 = many_invalid.fds.cap;
+    let many_invalid_first_free: i32 = linux_receive_fds_result_free(&many_invalid);
+    let many_invalid_second_free: i32 = linux_receive_fds_result_free(&many_invalid);
+    failures = failures + receive_fd_expect(many_invalid_error == (0 - 22)
+        && many_invalid_data_capacity == 0 && many_invalid_word_capacity == 0
+        && many_invalid_fds_capacity == 0
+        && many_invalid.released == 1 && many_invalid_first_free == 1
+        && many_invalid_second_free == 1,
+        "invalid multi-FD receive allocates nothing and cleanup is idempotent");
+
+    let many_data_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(many_data_pair.ok == 1,
+        "multi-FD data-only fixture resources");
+    if (many_data_pair.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 122);
+        let sent: i64 = linux_write_buffer(many_data_pair.first, &outgoing);
+        let received: LinuxReceiveFdsResult = receive_fds_after(sent == 1,
+            many_data_pair.second, 1, 0);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 1
+            && received.payload_received == 1 && received.eof == 0
+            && received.fd_count == 0 && received.retained_fd_count == 0
+            && received.accepted_fd_cap == 0
+            && len[i64](received.fds) == 0 && received.fds.cap == 0
+            && received.cloexec_applied_count == 0
+            && linux_buffer_byte(&received.data, 0) == 122,
+            "zero-cap recv returns data with an allocation-free FD sentinel");
+        let released: i32 = linux_receive_fds_result_free(&received);
+        let released_again: i32 = linux_receive_fds_result_free(&received);
+        failures = failures + receive_fd_expect(released == 1 && released_again == 1
+            && received.released == 1 && received.data.capacity_bytes == 0
+            && received.fds.cap == 0 && received.close_attempt_count == 0,
+            "data-only multi-FD result cleanup is allocation-free when repeated");
+        linux_buffer_free(&outgoing);
+        let _close_many_data_first: i64 = linux_close(many_data_pair.first);
+        let _close_many_data_second: i64 = linux_close(many_data_pair.second);
+    }
+
+    let many_one_pair: LinuxFdPair = linux_socketpair_stream();
+    let many_one_pipe: LinuxFdPair = linux_pipe_cloexec();
+    failures = failures + receive_fd_expect(many_one_pair.ok == 1
+        && many_one_pipe.ok == 1, "multi-FD one-descriptor fixture resources");
+    if (many_one_pair.ok == 1 && many_one_pipe.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 49);
+        let sent: i64 = linux_send_buffer_fd(
+            many_one_pair.first, &outgoing, many_one_pipe.first);
+        let received: LinuxReceiveFdsResult = receive_fds_after(sent == 1,
+            many_one_pair.second, 1, 3);
+        let retained: i64 = 0 - 1;
+        if (len[i64](received.fds) == 1) { retained = received.fds.data[0]; }
+        let retained_flags: i64 = linux_fd_flags(retained);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 1
+            && received.fd_count == 1 && received.retained_fd_count == 1
+            && len[i64](received.fds) == 1 && received.fds.cap == 3
+            && received.cloexec_applied_count == 1 && retained_flags >= 0
+            && (retained_flags % 2) == linux_fd_cloexec(),
+            "one ordered descriptor is retained with close-on-exec");
+        let taken: i64 = linux_receive_fds_take_at(&received, 0);
+        let repeated_take: i64 = linux_receive_fds_take_at(&received, 0);
+        let released: i32 = linux_receive_fds_result_free(&received);
+        let released_again: i32 = linux_receive_fds_result_free(&received);
+        failures = failures + receive_fd_expect(taken == retained
+            && repeated_take < 0 && received.retained_fd_count == 0
+            && released == 1 && released_again == 1
+            && received.close_attempt_count == 0 && linux_fd_flags(taken) >= 0,
+            "take_at transfers one descriptor and repeated cleanup cannot double-close it");
+        let _close_many_one_taken: i64 = linux_close(taken);
+        failures = failures + receive_fd_expect(linux_fd_flags(taken) == (0 - 9),
+            "caller closes exactly the descriptor transferred with take_at");
+        linux_buffer_free(&outgoing);
+        let _close_many_one_read: i64 = linux_close(many_one_pipe.first);
+        let _close_many_one_write: i64 = linux_close(many_one_pipe.second);
+        let _close_many_one_first: i64 = linux_close(many_one_pair.first);
+        let _close_many_one_second: i64 = linux_close(many_one_pair.second);
+    } else {
+        if (many_one_pipe.ok == 1) {
+            let _close_many_one_read: i64 = linux_close(many_one_pipe.first);
+            let _close_many_one_write: i64 = linux_close(many_one_pipe.second);
+        }
+        if (many_one_pair.ok == 1) {
+            let _close_many_one_first: i64 = linux_close(many_one_pair.first);
+            let _close_many_one_second: i64 = linux_close(many_one_pair.second);
+        }
+    }
+
+    let ordered_pair: LinuxFdPair = linux_socketpair_stream();
+    let ordered_first: LinuxFdPair = linux_pipe_cloexec();
+    let ordered_second: LinuxFdPair = linux_pipe_cloexec();
+    let ordered_third: LinuxFdPair = linux_pipe_cloexec();
+    failures = failures + receive_fd_expect(ordered_pair.ok == 1
+        && ordered_first.ok == 1 && ordered_second.ok == 1
+        && ordered_third.ok == 1, "ordered multi-FD fixture resources");
+    if (ordered_pair.ok == 1 && ordered_first.ok == 1
+        && ordered_second.ok == 1 && ordered_third.ok == 1) {
+        let first_byte: LinuxByteBuffer = linux_buffer_new(1);
+        let second_byte: LinuxByteBuffer = linux_buffer_new(1);
+        let third_byte: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&first_byte, 0, 97);
+        linux_buffer_set_byte(&second_byte, 0, 98);
+        linux_buffer_set_byte(&third_byte, 0, 99);
+        let first_written: i64 = linux_write_buffer(ordered_first.second, &first_byte);
+        let second_written: i64 = linux_write_buffer(ordered_second.second, &second_byte);
+        let third_written: i64 = linux_write_buffer(ordered_third.second, &third_byte);
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 111);
+        let fds: ArrayList[i64] = make[i64](3);
+        push[i64](&fds, ordered_first.first);
+        push[i64](&fds, ordered_second.first);
+        push[i64](&fds, ordered_third.first);
+        let sent: i64 = receive_fd_send_many(ordered_pair.first, &outgoing, &fds);
+        let received: LinuxReceiveFdsResult = receive_fds_after(sent == 1,
+            ordered_pair.second, 1, 3);
+        let fd0: i64 = 0 - 1; let fd1: i64 = 0 - 1; let fd2: i64 = 0 - 1;
+        if (len[i64](received.fds) == 3) {
+            fd0 = received.fds.data[0]; fd1 = received.fds.data[1];
+            fd2 = received.fds.data[2];
+        }
+        let got0: LinuxByteBuffer = linux_buffer_new(1);
+        let got1: LinuxByteBuffer = linux_buffer_new(1);
+        let got2: LinuxByteBuffer = linux_buffer_new(1);
+        let read0: i64 = receive_fd_read_after(received.ok == 1
+            && first_written == 1, fd0, &got0);
+        let read1: i64 = receive_fd_read_after(received.ok == 1
+            && second_written == 1, fd1, &got1);
+        let read2: i64 = receive_fd_read_after(received.ok == 1
+            && third_written == 1, fd2, &got2);
+        failures = failures + receive_fd_expect(first_written == 1
+            && second_written == 1 && third_written == 1 && sent == 1
+            && received.ok == 1 && received.fd_count == 3
+            && received.retained_fd_count == 3 && received.fds.cap == 3
+            && received.cloexec_applied_count == 3
+            && linux_fd_flags(fd0) >= 0 && linux_fd_flags(fd1) >= 0
+            && linux_fd_flags(fd2) >= 0 && read0 == 1 && read1 == 1 && read2 == 1
+            && linux_buffer_byte(&got0, 0) == 97
+            && linux_buffer_byte(&got1, 0) == 98
+            && linux_buffer_byte(&got2, 0) == 99,
+            "one recv preserves exact SCM_RIGHTS descriptor order");
+        let released: i32 = linux_receive_fds_result_free(&received);
+        let released_again: i32 = linux_receive_fds_result_free(&received);
+        failures = failures + receive_fd_expect(released == 1 && released_again == 1
+            && received.close_attempt_count == 3 && received.closed_fd_count == 3
+            && received.retained_fd_count == 0 && linux_fd_flags(fd0) == (0 - 9)
+            && linux_fd_flags(fd1) == (0 - 9) && linux_fd_flags(fd2) == (0 - 9)
+            && linux_fd_flags(ordered_first.first) >= 0
+            && linux_fd_flags(ordered_second.first) >= 0
+            && linux_fd_flags(ordered_third.first) >= 0,
+            "multi-FD cleanup closes each received duplicate once and preserves sender ownership");
+        free[i64](&fds); linux_buffer_free(&got0); linux_buffer_free(&got1);
+        linux_buffer_free(&got2); linux_buffer_free(&outgoing);
+        linux_buffer_free(&first_byte); linux_buffer_free(&second_byte);
+        linux_buffer_free(&third_byte);
+        let _close_ordered_first_read: i64 = linux_close(ordered_first.first);
+        let _close_ordered_first_write: i64 = linux_close(ordered_first.second);
+        let _close_ordered_second_read: i64 = linux_close(ordered_second.first);
+        let _close_ordered_second_write: i64 = linux_close(ordered_second.second);
+        let _close_ordered_third_read: i64 = linux_close(ordered_third.first);
+        let _close_ordered_third_write: i64 = linux_close(ordered_third.second);
+        let _close_ordered_pair_first: i64 = linux_close(ordered_pair.first);
+        let _close_ordered_pair_second: i64 = linux_close(ordered_pair.second);
+    } else {
+        if (ordered_first.ok == 1) {
+            let _close_ordered_first_read: i64 = linux_close(ordered_first.first);
+            let _close_ordered_first_write: i64 = linux_close(ordered_first.second);
+        }
+        if (ordered_second.ok == 1) {
+            let _close_ordered_second_read: i64 = linux_close(ordered_second.first);
+            let _close_ordered_second_write: i64 = linux_close(ordered_second.second);
+        }
+        if (ordered_third.ok == 1) {
+            let _close_ordered_third_read: i64 = linux_close(ordered_third.first);
+            let _close_ordered_third_write: i64 = linux_close(ordered_third.second);
+        }
+        if (ordered_pair.ok == 1) {
+            let _close_ordered_pair_first: i64 = linux_close(ordered_pair.first);
+            let _close_ordered_pair_second: i64 = linux_close(ordered_pair.second);
+        }
+    }
+
+    let fallback_pair: LinuxFdPair = linux_socketpair_stream();
+    let fallback_first: LinuxFdPair = linux_pipe_cloexec();
+    let fallback_second: LinuxFdPair = linux_pipe_cloexec();
+    failures = failures + receive_fd_expect(fallback_pair.ok == 1
+        && fallback_first.ok == 1 && fallback_second.ok == 1,
+        "multi-FD CLOEXEC fallback fixture resources");
+    if (fallback_pair.ok == 1 && fallback_first.ok == 1
+        && fallback_second.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 102);
+        let fds: ArrayList[i64] = make[i64](2);
+        push[i64](&fds, fallback_first.first);
+        push[i64](&fds, fallback_second.first);
+        let sent: i64 = receive_fd_send_many(fallback_pair.first, &outgoing, &fds);
+        let received: LinuxReceiveFdsResult = receive_fds_fallback_after(
+            sent == 1, fallback_pair.second, 1, 2);
+        let fd0: i64 = 0 - 1; let fd1: i64 = 0 - 1;
+        if (len[i64](received.fds) == 2) {
+            fd0 = received.fds.data[0]; fd1 = received.fds.data[1];
+        }
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 1
+            && received.used_cmsg_cloexec == 0 && received.fd_count == 2
+            && received.retained_fd_count == 2
+            && len[i64](received.fds) == 2 && received.fds.cap == 2
+            && received.cloexec_applied_count == 2
+            && linux_fd_flags(fd0) >= 0
+            && (linux_fd_flags(fd0) % 2) == linux_fd_cloexec()
+            && linux_fd_flags(fd1) >= 0
+            && (linux_fd_flags(fd1) % 2) == linux_fd_cloexec(),
+            "fallback recv applies close-on-exec to every retained descriptor");
+        let _fallback_released: i32 = linux_receive_fds_result_free(&received);
+        failures = failures + receive_fd_expect(linux_fd_flags(fd0) == (0 - 9)
+            && linux_fd_flags(fd1) == (0 - 9),
+            "fallback-owned descriptors close through the common cleanup path");
+        free[i64](&fds); linux_buffer_free(&outgoing);
+        let _close_fallback_first_read: i64 = linux_close(fallback_first.first);
+        let _close_fallback_first_write: i64 = linux_close(fallback_first.second);
+        let _close_fallback_second_read: i64 = linux_close(fallback_second.first);
+        let _close_fallback_second_write: i64 = linux_close(fallback_second.second);
+        let _close_fallback_pair_first: i64 = linux_close(fallback_pair.first);
+        let _close_fallback_pair_second: i64 = linux_close(fallback_pair.second);
+    } else {
+        if (fallback_first.ok == 1) {
+            let _close_fallback_first_read: i64 = linux_close(fallback_first.first);
+            let _close_fallback_first_write: i64 = linux_close(fallback_first.second);
+        }
+        if (fallback_second.ok == 1) {
+            let _close_fallback_second_read: i64 = linux_close(fallback_second.first);
+            let _close_fallback_second_write: i64 = linux_close(fallback_second.second);
+        }
+        if (fallback_pair.ok == 1) {
+            let _close_fallback_pair_first: i64 = linux_close(fallback_pair.first);
+            let _close_fallback_pair_second: i64 = linux_close(fallback_pair.second);
+        }
+    }
+
+    let overflow_pair: LinuxFdPair = linux_socketpair_stream();
+    let overflow_pipe: LinuxFdPair = linux_pipe_cloexec();
+    failures = failures + receive_fd_expect(overflow_pair.ok == 1
+        && overflow_pipe.ok == 1, "multi-FD cap-overflow fixture resources");
+    if (overflow_pair.ok == 1 && overflow_pipe.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 120);
+        let fds: ArrayList[i64] = make[i64](3);
+        push[i64](&fds, overflow_pipe.first);
+        push[i64](&fds, overflow_pipe.first);
+        push[i64](&fds, overflow_pipe.first);
+        let sent: i64 = receive_fd_send_many(overflow_pair.first, &outgoing, &fds);
+        let received: LinuxReceiveFdsResult = receive_fds_after(sent == 1,
+            overflow_pair.second, 1, 1);
+        let last_closed_flags: i64 = linux_fd_flags(received.last_closed_fd);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 0
+            && received.error_code == (0 - 75) && received.fd_overflow == 1
+            && received.control_truncated == 0 && received.fd_count == 3
+            && received.retained_fd_count == 0 && len[i64](received.fds) == 0
+            && received.fds.cap == 1 && received.close_attempt_count == 3
+            && received.closed_fd_count == 3 && received.close_error_code == 0
+            && received.last_closed_fd >= 0 && last_closed_flags == (0 - 9)
+            && linux_fd_flags(overflow_pipe.first) >= 0,
+            "crossing the accepted cap closes every received FD without growing the list");
+        let _overflow_released: i32 = linux_receive_fds_result_free(&received);
+        free[i64](&fds); linux_buffer_free(&outgoing);
+        let _close_overflow_read: i64 = linux_close(overflow_pipe.first);
+        let _close_overflow_write: i64 = linux_close(overflow_pipe.second);
+        let _close_overflow_pair_first: i64 = linux_close(overflow_pair.first);
+        let _close_overflow_pair_second: i64 = linux_close(overflow_pair.second);
+    } else {
+        if (overflow_pipe.ok == 1) {
+            let _close_overflow_read: i64 = linux_close(overflow_pipe.first);
+            let _close_overflow_write: i64 = linux_close(overflow_pipe.second);
+        }
+        if (overflow_pair.ok == 1) {
+            let _close_overflow_pair_first: i64 = linux_close(overflow_pair.first);
+            let _close_overflow_pair_second: i64 = linux_close(overflow_pair.second);
+        }
+    }
+
+    let many_trunc_pair: LinuxFdPair = linux_socketpair_stream();
+    let many_trunc_pipe: LinuxFdPair = linux_pipe_cloexec();
+    failures = failures + receive_fd_expect(many_trunc_pair.ok == 1
+        && many_trunc_pipe.ok == 1, "multi-FD truncated-control fixture resources");
+    if (many_trunc_pair.ok == 1 && many_trunc_pipe.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 116);
+        let fds: ArrayList[i64] = make[i64](16);
+        let fd_i: i32 = 0;
+        while (fd_i < 16) {
+            push[i64](&fds, many_trunc_pipe.first); fd_i = fd_i + 1;
+        }
+        let sent: i64 = receive_fd_send_many(
+            many_trunc_pair.first, &outgoing, &fds);
+        let received: LinuxReceiveFdsResult = receive_fds_after(sent == 1,
+            many_trunc_pair.second, 1, 1);
+        let last_closed_flags: i64 = linux_fd_flags(received.last_closed_fd);
+        failures = failures + receive_fd_expect(sent == 1 && received.ok == 0
+            && received.error_code == (0 - 90) && received.control_truncated == 1
+            && received.retained_fd_count == 0 && len[i64](received.fds) == 0
+            && received.fds.cap == 1 && received.fd_count >= 1
+            && received.close_attempt_count == received.fd_count
+            && received.closed_fd_count == received.fd_count
+            && received.close_error_code == 0 && received.last_closed_fd >= 0
+            && last_closed_flags == (0 - 9)
+            && linux_fd_flags(many_trunc_pipe.first) >= 0,
+            "truncated bounded control closes every descriptor installed by recvmsg");
+        let _many_trunc_released: i32 = linux_receive_fds_result_free(&received);
+        free[i64](&fds); linux_buffer_free(&outgoing);
+        let _close_many_trunc_read: i64 = linux_close(many_trunc_pipe.first);
+        let _close_many_trunc_write: i64 = linux_close(many_trunc_pipe.second);
+        let _close_many_trunc_pair_first: i64 = linux_close(many_trunc_pair.first);
+        let _close_many_trunc_pair_second: i64 = linux_close(many_trunc_pair.second);
+    } else {
+        if (many_trunc_pipe.ok == 1) {
+            let _close_many_trunc_read: i64 = linux_close(many_trunc_pipe.first);
+            let _close_many_trunc_write: i64 = linux_close(many_trunc_pipe.second);
+        }
+        if (many_trunc_pair.ok == 1) {
+            let _close_many_trunc_pair_first: i64 = linux_close(many_trunc_pair.first);
+            let _close_many_trunc_pair_second: i64 = linux_close(many_trunc_pair.second);
+        }
+    }
+
+    let many_malformed_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(many_malformed_pair.ok == 1,
+        "multi-FD malformed-control fixture resources");
+    if (many_malformed_pair.ok == 1) {
+        let control: LinuxByteBuffer = linux_buffer_new(40);
+        linux_buffer_set_u64(&control, 0, 20);
+        linux_buffer_set_u32(&control, 8, 1);
+        linux_buffer_set_u32(&control, 12, 1);
+        linux_buffer_set_u32(&control, 16, many_malformed_pair.first);
+        linux_buffer_set_u64(&control, 24, 15);
+        control.len = 40;
+        let parsed: LinuxControlFdsResult = linux_parse_scm_rights_many(
+            &control, 40, 3, 0);
+        failures = failures + receive_fd_expect(parsed.invalid == 1
+            && parsed.fd_count == 1 && parsed.retained_fd_count == 0
+            && len[i64](parsed.fds) == 0 && parsed.fds.cap == 3
+            && parsed.close_attempt_count == 1 && parsed.closed_fd_count == 1
+            && parsed.close_error_code == 0
+            && parsed.last_closed_fd == many_malformed_pair.first
+            && linux_fd_flags(many_malformed_pair.first) == (0 - 9),
+            "malformed control closes every ordered descriptor parsed before the fault");
+        free[i64](&parsed.fds); linux_buffer_free(&control);
+        let _close_many_malformed_second: i64 = linux_close(many_malformed_pair.second);
+    }
+
+    let malformed_record_pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + receive_fd_expect(malformed_record_pair.ok == 1,
+        "malformed rights-record fixture resources");
+    if (malformed_record_pair.ok == 1) {
+        let control: LinuxByteBuffer = linux_buffer_new(21);
+        linux_buffer_set_u64(&control, 0, 21);
+        linux_buffer_set_u32(&control, 8, 1);
+        linux_buffer_set_u32(&control, 12, 1);
+        linux_buffer_set_u32(&control, 16, malformed_record_pair.first);
+        linux_buffer_set_byte(&control, 20, 127);
+        control.len = 21;
+        let parsed: LinuxControlFdsResult = linux_parse_scm_rights_many(
+            &control, 21, 3, 0);
+        failures = failures + receive_fd_expect(parsed.invalid == 1
+            && parsed.fd_count == 1 && parsed.retained_fd_count == 0
+            && parsed.close_attempt_count == 1 && parsed.closed_fd_count == 1
+            && parsed.close_error_code == 0
+            && parsed.last_closed_fd == malformed_record_pair.first
+            && linux_fd_flags(malformed_record_pair.first) == (0 - 9),
+            "malformed SCM_RIGHTS data closes each complete installed FD slot");
+        free[i64](&parsed.fds); linux_buffer_free(&control);
+        let _close_malformed_record_second: i64 = linux_close(
+            malformed_record_pair.second);
+    }
+
+    // Poison the exact native size class reused by the 56-byte msghdr. Freeing
+    // replaces word zero with the allocator link but leaves msg_namelen=1 in
+    // word one; before explicit zeroing that stale ABI state made sendmsg fail
+    // and the following blocking recv hung forever.
+    let poisoned_msghdr_reuse: LinuxByteBuffer = linux_buffer_new(40);
+    linux_buffer_set_u64(&poisoned_msghdr_reuse, 0, 20);
+    linux_buffer_set_u32(&poisoned_msghdr_reuse, 8, 1);
+    linux_buffer_set_u32(&poisoned_msghdr_reuse, 12, 1);
+    linux_buffer_free(&poisoned_msghdr_reuse);
+
+    let close_error_pair: LinuxFdPair = linux_socketpair_stream();
+    let close_error_pipe: LinuxFdPair = linux_pipe_cloexec();
+    failures = failures + receive_fd_expect(close_error_pair.ok == 1
+        && close_error_pipe.ok == 1, "multi-FD close-error fixture resources");
+    if (close_error_pair.ok == 1 && close_error_pipe.ok == 1) {
+        let outgoing: LinuxByteBuffer = linux_buffer_new(1);
+        linux_buffer_set_byte(&outgoing, 0, 101);
+        let sent: i64 = linux_send_buffer_fd(
+            close_error_pair.first, &outgoing, close_error_pipe.first);
+        failures = failures + receive_fd_expect(sent == 1,
+            "zeroed syscall ABI storage survives poisoned native allocator reuse");
+        let received: LinuxReceiveFdsResult = receive_fds_after(sent == 1,
+            close_error_pair.second, 1, 1);
+        let received_fd: i64 = 0 - 1;
+        if (len[i64](received.fds) == 1) { received_fd = received.fds.data[0]; }
+        let caller_closed: i64 = linux_close(received_fd);
+        let released: i32 = linux_receive_fds_result_free(&received);
+        let released_again: i32 = linux_receive_fds_result_free(&received);
+        failures = failures + receive_fd_expect(sent == 1 && caller_closed == 0
+            && released == 0 && released_again == 0 && received.released == 1
+            && received.close_attempt_count == 1 && received.closed_fd_count == 0
+            && received.last_closed_fd == received_fd
+            && received.close_error_code == (0 - 9)
+            && linux_fd_flags(received_fd) == (0 - 9)
+            && linux_fd_flags(close_error_pipe.first) >= 0,
+            "cleanup exposes exact close failure once and remains idempotent");
+        linux_buffer_free(&outgoing);
+        let _close_error_pipe_read: i64 = linux_close(close_error_pipe.first);
+        let _close_error_pipe_write: i64 = linux_close(close_error_pipe.second);
+        let _close_error_pair_first: i64 = linux_close(close_error_pair.first);
+        let _close_error_pair_second: i64 = linux_close(close_error_pair.second);
+    } else {
+        if (close_error_pipe.ok == 1) {
+            let _close_error_pipe_read: i64 = linux_close(close_error_pipe.first);
+            let _close_error_pipe_write: i64 = linux_close(close_error_pipe.second);
+        }
+        if (close_error_pair.ok == 1) {
+            let _close_error_pair_first: i64 = linux_close(close_error_pair.first);
+            let _close_error_pair_second: i64 = linux_close(close_error_pair.second);
+        }
+    }
+
+    if (failures != 0) { return 1; }
+    _zag_println("linux_receive_fd: ok");
+    return 0;
+}

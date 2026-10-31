@@ -1,0 +1,22 @@
+// tests/syntax/scoped_block.flash — W3.2: bare { } scoped blocks.
+
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    let outer: i32 = 1;
+
+    {
+        let inner: i32 = 2;
+        outer = outer + inner;
+    }
+
+    {
+        let x: i32 = 10;
+        outer = outer + x;
+    }
+
+    if (outer != 13) { return 1; }
+
+    flash_println("scoped_block: ok");
+    return 0;
+}

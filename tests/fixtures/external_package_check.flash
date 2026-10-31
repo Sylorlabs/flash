@@ -1,0 +1,21 @@
+// Semantic-check fixture copied outside the Flash checkout by the package gate.
+enum Mode { Idle, Active }
+
+struct Counter {
+    values: ArrayList[t9],
+    mode: Mode,
+}
+
+fn bump(c: *Counter) void {
+    push[t9](&c.*.values, 1);
+    c.*.mode = Mode.Active;
+}
+
+fn main() i32 {
+    let c: Counter = Counter{ .values = make[t9](2), .mode = Mode.Idle };
+    bump(&c);
+    if (c.mode == Mode.Active && len[t9](c.values) == 1 && get[t9](c.values, 0) == 1) {
+        return 0;
+    }
+    return 1;
+}

@@ -1,0 +1,56 @@
+// examples/allocator_demo.flash — demonstrates function-pointer-based allocators.
+//
+// The Allocator struct stores function pointers for alloc/realloc/free plus
+// an opaque state pointer. Two built-in allocators are provided:
+//   - default_allocator(): wraps _zag_malloc/_zag_realloc/_zag_free
+//   - arena_allocator(s): bump pointer over a pre-allocated buffer
+
+extern fn _zag_print(s: []u8) void;
+extern fn _zag_println(s: []u8) void;
+extern fn _zag_i64_to_str(v: i64) []u8;
+
+@import("std/list.flash")
+
+fn main() i32 {
+    // --- Default allocator ---
+    let def_alloc: Allocator = default_allocator();
+    let xs: ArrayList[i32] = make_with[i32](4, &def_alloc);
+    push[i32](&xs, 10);
+    push[i32](&xs, 20);
+    push[i32](&xs, 30);
+    let n0: i32 = get[i32](xs, 0);
+    let n1: i32 = get[i32](xs, 1);
+    let n2: i32 = get[i32](xs, 2);
+    if (n0 != 10 || n1 != 20 || n2 != 30) {
+        _zag_println("allocator_demo: FAIL default");
+        return 1;
+    }
+    free[i32](&xs);
+
+    // --- Arena allocator ---
+    let arena: ArenaState = arena_new(4096);
+    let arena_alloc: Allocator = arena_allocator(&arena);
+    let ys: ArrayList[i32] = make_with[i32](4, &arena_alloc);
+    push[i32](&ys, 100);
+    push[i32](&ys, 200);
+    push[i32](&ys, 300);
+    let m0: i32 = get[i32](ys, 0);
+    let m1: i32 = get[i32](ys, 1);
+    let m2: i32 = get[i32](ys, 2);
+    if (m0 != 100 || m1 != 200 || m2 != 300) {
+        _zag_println("allocator_demo: FAIL arena");
+        return 1;
+    }
+
+    // Verify arena offset advanced (at least 32 bytes for 4 i32s + alignment)
+    if (arena.offset < 16) {
+        _zag_println("allocator_demo: FAIL arena offset");
+        return 1;
+    }
+
+    // Free the arena (collectively frees all arena allocations)
+    arena_free(&arena);
+
+    _zag_println("allocator_demo: ok");
+    return 0;
+}

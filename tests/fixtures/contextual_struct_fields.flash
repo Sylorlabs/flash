@@ -1,0 +1,21 @@
+enum ContextError { None, Invalid }
+
+struct ContextualFields {
+    bytes: []u8,
+    wide: i64,
+    error: ContextError,
+}
+
+fn contextual_fields(error: ContextError, data: *u8, count: i32) ContextualFields {
+    return ContextualFields{
+        .bytes = data[0..count],
+        .wide = 0 - 1,
+        .error = error,
+    };
+}
+
+fn main() i32 {
+    let data: *u8 = null as *u8;
+    let fields: ContextualFields = contextual_fields(ContextError.None, data, 0);
+    return fields.wide as i32 + fields.bytes.len;
+}

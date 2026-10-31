@@ -35,10 +35,10 @@ fn detect_rotation_from_markers(m: OrientationMarkers) RotationState {
     return RotationState.R0;
 }
 
-fn rotation_mismatch(m: OrientationMarkers, expected: RotationState) i32 {
+fn rotation_mismatch(m: OrientationMarkers, expected: RotationState) bool {
     let observed: RotationState = detect_rotation_from_markers(m);
-    if (observed == expected) { return 0; }
-    return 1;
+    if (observed == expected) { return false; }
+    return true;
 }
 
 // ── local voxel remapping (Z-up, clockwise XY rotation) ─────────────────────

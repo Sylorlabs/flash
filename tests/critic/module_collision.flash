@@ -1,0 +1,9 @@
+// module_collision.flash — must FAIL stage-1 --check.
+// Imports two modules that both define `shared_fn`, causing a collision.
+
+@import("../fixtures/module_collision/mod_a.flash")
+@import("../fixtures/module_collision/mod_b.flash")
+
+fn main() i32 {
+    return shared_fn();
+}

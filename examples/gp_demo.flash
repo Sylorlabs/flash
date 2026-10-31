@@ -20,7 +20,7 @@ fn count_words(s: []u8) i32 {
     let i: i32 = 0;
     while (i < s.len) {
         let c: i32 = s[i] as i32;
-        if (c == ' ') {
+        if (c == 32) {
             in_word = 0;
         } else {
             if (in_word == 0) { count = count + 1; }

@@ -1,0 +1,33 @@
+// tests/types/inference.flash — W9: type inference at call sites.
+//
+// Tests that generic calls without explicit type args work:
+//   push(&xs, 9) infers T = i32 from xs: ArrayList[i32]
+//   first_or(xs, -1) infers T = i32 from xs: ArrayList[i32]
+
+@import("std/flash_std.flash")
+
+fn first_or[T](l: ArrayList[T], fallback: T) T {
+    if (len[T](l) < 1) { return fallback; }
+    return get[T](l, 0);
+}
+
+fn main() i32 {
+    let xs: ArrayList[i32] = make[i32](4);
+
+    // Type inference: push(&xs, 9) should infer T = i32
+    push(&xs, 9);
+    push(&xs, 17);
+    push(&xs, 42);
+
+    // Type inference: first_or(xs, -1) should infer T = i32
+    let v: i32 = first_or(xs, -1);
+    if (v != 9) { return 1; }
+
+    // Explicit type args still work
+    let v2: i32 = first_or[i32](xs, -1);
+    if (v2 != 9) { return 2; }
+
+    flash_println_str_int("first=", v as i64);
+    flash_println("inference: ok");
+    return 0;
+}

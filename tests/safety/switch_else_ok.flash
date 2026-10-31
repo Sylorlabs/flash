@@ -1,0 +1,10 @@
+enum Color { Red, Green, Blue }
+
+fn name(c: Color) []u8 {
+    switch (c) {
+        Red => "red",
+        else => "other",
+    }
+}
+
+fn main() i32 { return 0; }

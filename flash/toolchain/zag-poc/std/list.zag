@@ -12,18 +12,133 @@
 
 @import("rt.zag")
 
+// Allocator abstraction: stores function pointers for alloc/realloc/free,
+// plus an opaque state pointer. The default allocator uses _zag_malloc etc.
+// The arena allocator uses a bump pointer over a pre-allocated buffer.
+struct Allocator {
+    alloc_fn:   fn(*u8, i32) *i8,
+    realloc_fn: fn(*u8, *i8, i32) *i8,
+    free_fn:    fn(*u8, *i8) void,
+    state:      *u8,
+}
+
+// ── Default allocator (wraps _zag_malloc/_zag_realloc/_zag_free) ─────────────
+
+fn default_alloc_fn(state: *u8, n: i32) *i8 { return _zag_malloc(n); }
+fn default_realloc_fn(state: *u8, p: *i8, n: i32) *i8 { return _zag_realloc(p, n); }
+fn default_free_fn(state: *u8, p: *i8) void { _zag_free(p); }
+
+fn default_allocator() Allocator {
+    return Allocator{
+        .alloc_fn = default_alloc_fn,
+        .realloc_fn = default_realloc_fn,
+        .free_fn = default_free_fn,
+        .state = null as *u8,
+    };
+}
+
+// ── Arena allocator (bump pointer over pre-allocated buffer) ────────────────
+
+struct ArenaState {
+    buf:    *i8,
+    cap:    i32,
+    offset: i32,
+}
+
+fn arena_new(cap: i32) ArenaState {
+    let c: i32 = cap;
+    if (c < 1) { c = 1; }
+    let buf: *i8 = _zag_malloc(c);
+    if (buf == null as *i8) { flash_list_panic("panic: arena_new alloc failed"); }
+    return ArenaState{ .buf = buf, .cap = c, .offset = 0 };
+}
+
+fn arena_free(s: *ArenaState) void {
+    _zag_free(s.*.buf);
+    s.*.buf = null as *i8;
+    s.*.cap = 0;
+    s.*.offset = 0;
+}
+
+fn arena_bump(s: *ArenaState, n: i32) *i8 {
+    let aligned: i32 = (n + 7) & -8;
+    if (s.*.offset + aligned > s.*.cap) {
+        return _zag_malloc(n);
+    }
+    let ptr: *i8 = s.*.buf + s.*.offset;
+    s.*.offset = s.*.offset + aligned;
+    return ptr;
+}
+
+fn arena_alloc_fn(state: *u8, n: i32) *i8 {
+    let s: *ArenaState = state as *ArenaState;
+    return arena_bump(s, n);
+}
+
+fn arena_realloc_fn(state: *u8, p: *i8, n: i32) *i8 {
+    return _zag_realloc(p, n);
+}
+
+fn arena_free_fn(state: *u8, p: *i8) void {
+    // No-op: arena allocations are freed collectively via arena_free.
+    return;
+}
+
+fn arena_allocator(s: *ArenaState) Allocator {
+    return Allocator{
+        .alloc_fn = arena_alloc_fn,
+        .realloc_fn = arena_realloc_fn,
+        .free_fn = arena_free_fn,
+        .state = s as *u8,
+    };
+}
+
+// ── Dispatch: call through the function pointers ────────────────────────────
+
+fn allocator_alloc(a: *Allocator, n: i32) *i8 {
+    return a.*.alloc_fn(a.*.state, n);
+}
+
+fn allocator_realloc(a: *Allocator, p: *i8, n: i32) *i8 {
+    return a.*.realloc_fn(a.*.state, p, n);
+}
+
+fn allocator_free(a: *Allocator, p: *i8) void {
+    a.*.free_fn(a.*.state, p);
+}
+
 struct ArrayList[T] {
-    data: *T,
-    len:  i32,
-    cap:  i32,
+    data:  *T,
+    len:   i32,
+    cap:   i32,
+    alloc: *Allocator,
 }
 
 // Create a list with room for `cap` elements (cap >= 1 recommended).
+// Uses the default global allocator (_zag_malloc).
 fn make[T](cap: i32) ArrayList[T] {
     let c: i32 = cap;
     if (c < 1) { c = 1; }
-    let raw: *i8 = _zag_malloc(c * @sizeOf[T]());
-    return ArrayList[T]{ .data = raw as *T, .len = 0, .cap = c };
+    let sz: i32 = @sizeOf[T]();
+    if (c > 0 && sz > 0 && c > 2147483647 / sz) {
+        flash_list_panic("panic: ArrayList make overflow");
+    }
+    let raw: *i8 = _zag_malloc(c * sz);
+    if (raw == null as *i8) { flash_list_panic("panic: ArrayList make alloc failed"); }
+    return ArrayList[T]{ .data = raw as *T, .len = 0, .cap = c, .alloc = null as *Allocator };
+}
+
+// Create a list with a custom allocator.
+fn make_with[T](cap: i32, a: *Allocator) ArrayList[T] {
+    let c: i32 = cap;
+    if (c < 1) { c = 1; }
+    let sz: i32 = @sizeOf[T]();
+    if (c > 0 && sz > 0 && c > 2147483647 / sz) {
+        flash_list_panic("panic: ArrayList make_with overflow");
+    }
+    let raw: *i8 = allocator_alloc(a, c * sz);
+    if (raw == null as *i8) { flash_list_panic("panic: ArrayList make_with alloc failed"); }
+    return ArrayList[T]{ .data = raw as *T, .len = 0, .cap = c, .alloc = a };
 }
 
 // Append a value, doubling capacity when full.
@@ -31,29 +146,66 @@ fn push[T](xs: *ArrayList[T], val: T) void {
     if (xs.*.len >= xs.*.cap) {
         let nc: i32 = xs.*.cap * 2;
         if (nc < 4) { nc = 4; }
-        xs.*.data = _zag_realloc(xs.*.data as *i8, nc * @sizeOf[T]()) as *T;
+        let sz: i32 = @sizeOf[T]();
+        if (nc > 0 && sz > 0 && nc > 2147483647 / sz) {
+            flash_list_panic("panic: ArrayList push overflow");
+        }
+        if (xs.*.alloc != null as *Allocator) {
+            if (xs.*.data == null as *T || xs.*.cap < 1) {
+                xs.*.data = allocator_alloc(xs.*.alloc, nc * sz) as *T;
+            } else {
+                xs.*.data = allocator_realloc(xs.*.alloc, xs.*.data as *i8, nc * sz) as *T;
+            }
+        } else {
+            if (xs.*.data == null as *T || xs.*.cap < 1) {
+                xs.*.data = _zag_malloc(nc * sz) as *T;
+            } else {
+                xs.*.data = _zag_realloc(xs.*.data as *i8, nc * sz) as *T;
+            }
+        }
+        if (xs.*.data == null as *T) { flash_list_panic("panic: ArrayList push alloc failed"); }
         xs.*.cap = nc;
     }
     xs.*.data[xs.*.len] = val;
     xs.*.len = xs.*.len + 1;
 }
 
-// Element at index (no bounds check — caller ensures i < len).
+// Element at index. Bounds-checked: panics on i < 0 or i >= len.
 fn get[T](xs: ArrayList[T], i: i32) T {
+    if (i < 0 || i >= xs.len) {
+        let diag: []u8 = _zag_str_concat(_zag_str_concat(
+            _zag_str_concat("panic: ArrayList get OOB i=", _zag_i64_to_str(i as i64)),
+            " len="), _zag_i64_to_str(xs.len as i64));
+        flash_list_panic(diag);
+    }
     return xs.data[i];
 }
 
-// Overwrite element at index.
+// Overwrite element at index. Bounds-checked: panics on i < 0 or i >= len.
 fn set[T](xs: *ArrayList[T], i: i32, val: T) void {
+    if (i < 0 || i >= xs.*.len) {
+        let diag: []u8 = _zag_str_concat(_zag_str_concat(
+            _zag_str_concat("panic: ArrayList set OOB i=", _zag_i64_to_str(i as i64)),
+            " len="), _zag_i64_to_str(xs.*.len as i64));
+        flash_list_panic(diag);
+    }
     xs.*.data[i] = val;
 }
 
-// Remove and return the last element.
+// Remove and return the last element. Panics on empty list.
 fn pop[T](xs: *ArrayList[T]) T {
+    if (xs.*.len < 1) {
+        flash_list_panic("panic: ArrayList pop from empty list");
+    }
     let last: i32 = xs.*.len - 1;
     let v: T = xs.*.data[last];
     xs.*.len = last;
     return v;
+}
+
+fn flash_list_panic(msg: []u8) void {
+    _zag_eprintln(msg);
+    _zag_exit(1);
 }
 
 fn len[T](xs: ArrayList[T]) i32 {
@@ -70,8 +222,13 @@ fn is_empty[T](xs: ArrayList[T]) bool {
 
 // Release the backing buffer; the list must not be used afterwards.
 fn free[T](xs: *ArrayList[T]) void {
-    _zag_free(xs.*.data as *i8);
+    if (xs.*.alloc != null as *Allocator) {
+        allocator_free(xs.*.alloc, xs.*.data as *i8);
+    } else {
+        _zag_free(xs.*.data as *i8);
+    }
     xs.*.data = null as *T;
     xs.*.len = 0;
     xs.*.cap = 0;
+    xs.*.alloc = null as *Allocator;
 }

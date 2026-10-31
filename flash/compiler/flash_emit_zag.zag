@@ -59,7 +59,7 @@ fn fez_t_width(ty: []u8) i32 {
     return w;
 }
 
-fn fez_type(ty: []u8) []u8 {
+fn fez_type_atom(ty: []u8) []u8 {
     if (@strEq(ty, "trit"))  { return "Trit"; }
     if (@strEq(ty, "wave"))  { return "Wave"; }
     if (@strEq(ty, "beam"))  { return "Beam"; }
@@ -70,6 +70,31 @@ fn fez_type(ty: []u8) []u8 {
     let tw: i32 = fez_t_width(ty);
     if (tw >= 1 && tw <= 40) { return "i64"; }
     return ty;
+}
+
+fn fez_type_word_char(c: i32) bool {
+    if (c >= 48 && c <= 57) { return true; }
+    if (c >= 65 && c <= 90) { return true; }
+    if (c >= 97 && c <= 122) { return true; }
+    if (c == 95) { return true; }
+    return false;
+}
+
+fn fez_type(ty: []u8) []u8 {
+    let out: []u8 = "";
+    let i: i32 = 0;
+    while (i < ty.len) {
+        let c: i32 = ty[i] as i32;
+        if (fez_type_word_char(c)) {
+            let start: i32 = i;
+            while (i < ty.len && fez_type_word_char(ty[i] as i32)) { i = i + 1; }
+            out = _zag_str_concat(out, fez_type_atom(ty[start..i]));
+        } else {
+            out = _zag_str_concat(out, ty[i..i + 1]);
+            i = i + 1;
+        }
+    }
+    return out;
 }
 
 fn fez_trit_lit(text: []u8) []u8 {
@@ -233,6 +258,15 @@ fn fez_expr(n: *FlashNode) []u8 {
     if (code == 15) { return fez_node_text(n); }
     if (code == 16) {
         let b: Bin = fez_node_as_bin(n);
+        if (@strEq(b.op, "<<") || @strEq(b.op, ">>")) {
+            let helper: []u8 = "flash_shl_i64";
+            if (@strEq(b.op, ">>")) { helper = "flash_shr_i64"; }
+            let shifted: []u8 = _zag_str_concat(helper, "(");
+            shifted = _zag_str_concat(shifted, fez_expr(b.l));
+            shifted = _zag_str_concat(shifted, ", ");
+            shifted = _zag_str_concat(shifted, fez_expr(b.r));
+            return _zag_str_concat(shifted, ")");
+        }
         let s: []u8 = _zag_str_concat("(", fez_expr(b.l));
         s = _zag_str_concat(s, " ");
         s = _zag_str_concat(s, b.op);
@@ -320,6 +354,15 @@ fn fez_expr(n: *FlashNode) []u8 {
             s = _zag_str_concat(s, " = ");
             s = _zag_str_concat(s, fez_expr(fi.val));
             i = i + 1;
+        }
+        if (@strEq(sl.sname, "ArrayList")) {
+            let has_alloc: bool = false;
+            let fi_i: i32 = 0;
+            while (fi_i < len[FieldInit](sl.fields)) {
+                if (@strEq(get[FieldInit](sl.fields, fi_i).name, "alloc")) { has_alloc = true; }
+                fi_i = fi_i + 1;
+            }
+            if (!has_alloc) { s = _zag_str_concat(s, ", .alloc = null as *Allocator"); }
         }
         return _zag_str_concat(s, " }");
     }

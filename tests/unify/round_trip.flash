@@ -1,0 +1,42 @@
+// tests/unify/round_trip.flash — W1: unified grammar round-trip test.
+//
+// This file uses `program`, `fn`, `@import`, tritvec literals, and the
+// interference operator @ in the same compilation. It must compile and run.
+
+program round_trip
+
+@import("std/flash_std.flash")
+
+fn trit_sum(a: t9, b: t9) t9 {
+    return a + b;
+}
+
+fn main() i32 {
+    // Tritvec literals (W4)
+    let a: t9 = 0t+;       // +1
+    let b: t9 = 0t-;       // -1
+    let c: t9 = 0t++;      // +4
+
+    // Interference operator (W5)
+    let d: t9 = a @ b;     // + @ - = 0
+    if (d != 0) { return 1; }
+
+    // Function call
+    let s: t9 = trit_sum(a, c);  // 1 + 4 = 5
+    if (s != 5) { return 2; }
+
+    // Bare scoped block (W3)
+    {
+        let inner: t9 = 0t+0;  // 3
+        s = trit_sum(s, inner);  // 5 + 3 = 8
+    }
+    if (s != 8) { return 3; }
+
+    // Unary minus (W3)
+    let neg: t9 = -5;
+    if (neg != -5) { return 4; }
+
+    flash_println_str_int("round_trip: s=", s as i64);
+    flash_println("round_trip: ok");
+    return 0;
+}

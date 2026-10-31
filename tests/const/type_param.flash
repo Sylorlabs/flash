@@ -1,0 +1,40 @@
+// tests/const/type_param.flash — W11: const used as array size / type param.
+//
+// Tests that const values can be used as type parameters (e.g., array sizes).
+
+@import("std/flash_std.flash")
+
+const SIZE: i32 = 4;
+const MAX_VAL: i32 = 100;
+
+fn main() i32 {
+    // Use const as array size
+    let arr: ArrayList[i32] = make[i32](SIZE);
+    push[i32](&arr, 10);
+    push[i32](&arr, 20);
+    push[i32](&arr, 30);
+    push[i32](&arr, 40);
+
+    if (len[i32](arr) != SIZE) { return 1; }
+
+    // Use const in expression
+    let total: i32 = 0;
+    let i: i32 = 0;
+    while (i < len[i32](arr)) {
+        total = total + get[i32](arr, i);
+        i = i + 1;
+    }
+
+    if (total != 100) { return 2; }
+    if (total != MAX_VAL) { return 3; }
+
+    // Const arithmetic
+    let doubled: i32 = SIZE * 2;
+    if (doubled != 8) { return 4; }
+
+    flash_println_str_int("SIZE=", SIZE as i64);
+    flash_println_str_int("MAX_VAL=", MAX_VAL as i64);
+    flash_println_str_int("total=", total as i64);
+    flash_println("const_type_param: ok");
+    return 0;
+}

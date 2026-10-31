@@ -1,0 +1,17 @@
+// examples/bounds_oob_negative.flash — must panic at runtime (negative index get).
+
+extern fn _zag_println(s: []u8) void;
+extern fn _zag_i64_to_str(v: i64) []u8;
+
+@import("std/list.flash")
+
+fn main() i32 {
+    let xs: ArrayList[i32] = make[i32](4);
+    push[i32](&xs, 1);
+    push[i32](&xs, 2);
+    // Deliberate OOB: negative index.
+    let bad: i32 = get[i32](xs, 0 - 1);
+    _zag_println(_zag_i64_to_str(bad as i64));
+    free[i32](&xs);
+    return 0;
+}

@@ -1,0 +1,10 @@
+// type_collision.flash — must FAIL stage-1 --check.
+// Imports two modules that both define `SharedType`, causing a type collision.
+
+@import("../fixtures/type_collision/mod_a.flash")
+@import("../fixtures/type_collision/mod_b.flash")
+
+fn main() i32 {
+    let v: SharedType = SharedType{ .x = 1 };
+    return v.x;
+}

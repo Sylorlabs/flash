@@ -1,0 +1,4 @@
+// mod_b.flash — also defines a function named `shared_fn` (collision!)
+fn shared_fn() i32 {
+    return 2;
+}

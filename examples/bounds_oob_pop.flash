@@ -1,0 +1,15 @@
+// examples/bounds_oob_pop.flash — must panic at runtime (pop empty list).
+
+extern fn _zag_println(s: []u8) void;
+extern fn _zag_i64_to_str(v: i64) []u8;
+
+@import("std/list.flash")
+
+fn main() i32 {
+    let xs: ArrayList[i32] = make[i32](4);
+    // Deliberate OOB: pop from empty list.
+    let bad: i32 = pop[i32](&xs);
+    _zag_println(_zag_i64_to_str(bad as i64));
+    free[i32](&xs);
+    return 0;
+}

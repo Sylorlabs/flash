@@ -5,19 +5,19 @@
 // Zag std layer shrinks. No imports: the shim runtime provides []u8 slices,
 // ArrayList, and _zag_* builtins.
 
-fn flash_str_ends_with(s: []u8, suf: []u8) i32 {
-    if (s.len < suf.len) { return 0; }
+fn flash_str_ends_with(s: []u8, suf: []u8) bool {
+    if (s.len < suf.len) { return false; }
     let off: i32 = s.len - suf.len;
     let i: i32 = 0;
     while (i < suf.len) {
-        if (s[off + i] != suf[i]) { return 0; }
+        if (s[off + i] != suf[i]) { return false; }
         i = i + 1;
     }
-    return 1;
+    return true;
 }
 
-fn flash_str_index_of(hay: []u8, needle: []u8) i32 {
-    if (needle.len < 1 || hay.len < needle.len) { return -1; }
+fn flash_str_index_of(hay: []u8, needle: []u8) ?i32 {
+    if (needle.len < 1 || hay.len < needle.len) { return null; }
     let i: i32 = 0;
     while (i <= hay.len - needle.len) {
         let j: i32 = 0;
@@ -29,14 +29,14 @@ fn flash_str_index_of(hay: []u8, needle: []u8) i32 {
         if (ok == 1) { return i; }
         i = i + 1;
     }
-    return -1;
+    return null;
 }
 
 fn flash_path_dir(path: []u8) []u8 {
     let slash: i32 = -1;
     let i: i32 = 0;
     while (i < path.len) {
-        if (path[i] == '/') { slash = i; }
+        if (path[i] == 47) { slash = i; }
         i = i + 1;
     }
     if (slash < 0) { return "."; }
@@ -44,7 +44,7 @@ fn flash_path_dir(path: []u8) []u8 {
 }
 
 fn flash_path_join(dir: []u8, rel: []u8) []u8 {
-    if (rel.len > 0 && rel[0] == '/') { return rel; }
+    if (rel.len > 0 && rel[0] == 47) { return rel; }
     if (@strEq(dir, ".") == 1) { return rel; }
     return _zag_str_concat(_zag_str_concat(dir, "/"), rel);
 }
@@ -64,7 +64,7 @@ fn flash_path_canonical(path: []u8) []u8 {
     let start: i32 = 0;
     let i: i32 = 0;
     while (i <= path.len) {
-        if (i == path.len || path[i] == '/') {
+        if (i == path.len || path[i] == 47) {
             if (i > start) {
                 flash_path_push_component(&stk, path[start..i]);
             }
@@ -76,7 +76,7 @@ fn flash_path_canonical(path: []u8) []u8 {
     let j: i32 = 0;
     let n: i32 = len[[]u8](stk);
     while (j < n) {
-        if (j > 0) { push[u8](&out, '/'); }
+        if (j > 0) { push[u8](&out, 47); }
         let part: []u8 = get[[]u8](stk, j);
         let k: i32 = 0;
         while (k < part.len) { push[u8](&out, part[k]); k = k + 1; }
@@ -91,32 +91,73 @@ fn flash_path_stem(path: []u8) []u8 {
     let slash: i32 = -1;
     let i: i32 = 0;
     while (i < path.len) {
-        if (path[i] == '/') { slash = i; }
+        if (path[i] == 47) { slash = i; }
         i = i + 1;
     }
     let base: []u8 = path;
     if (slash >= 0) { base = path[slash + 1..]; }
-    if (flash_str_ends_with(base, ".flash.zag") == 1) {
+    if (base.len >= 10 && flash_str_ends_with(base, ".flash.zag")) {
         return base[0..base.len - 10];
     }
-    if (flash_str_ends_with(base, ".flash") == 1) {
+    if (base.len >= 6 && flash_str_ends_with(base, ".flash")) {
         return base[0..base.len - 6];
     }
     let dot: i32 = -1;
     let j: i32 = 0;
     while (j < base.len) {
-        if (base[j] == '.') { dot = j; }
+        if (base[j] == 46) { dot = j; }
         j = j + 1;
     }
     if (dot > 0) { return base[0..dot]; }
     return base;
 }
 
-fn flash_list_has(list: *ArrayList[[]u8], s: []u8) i32 {
+fn flash_list_has(list: *ArrayList[[]u8], s: []u8) bool {
     let i: i32 = 0;
     while (i < len[[]u8](list.*)) {
-        if (@strEq(get[[]u8](list.*, i), s) == 1) { return 1; }
+        if (@strEq(get[[]u8](list.*, i), s) == 1) { return true; }
         i = i + 1;
     }
-    return 0;
+    return false;
+}
+
+// ── s3: ownership-aware string builder (S9) ──────────────────────────────────
+// s3 provides a leak-free way to build strings from multiple concatenations.
+// Instead of nesting _zag_str_concat (which leaks intermediates), use s3:
+//   let b: S3 = s3_new();
+//   s3_append(&b, "hello ");
+//   s3_append(&b, "world");
+//   let result: []u8 = s3_finish(b);  // transfers ownership
+//   // ... use result ...
+//   _zag_str_free(result);             // free when done
+
+struct S3 {
+    parts: ArrayList[[]u8],
+}
+
+fn s3_new() S3 {
+    return S3{ .parts = make[[]u8](8) };
+}
+
+fn s3_append(s: *S3, str: []u8) void {
+    push[[]u8](&s.*.parts, str);
+}
+
+fn s3_finish(s: *S3) []u8 {
+    if (len[[]u8](s.*.parts) == 0) { return ""; }
+    let out: []u8 = get[[]u8](s.*.parts, 0);
+    let i: i32 = 1;
+    while (i < len[[]u8](s.*.parts)) {
+        let next: []u8 = _zag_str_concat(out, get[[]u8](s.*.parts, i));
+        if (i > 1) { _zag_free(out as *i8); }
+        out = next;
+        i = i + 1;
+    }
+    return out;
+}
+
+fn s3_free(s: *S3) void {
+    // s3_finish transfers ownership of the final string to the caller.
+    // s3_free is a no-op if s3_finish was already called.
+    // If s3_finish was NOT called, the parts array itself is stack-allocated.
 }

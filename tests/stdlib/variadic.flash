@@ -1,0 +1,48 @@
+// tests/stdlib/variadic.flash — W10: variadic println overloads and PrintBuf.
+//
+// Tests the extended print overloads and the PrintBuf builder pattern
+// that provide variadic-like printing without `...` syntax.
+
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    // 0 args (just newline)
+    flash_newline();
+
+    // 1 arg (string)
+    flash_println("one");
+
+    // 2 args (string + int)
+    flash_println_str_int("answer=", 42 as i64);
+
+    // 2 args (string + string)
+    flash_println_2ss("hello, ", "world");
+
+    // 3 args (string + int + string)
+    flash_println_3sis("x=", 10 as i64, " done");
+
+    // 3 args (string + string + int)
+    flash_println_3ssi("val: ", "n=", 99 as i64);
+
+    // 4 args (string + int + string + int)
+    flash_println_4sisi("a=", 1 as i64, " b=", 2 as i64);
+
+    // 4 args (string + int + int + string)
+    flash_println_4siis("sum: ", 3 as i64, 4 as i64, " = 7");
+
+    // 5 args (string + int + string + int + string)
+    flash_println_5sisiv("x=", 5 as i64, " y=", 10 as i64, " ok");
+
+    // PrintBuf builder pattern (arbitrary arg count)
+    let pb: PrintBuf = pb_new();
+    pb_str(&pb, "builder: ");
+    pb_int(&pb, 1 as i64);
+    pb_str(&pb, " + ");
+    pb_int(&pb, 2 as i64);
+    pb_str(&pb, " = ");
+    pb_int(&pb, 3 as i64);
+    pb_println(pb);
+
+    flash_println("variadic: ok");
+    return 0;
+}

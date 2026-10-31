@@ -1,0 +1,5 @@
+fn main() i32 {
+    let status: i32 = _zag_exec_cmd("true");
+    if (status != 0) { return 1; }
+    _zag_println("process_exec: ok"); return 0;
+}

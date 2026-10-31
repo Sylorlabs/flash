@@ -1,0 +1,11 @@
+@import("spark") as sp
+
+fn main() i32 {
+    // Package-looking text in strings and comments must remain byte-exact:
+    // sp.spark_new is documentation here, not a qualified expression.
+    let package_text: []u8 = "sp.spark_new";
+    let item: sp.Spark = sp.spark_new(9);
+    if (item.value != 9 || @strEq(package_text, "sp.spark_new") == 0) { return 1; }
+    _zag_println("named_package_consumer: ok");
+    return 0;
+}

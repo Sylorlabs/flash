@@ -1,0 +1,9 @@
+fn main() i32 {
+    let rendered: []u8 = _zag_i64_to_str(27);
+    if (@strEq(rendered, "27") == 0) {
+        _zag_str_free(rendered);
+        return 1;
+    }
+    _zag_str_free(rendered);
+    return 0;
+}

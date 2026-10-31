@@ -85,7 +85,7 @@ fn probe_rotation() void {
         pp_s(" det=");
         pp_i(rotation_to_deg(detect_rotation_from_markers(m)));
         pp_s(" mm=");
-        pp_i(rotation_mismatch(m, RotationState.R90));
+        pp_i(rotation_mismatch(m, RotationState.R90) as i32);
         pp_nl();
         s = s + 1;
     }
@@ -151,7 +151,11 @@ fn probe_manager() void {
             pp_s(" rot=");
             pp_i(rotation_to_deg(a.rot));
             pp_s(" back=");
-            pp_i(physical_to_logical(m.stripe_pool, a));
+            if (physical_to_logical(m.stripe_pool, a)) |logical| {
+                pp_i(logical);
+            } else {
+                pp_s("none");
+            }
         } else {
             pp_s(" none");
         }

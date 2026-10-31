@@ -1,0 +1,4 @@
+// mod_ok_b.flash — defines `fn ok_fn_b` (no collision)
+fn ok_fn_b() i32 {
+    return 20;
+}

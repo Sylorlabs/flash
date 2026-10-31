@@ -25,7 +25,7 @@ fn fimg_wrap_manifest(manifest_text: []u8, target: []u8, name: []u8) []u8 {
     fimg_app(&out, "format = \"fimg-v1\"\n");
     fimg_app(&out, "[manifest]\n");
     fimg_app(&out, manifest_text);
-    if (manifest_text.len > 0 && manifest_text[manifest_text.len - 1] != '\n') {
+    if (manifest_text.len > 0 && manifest_text[manifest_text.len - 1] != 10) {
         fimg_app(&out, "\n");
     }
     fimg_app(&out, "[extern]\n");

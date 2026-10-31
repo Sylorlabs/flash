@@ -1,0 +1,7 @@
+pub struct Spark {
+    value: t27,
+}
+
+pub fn spark_new(value: t27) Spark {
+    return Spark{ .value = value };
+}

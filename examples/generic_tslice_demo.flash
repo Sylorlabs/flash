@@ -1,0 +1,28 @@
+// Regression: native t-units must lower recursively through containers,
+// pointers, and slices on the binary emulation target.
+
+@import("std/flash_std.flash")
+
+fn sum_native(values: *ArrayList[t9]) t27 {
+    let total: t27 = 0;
+    let i: i32 = 0;
+    while (i < len[t9](values.*)) {
+        total = total + get[t9](values.*, i) as t27;
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() i32 {
+    let values: ArrayList[t9] = make[t9](3);
+    push[t9](&values, 9841);
+    push[t9](&values, -9841);
+    push[t9](&values, 1);
+    let first: t9 = values.data[0];
+    if (first != 9841) { return 1; }
+    let result: t27 = sum_native(&values);
+    if (result != 1) { return 1; }
+    free[t9](&values);
+    flash_println("generic_tslice_demo: ok");
+    return 0;
+}

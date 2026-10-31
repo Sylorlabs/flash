@@ -1,0 +1,1179 @@
+format=zag-semantic-manifest-v1
+advisory=true
+executable_authority=false
+complete=true
+detail_level=full
+module=harsh_ternary.zag
+profile=strict
+source=927628370,143750655,4211
+public=216613626,131542391,0
+effects=216613626,131542391,0
+layouts=216613626,131542391,0
+graph=878572994,604884627,25191
+graph_complete=1
+decl_fn=_zag_malloc	602239870,679158606,173	line=16	effect=3
+fact_fn=_zag_malloc	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_realloc	434696450,638818083,204	line=17	effect=3
+fact_fn=_zag_realloc	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_free	255116002,482010143,162	line=18	effect=1
+fact_fn=_zag_free	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_memcpy	808819735,117690231,220	line=19	effect=0
+fact_fn=_zag_memcpy	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_memcmp	767740451,363745733,215	line=20	effect=0
+fact_fn=_zag_memcmp	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strlen	460684129,915341804,156	line=23	effect=0
+fact_fn=_zag_strlen	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strcmp	694989196,564761593,187	line=24	effect=0
+fact_fn=_zag_strcmp	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strcmp_ord	965745539,79877324,191	line=25	effect=0
+fact_fn=_zag_strcmp_ord	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strdup	399685385,325081363,165	line=26	effect=1
+fact_fn=_zag_strdup	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_concat	54518050,147982360,200	line=27	effect=1
+fact_fn=_zag_str_concat	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_index_of_byte	450277703,616871466,197	line=28	effect=0
+fact_fn=_zag_str_index_of_byte	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_i64_to_str	774889173,762720612,168	line=29	effect=1
+fact_fn=_zag_i64_to_str	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_u64_to_str	459904823,800247324,168	line=30	effect=1
+fact_fn=_zag_u64_to_str	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_to_i64	604981581,785716214,160	line=31	effect=0
+fact_fn=_zag_str_to_i64	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_print	410386809,842218209,161	line=34	effect=4
+fact_fn=_zag_print	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_println	953727822,993815596,163	line=35	effect=4
+fact_fn=_zag_println	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_eprintln	783295709,969170529,164	line=36	effect=4
+fact_fn=_zag_eprintln	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_flush	217076049,844902298,132	line=37	effect=4
+fact_fn=_zag_flush	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_read_file	341286734,397383280,178	line=41	effect=5
+fact_fn=_zag_read_file	effect_free=0	leaf=1	constant_return=0	alloc=1	io=1
+decl_fn=_zag_write_file	479036127,452317086,205	line=42	effect=4
+fact_fn=_zag_write_file	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_write_exec	732880525,912565347,205	line=44	effect=4
+fact_fn=_zag_write_exec	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_file_exists	738793763,819522761,169	line=45	effect=4
+fact_fn=_zag_file_exists	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_exec_cmd	602643484,16573448,165	line=48	effect=4
+fact_fn=_zag_exec_cmd	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_exec_capture	542443913,342308047,180	line=49	effect=5
+fact_fn=_zag_exec_capture	effect_free=0	leaf=1	constant_return=0	alloc=1	io=1
+decl_fn=_zag_exit	405275641,368471588,162	line=52	effect=4
+fact_fn=_zag_exit	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_argc	998942557,695012765,130	line=55	effect=4
+fact_fn=_zag_argc	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_arg	882280767,899487250,160	line=56	effect=4
+fact_fn=_zag_arg	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_getenv	977116258,601522591,165	line=57	effect=4
+fact_fn=_zag_getenv	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_slice_ptr	445180039,853621880,159	line=59	effect=0
+fact_fn=_zag_slice_ptr	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_read_fd	969270656,322067489,224	line=60	effect=4
+fact_fn=_zag_read_fd	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_clock_monotonic_ms	592918630,470527004,144	line=61	effect=4
+fact_fn=_zag_clock_monotonic_ms	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_raw_syscall	693351262,901525871,353	line=62	effect=4
+fact_fn=_zag_raw_syscall	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=tm__i8_to_index	942545666,63699086,690	line=16	effect=0
+fact_fn=tm__i8_to_index	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__i8_to_index	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	if.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	if.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__i8_to_index	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__balance_sum	24726428,3453448,1960	line=24	effect=0
+fact_fn=tm__balance_sum	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__balance_sum	let.result	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__balance_sum	result	i8	basis=explicit
+expr_fact=tm__balance_sum	let.carry	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__balance_sum	carry	i8	basis=explicit
+expr_fact=tm__balance_sum	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.target	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.operand.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.operand.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.target	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	if.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	if.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.target	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.operand.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.operand.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.target	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.target	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.target	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__balance_sum	return	type=tm__TritAddResult	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__add	646317579,504654066,769	line=40	effect=0
+fact_fn=tm__add	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=tm__add	tm__balance_sum
+expr_fact=tm__add	let.raw	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	let.raw.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	let.raw.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	let.raw.left.left.operand	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	let.raw.left.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	let.raw.left.right.operand	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	let.raw.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	let.raw.right.operand	type=i8	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__add	raw	i32	basis=explicit
+expr_fact=tm__add	return	type=tm__TritAddResult	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__add	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__add	return.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__mul	905029351,701335636,572	line=45	effect=0
+fact_fn=tm__mul	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__mul	let.product	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__mul	let.product.operand	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__mul	let.product.operand.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__mul	let.product.operand.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__mul	product	i8	basis=explicit
+expr_fact=tm__mul	return	type=tm__TritMulResult	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__table_and	194142232,457813590,1112	line=72	effect=0
+fact_fn=tm__table_and	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__table_and	return	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__table_or	441149613,313270083,819	line=80	effect=0
+fact_fn=tm__table_or	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__table_or	return	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__table_xor	206790573,611634371,966	line=88	effect=0
+fact_fn=tm__table_xor	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__table_xor	return	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__table_consensus	886983557,113460496,826	line=96	effect=0
+fact_fn=tm__table_consensus	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__table_consensus	return	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__table_implication	942986250,176099370,828	line=104	effect=0
+fact_fn=tm__table_implication	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__table_implication	return	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__lookup	394069634,931423000,849	line=112	effect=0
+fact_fn=tm__lookup	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=tm__lookup	tm__i8_to_index
+call_edge=tm__lookup	tm__i8_to_index
+expr_fact=tm__lookup	let.ia	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__lookup	let.ia.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__lookup	let.ia.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__lookup	ia	i32	basis=explicit
+expr_fact=tm__lookup	let.ib	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__lookup	let.ib.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__lookup	let.ib.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__lookup	ib	i32	basis=explicit
+expr_fact=tm__lookup	return	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+decl_fn=tm__ternary_and	461762443,425981486,467	line=129	effect=0
+fact_fn=tm__ternary_and	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=tm__ternary_and	tm__lookup
+call_edge=tm__ternary_and	tm__table_and
+expr_fact=tm__ternary_and	return	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_and	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__ternary_and	return.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_and	return.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__ternary_and	return.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_and	return.arg2	type=i8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__ternary_or	170999674,594425706,465	line=133	effect=0
+fact_fn=tm__ternary_or	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=tm__ternary_or	tm__lookup
+call_edge=tm__ternary_or	tm__table_or
+expr_fact=tm__ternary_or	return	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_or	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__ternary_or	return.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_or	return.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__ternary_or	return.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_or	return.arg2	type=i8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__ternary_xor	225544529,124726781,467	line=137	effect=0
+fact_fn=tm__ternary_xor	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=tm__ternary_xor	tm__lookup
+call_edge=tm__ternary_xor	tm__table_xor
+expr_fact=tm__ternary_xor	return	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_xor	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__ternary_xor	return.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_xor	return.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__ternary_xor	return.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_xor	return.arg2	type=i8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__consensus	152597840,572409269,471	line=141	effect=0
+fact_fn=tm__consensus	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=tm__consensus	tm__lookup
+call_edge=tm__consensus	tm__table_consensus
+expr_fact=tm__consensus	return	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__consensus	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__consensus	return.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__consensus	return.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__consensus	return.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__consensus	return.arg2	type=i8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__implication	839717470,173299623,475	line=145	effect=0
+fact_fn=tm__implication	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=tm__implication	tm__lookup
+call_edge=tm__implication	tm__table_implication
+expr_fact=tm__implication	return	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__implication	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__implication	return.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__implication	return.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=tm__implication	return.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__implication	return.arg2	type=i8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__ternary_not	630817139,474695302,962	line=149	effect=0
+fact_fn=tm__ternary_not	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__ternary_not	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	return.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	return.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__ternary_not	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=tm__xor_mod3_compute	224795223,213251352,1036	line=159	effect=0
+fact_fn=tm__xor_mod3_compute	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=tm__xor_mod3_compute	let.ua	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ua.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ua.left.operand	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ua.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__xor_mod3_compute	ua	i32	basis=explicit
+expr_fact=tm__xor_mod3_compute	let.ub	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ub.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ub.left.operand	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ub.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__xor_mod3_compute	ub	i32	basis=explicit
+expr_fact=tm__xor_mod3_compute	let.ur	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ur.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ur.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ur.left.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	let.ur.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=tm__xor_mod3_compute	ur	i32	basis=explicit
+expr_fact=tm__xor_mod3_compute	return	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	return.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	return.operand.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=tm__xor_mod3_compute	return.operand.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=wire_at	530516369,105634582,688	line=8	effect=0
+fact_fn=wire_at	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=wire_at	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	return.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	return.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=wire_at	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=table_cell	143457814,170426066,627	line=14	effect=0
+fact_fn=table_cell	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=table_cell	tm__lookup
+call_edge=table_cell	wire_at
+call_edge=table_cell	wire_at
+expr_fact=table_cell	return	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=table_cell	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=table_cell	return.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=table_cell	return.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=table_cell	return.arg1.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=table_cell	return.arg1.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=table_cell	return.arg2	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=table_cell	return.arg2.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=table_cell	return.arg2.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=sweep_and	20701026,42178174,2636	line=18	effect=4
+fact_fn=sweep_and	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=sweep_and	wire_at
+call_edge=sweep_and	wire_at
+call_edge=sweep_and	tm__ternary_and
+call_edge=sweep_and	table_cell
+call_edge=sweep_and	_zag_print
+call_edge=sweep_and	_zag_println
+call_edge=sweep_and	_zag_exit
+call_edge=sweep_and	_zag_print
+call_edge=sweep_and	_zag_println
+expr_fact=sweep_and	let.row	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_and	row	i32	basis=explicit
+expr_fact=sweep_and	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	let.col	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_and	col	i32	basis=explicit
+expr_fact=sweep_and	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	let.a	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	let.a.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	let.a.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_and	a	i8	basis=explicit
+expr_fact=sweep_and	let.b	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	let.b.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	let.b.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_and	b	i8	basis=explicit
+expr_fact=sweep_and	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.left.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.left.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.right.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.right.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	if.condition.right.arg2	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_and	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_and	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_and	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_and	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_and	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_and	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=sweep_or	72980568,992244056,2634	line=38	effect=4
+fact_fn=sweep_or	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=sweep_or	wire_at
+call_edge=sweep_or	wire_at
+call_edge=sweep_or	tm__ternary_or
+call_edge=sweep_or	table_cell
+call_edge=sweep_or	_zag_print
+call_edge=sweep_or	_zag_println
+call_edge=sweep_or	_zag_exit
+call_edge=sweep_or	_zag_print
+call_edge=sweep_or	_zag_println
+expr_fact=sweep_or	let.row	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_or	row	i32	basis=explicit
+expr_fact=sweep_or	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	let.col	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_or	col	i32	basis=explicit
+expr_fact=sweep_or	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	let.a	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	let.a.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	let.a.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_or	a	i8	basis=explicit
+expr_fact=sweep_or	let.b	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	let.b.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	let.b.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_or	b	i8	basis=explicit
+expr_fact=sweep_or	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.left.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.left.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.right.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.right.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	if.condition.right.arg2	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_or	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_or	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_or	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_or	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_or	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_or	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=sweep_xor	270839975,611434377,2636	line=58	effect=4
+fact_fn=sweep_xor	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=sweep_xor	wire_at
+call_edge=sweep_xor	wire_at
+call_edge=sweep_xor	tm__ternary_xor
+call_edge=sweep_xor	table_cell
+call_edge=sweep_xor	_zag_print
+call_edge=sweep_xor	_zag_println
+call_edge=sweep_xor	_zag_exit
+call_edge=sweep_xor	_zag_print
+call_edge=sweep_xor	_zag_println
+expr_fact=sweep_xor	let.row	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_xor	row	i32	basis=explicit
+expr_fact=sweep_xor	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	let.col	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_xor	col	i32	basis=explicit
+expr_fact=sweep_xor	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	let.a	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	let.a.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	let.a.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_xor	a	i8	basis=explicit
+expr_fact=sweep_xor	let.b	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	let.b.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	let.b.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_xor	b	i8	basis=explicit
+expr_fact=sweep_xor	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.left.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.left.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.right.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.right.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	if.condition.right.arg2	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_xor	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_xor	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_xor	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_xor	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_xor	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_xor	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=sweep_consensus	708743852,664101160,2640	line=78	effect=4
+fact_fn=sweep_consensus	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=sweep_consensus	wire_at
+call_edge=sweep_consensus	wire_at
+call_edge=sweep_consensus	tm__consensus
+call_edge=sweep_consensus	table_cell
+call_edge=sweep_consensus	_zag_print
+call_edge=sweep_consensus	_zag_println
+call_edge=sweep_consensus	_zag_exit
+call_edge=sweep_consensus	_zag_print
+call_edge=sweep_consensus	_zag_println
+expr_fact=sweep_consensus	let.row	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_consensus	row	i32	basis=explicit
+expr_fact=sweep_consensus	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	let.col	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_consensus	col	i32	basis=explicit
+expr_fact=sweep_consensus	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	let.a	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	let.a.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	let.a.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_consensus	a	i8	basis=explicit
+expr_fact=sweep_consensus	let.b	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	let.b.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	let.b.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_consensus	b	i8	basis=explicit
+expr_fact=sweep_consensus	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.left.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.left.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.right.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.right.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	if.condition.right.arg2	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_consensus	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_consensus	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_consensus	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_consensus	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_consensus	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_consensus	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=sweep_implication	629015033,791782395,2644	line=98	effect=4
+fact_fn=sweep_implication	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=sweep_implication	wire_at
+call_edge=sweep_implication	wire_at
+call_edge=sweep_implication	tm__implication
+call_edge=sweep_implication	table_cell
+call_edge=sweep_implication	_zag_print
+call_edge=sweep_implication	_zag_println
+call_edge=sweep_implication	_zag_exit
+call_edge=sweep_implication	_zag_print
+call_edge=sweep_implication	_zag_println
+expr_fact=sweep_implication	let.row	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_implication	row	i32	basis=explicit
+expr_fact=sweep_implication	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	let.col	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_implication	col	i32	basis=explicit
+expr_fact=sweep_implication	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	let.a	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	let.a.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	let.a.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_implication	a	i8	basis=explicit
+expr_fact=sweep_implication	let.b	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	let.b.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	let.b.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=sweep_implication	b	i8	basis=explicit
+expr_fact=sweep_implication	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.left.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.left.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.right.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.right.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	if.condition.right.arg2	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_implication	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_implication	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_implication	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_implication	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=sweep_implication	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=sweep_implication	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=main	249305073,906046583,5411	line=118	effect=4
+fact_fn=main	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=main	_zag_println
+call_edge=main	sweep_and
+call_edge=main	tm__table_and
+call_edge=main	sweep_or
+call_edge=main	tm__table_or
+call_edge=main	sweep_xor
+call_edge=main	tm__table_xor
+call_edge=main	sweep_consensus
+call_edge=main	tm__table_consensus
+call_edge=main	sweep_implication
+call_edge=main	tm__table_implication
+call_edge=main	wire_at
+call_edge=main	wire_at
+call_edge=main	tm__ternary_xor
+call_edge=main	tm__xor_mod3_compute
+call_edge=main	_zag_println
+call_edge=main	_zag_exit
+call_edge=main	_zag_println
+call_edge=main	wire_at
+call_edge=main	tm__ternary_not
+call_edge=main	_zag_println
+call_edge=main	_zag_exit
+call_edge=main	_zag_println
+call_edge=main	_zag_println
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=tm__TruthTable9	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.row	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	row	i32	basis=explicit
+expr_fact=main	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.col	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	col	i32	basis=explicit
+expr_fact=main	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.a	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.a.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.a.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	a	i8	basis=explicit
+expr_fact=main	let.b	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.b.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.b.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	b	i8	basis=explicit
+expr_fact=main	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right.arg1	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.i	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	i	i32	basis=explicit
+expr_fact=main	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.a	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.a.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.a.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	a	i8	basis=explicit
+expr_fact=main	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right.right	type=i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_malloc
+decl_node=_zag_malloc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	602239870,679158606,173
+decl_codegen_region=_zag_malloc	602239870,679158606,173
+decl_type_edge=_zag_malloc	i32
+decl_type_edge=_zag_malloc	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_realloc
+decl_node=_zag_realloc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	434696450,638818083,204
+decl_codegen_region=_zag_realloc	434696450,638818083,204
+decl_type_edge=_zag_realloc	*i8
+decl_type_edge=_zag_realloc	i32
+decl_type_edge=_zag_realloc	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_free
+decl_node=_zag_free	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	255116002,482010143,162
+decl_codegen_region=_zag_free	255116002,482010143,162
+decl_type_edge=_zag_free	*i8
+decl_type_edge=_zag_free	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_memcpy
+decl_node=_zag_memcpy	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	808819735,117690231,220
+decl_codegen_region=_zag_memcpy	808819735,117690231,220
+decl_type_edge=_zag_memcpy	*i8
+decl_type_edge=_zag_memcpy	*i8
+decl_type_edge=_zag_memcpy	i32
+decl_type_edge=_zag_memcpy	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_memcmp
+decl_node=_zag_memcmp	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	767740451,363745733,215
+decl_codegen_region=_zag_memcmp	767740451,363745733,215
+decl_type_edge=_zag_memcmp	*i8
+decl_type_edge=_zag_memcmp	*i8
+decl_type_edge=_zag_memcmp	i32
+decl_type_edge=_zag_memcmp	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strlen
+decl_node=_zag_strlen	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	460684129,915341804,156
+decl_codegen_region=_zag_strlen	460684129,915341804,156
+decl_type_edge=_zag_strlen	[]u8
+decl_type_edge=_zag_strlen	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strcmp
+decl_node=_zag_strcmp	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	694989196,564761593,187
+decl_codegen_region=_zag_strcmp	694989196,564761593,187
+decl_type_edge=_zag_strcmp	[]u8
+decl_type_edge=_zag_strcmp	[]u8
+decl_type_edge=_zag_strcmp	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strcmp_ord
+decl_node=_zag_strcmp_ord	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	965745539,79877324,191
+decl_codegen_region=_zag_strcmp_ord	965745539,79877324,191
+decl_type_edge=_zag_strcmp_ord	[]u8
+decl_type_edge=_zag_strcmp_ord	[]u8
+decl_type_edge=_zag_strcmp_ord	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strdup
+decl_node=_zag_strdup	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	399685385,325081363,165
+decl_codegen_region=_zag_strdup	399685385,325081363,165
+decl_type_edge=_zag_strdup	[]u8
+decl_type_edge=_zag_strdup	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_concat
+decl_node=_zag_str_concat	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	54518050,147982360,200
+decl_codegen_region=_zag_str_concat	54518050,147982360,200
+decl_type_edge=_zag_str_concat	[]u8
+decl_type_edge=_zag_str_concat	[]u8
+decl_type_edge=_zag_str_concat	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_index_of_byte
+decl_node=_zag_str_index_of_byte	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	450277703,616871466,197
+decl_codegen_region=_zag_str_index_of_byte	450277703,616871466,197
+decl_type_edge=_zag_str_index_of_byte	[]u8
+decl_type_edge=_zag_str_index_of_byte	i32
+decl_type_edge=_zag_str_index_of_byte	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_i64_to_str
+decl_node=_zag_i64_to_str	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	774889173,762720612,168
+decl_codegen_region=_zag_i64_to_str	774889173,762720612,168
+decl_type_edge=_zag_i64_to_str	i64
+decl_type_edge=_zag_i64_to_str	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_u64_to_str
+decl_node=_zag_u64_to_str	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	459904823,800247324,168
+decl_codegen_region=_zag_u64_to_str	459904823,800247324,168
+decl_type_edge=_zag_u64_to_str	u64
+decl_type_edge=_zag_u64_to_str	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_to_i64
+decl_node=_zag_str_to_i64	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	604981581,785716214,160
+decl_codegen_region=_zag_str_to_i64	604981581,785716214,160
+decl_type_edge=_zag_str_to_i64	[]u8
+decl_type_edge=_zag_str_to_i64	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_print
+decl_node=_zag_print	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	410386809,842218209,161
+decl_codegen_region=_zag_print	410386809,842218209,161
+decl_type_edge=_zag_print	[]u8
+decl_type_edge=_zag_print	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_println
+decl_node=_zag_println	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	953727822,993815596,163
+decl_codegen_region=_zag_println	953727822,993815596,163
+decl_type_edge=_zag_println	[]u8
+decl_type_edge=_zag_println	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_eprintln
+decl_node=_zag_eprintln	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	783295709,969170529,164
+decl_codegen_region=_zag_eprintln	783295709,969170529,164
+decl_type_edge=_zag_eprintln	[]u8
+decl_type_edge=_zag_eprintln	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_flush
+decl_node=_zag_flush	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	217076049,844902298,132
+decl_codegen_region=_zag_flush	217076049,844902298,132
+decl_type_edge=_zag_flush	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_read_file
+decl_node=_zag_read_file	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	341286734,397383280,178
+decl_codegen_region=_zag_read_file	341286734,397383280,178
+decl_type_edge=_zag_read_file	[]u8
+decl_type_edge=_zag_read_file	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_write_file
+decl_node=_zag_write_file	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	479036127,452317086,205
+decl_codegen_region=_zag_write_file	479036127,452317086,205
+decl_type_edge=_zag_write_file	[]u8
+decl_type_edge=_zag_write_file	[]u8
+decl_type_edge=_zag_write_file	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_write_exec
+decl_node=_zag_write_exec	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	732880525,912565347,205
+decl_codegen_region=_zag_write_exec	732880525,912565347,205
+decl_type_edge=_zag_write_exec	[]u8
+decl_type_edge=_zag_write_exec	[]u8
+decl_type_edge=_zag_write_exec	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_file_exists
+decl_node=_zag_file_exists	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	738793763,819522761,169
+decl_codegen_region=_zag_file_exists	738793763,819522761,169
+decl_type_edge=_zag_file_exists	[]u8
+decl_type_edge=_zag_file_exists	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exec_cmd
+decl_node=_zag_exec_cmd	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	602643484,16573448,165
+decl_codegen_region=_zag_exec_cmd	602643484,16573448,165
+decl_type_edge=_zag_exec_cmd	[]u8
+decl_type_edge=_zag_exec_cmd	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exec_capture
+decl_node=_zag_exec_capture	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	542443913,342308047,180
+decl_codegen_region=_zag_exec_capture	542443913,342308047,180
+decl_type_edge=_zag_exec_capture	[]u8
+decl_type_edge=_zag_exec_capture	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exit
+decl_node=_zag_exit	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	405275641,368471588,162
+decl_codegen_region=_zag_exit	405275641,368471588,162
+decl_type_edge=_zag_exit	i32
+decl_type_edge=_zag_exit	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_argc
+decl_node=_zag_argc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	998942557,695012765,130
+decl_codegen_region=_zag_argc	998942557,695012765,130
+decl_type_edge=_zag_argc	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_arg
+decl_node=_zag_arg	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	882280767,899487250,160
+decl_codegen_region=_zag_arg	882280767,899487250,160
+decl_type_edge=_zag_arg	i32
+decl_type_edge=_zag_arg	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_getenv
+decl_node=_zag_getenv	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	977116258,601522591,165
+decl_codegen_region=_zag_getenv	977116258,601522591,165
+decl_type_edge=_zag_getenv	[]u8
+decl_type_edge=_zag_getenv	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_slice_ptr
+decl_node=_zag_slice_ptr	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	445180039,853621880,159
+decl_codegen_region=_zag_slice_ptr	445180039,853621880,159
+decl_type_edge=_zag_slice_ptr	[]u8
+decl_type_edge=_zag_slice_ptr	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_read_fd
+decl_node=_zag_read_fd	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	969270656,322067489,224
+decl_codegen_region=_zag_read_fd	969270656,322067489,224
+decl_type_edge=_zag_read_fd	i64
+decl_type_edge=_zag_read_fd	*i8
+decl_type_edge=_zag_read_fd	i64
+decl_type_edge=_zag_read_fd	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_clock_monotonic_ms
+decl_node=_zag_clock_monotonic_ms	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	592918630,470527004,144
+decl_codegen_region=_zag_clock_monotonic_ms	592918630,470527004,144
+decl_type_edge=_zag_clock_monotonic_ms	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_raw_syscall
+decl_node=_zag_raw_syscall	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	693351262,901525871,353
+decl_codegen_region=_zag_raw_syscall	693351262,901525871,353
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__TritAddResult
+decl_node=tm__TritAddResult	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	422639402,766381830,46
+decl_codegen_region=tm__TritAddResult	422639402,766381830,46
+layout_node=tm__TritAddResult	422639402,766381830,46
+decl_type_edge=tm__TritAddResult	i8
+decl_type_edge=tm__TritAddResult	i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__TritMulResult
+decl_node=tm__TritMulResult	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	922130248,816049256,38
+decl_codegen_region=tm__TritMulResult	922130248,816049256,38
+layout_node=tm__TritMulResult	922130248,816049256,38
+decl_type_edge=tm__TritMulResult	i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__i8_to_index
+decl_node=tm__i8_to_index	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	942545666,63699086,690
+decl_codegen_region=tm__i8_to_index	942545666,63699086,690
+decl_type_edge=tm__i8_to_index	i8
+decl_type_edge=tm__i8_to_index	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__balance_sum
+decl_node=tm__balance_sum	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	24726428,3453448,1960
+decl_codegen_region=tm__balance_sum	24726428,3453448,1960
+decl_type_edge=tm__balance_sum	i32
+decl_type_edge=tm__balance_sum	tm__TritAddResult
+decl_layout_edge=tm__balance_sum	tm__TritAddResult
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__add
+decl_node=tm__add	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	646317579,504654066,769
+decl_codegen_region=tm__add	646317579,504654066,769
+decl_type_edge=tm__add	i8
+decl_type_edge=tm__add	i8
+decl_type_edge=tm__add	i8
+decl_type_edge=tm__add	tm__TritAddResult
+decl_layout_edge=tm__add	tm__TritAddResult
+fn_call_edge=tm__add	tm__balance_sum
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__mul
+decl_node=tm__mul	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	905029351,701335636,572
+decl_codegen_region=tm__mul	905029351,701335636,572
+decl_type_edge=tm__mul	i8
+decl_type_edge=tm__mul	i8
+decl_type_edge=tm__mul	tm__TritMulResult
+decl_layout_edge=tm__mul	tm__TritMulResult
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__TruthTable9
+decl_node=tm__TruthTable9	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	361877576,49577278,112
+decl_codegen_region=tm__TruthTable9	361877576,49577278,112
+layout_node=tm__TruthTable9	361877576,49577278,112
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_type_edge=tm__TruthTable9	i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__table_and
+decl_node=tm__table_and	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	194142232,457813590,1112
+decl_codegen_region=tm__table_and	194142232,457813590,1112
+decl_type_edge=tm__table_and	tm__TruthTable9
+decl_layout_edge=tm__table_and	tm__TruthTable9
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__table_or
+decl_node=tm__table_or	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	441149613,313270083,819
+decl_codegen_region=tm__table_or	441149613,313270083,819
+decl_type_edge=tm__table_or	tm__TruthTable9
+decl_layout_edge=tm__table_or	tm__TruthTable9
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__table_xor
+decl_node=tm__table_xor	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	206790573,611634371,966
+decl_codegen_region=tm__table_xor	206790573,611634371,966
+decl_type_edge=tm__table_xor	tm__TruthTable9
+decl_layout_edge=tm__table_xor	tm__TruthTable9
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__table_consensus
+decl_node=tm__table_consensus	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	886983557,113460496,826
+decl_codegen_region=tm__table_consensus	886983557,113460496,826
+decl_type_edge=tm__table_consensus	tm__TruthTable9
+decl_layout_edge=tm__table_consensus	tm__TruthTable9
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__table_implication
+decl_node=tm__table_implication	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	942986250,176099370,828
+decl_codegen_region=tm__table_implication	942986250,176099370,828
+decl_type_edge=tm__table_implication	tm__TruthTable9
+decl_layout_edge=tm__table_implication	tm__TruthTable9
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__lookup
+decl_node=tm__lookup	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	394069634,931423000,849
+decl_codegen_region=tm__lookup	394069634,931423000,849
+decl_type_edge=tm__lookup	tm__TruthTable9
+decl_layout_edge=tm__lookup	tm__TruthTable9
+decl_type_edge=tm__lookup	i8
+decl_type_edge=tm__lookup	i8
+decl_type_edge=tm__lookup	i8
+fn_call_edge=tm__lookup	tm__i8_to_index
+fn_call_edge=tm__lookup	tm__i8_to_index
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__ternary_and
+decl_node=tm__ternary_and	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	461762443,425981486,467
+decl_codegen_region=tm__ternary_and	461762443,425981486,467
+decl_type_edge=tm__ternary_and	i8
+decl_type_edge=tm__ternary_and	i8
+decl_type_edge=tm__ternary_and	i8
+fn_call_edge=tm__ternary_and	tm__lookup
+fn_call_edge=tm__ternary_and	tm__table_and
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__ternary_or
+decl_node=tm__ternary_or	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	170999674,594425706,465
+decl_codegen_region=tm__ternary_or	170999674,594425706,465
+decl_type_edge=tm__ternary_or	i8
+decl_type_edge=tm__ternary_or	i8
+decl_type_edge=tm__ternary_or	i8
+fn_call_edge=tm__ternary_or	tm__lookup
+fn_call_edge=tm__ternary_or	tm__table_or
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__ternary_xor
+decl_node=tm__ternary_xor	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	225544529,124726781,467
+decl_codegen_region=tm__ternary_xor	225544529,124726781,467
+decl_type_edge=tm__ternary_xor	i8
+decl_type_edge=tm__ternary_xor	i8
+decl_type_edge=tm__ternary_xor	i8
+fn_call_edge=tm__ternary_xor	tm__lookup
+fn_call_edge=tm__ternary_xor	tm__table_xor
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__consensus
+decl_node=tm__consensus	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	152597840,572409269,471
+decl_codegen_region=tm__consensus	152597840,572409269,471
+decl_type_edge=tm__consensus	i8
+decl_type_edge=tm__consensus	i8
+decl_type_edge=tm__consensus	i8
+fn_call_edge=tm__consensus	tm__lookup
+fn_call_edge=tm__consensus	tm__table_consensus
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__implication
+decl_node=tm__implication	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	839717470,173299623,475
+decl_codegen_region=tm__implication	839717470,173299623,475
+decl_type_edge=tm__implication	i8
+decl_type_edge=tm__implication	i8
+decl_type_edge=tm__implication	i8
+fn_call_edge=tm__implication	tm__lookup
+fn_call_edge=tm__implication	tm__table_implication
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__ternary_not
+decl_node=tm__ternary_not	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	630817139,474695302,962
+decl_codegen_region=tm__ternary_not	630817139,474695302,962
+decl_type_edge=tm__ternary_not	i8
+decl_type_edge=tm__ternary_not	i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	tm__xor_mod3_compute
+decl_node=tm__xor_mod3_compute	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	224795223,213251352,1036
+decl_codegen_region=tm__xor_mod3_compute	224795223,213251352,1036
+decl_type_edge=tm__xor_mod3_compute	i8
+decl_type_edge=tm__xor_mod3_compute	i8
+decl_type_edge=tm__xor_mod3_compute	i8
+decl_module_edge=harsh_ternary.zag	wire_at
+decl_node=wire_at	harsh_ternary.zag	530516369,105634582,688
+decl_codegen_region=wire_at	530516369,105634582,688
+decl_type_edge=wire_at	i32
+decl_type_edge=wire_at	i8
+decl_module_edge=harsh_ternary.zag	table_cell
+decl_node=table_cell	harsh_ternary.zag	143457814,170426066,627
+decl_codegen_region=table_cell	143457814,170426066,627
+decl_type_edge=table_cell	tm__TruthTable9
+decl_layout_edge=table_cell	tm__TruthTable9
+decl_type_edge=table_cell	i32
+decl_type_edge=table_cell	i32
+decl_type_edge=table_cell	i8
+fn_call_edge=table_cell	tm__lookup
+fn_call_edge=table_cell	wire_at
+fn_call_edge=table_cell	wire_at
+decl_module_edge=harsh_ternary.zag	sweep_and
+decl_node=sweep_and	harsh_ternary.zag	20701026,42178174,2636
+decl_codegen_region=sweep_and	20701026,42178174,2636
+decl_type_edge=sweep_and	tm__TruthTable9
+decl_layout_edge=sweep_and	tm__TruthTable9
+decl_type_edge=sweep_and	[]u8
+decl_type_edge=sweep_and	void
+fn_call_edge=sweep_and	wire_at
+fn_call_edge=sweep_and	wire_at
+fn_call_edge=sweep_and	tm__ternary_and
+fn_call_edge=sweep_and	table_cell
+fn_call_edge=sweep_and	_zag_print
+fn_call_edge=sweep_and	_zag_println
+fn_call_edge=sweep_and	_zag_exit
+fn_call_edge=sweep_and	_zag_print
+fn_call_edge=sweep_and	_zag_println
+decl_module_edge=harsh_ternary.zag	sweep_or
+decl_node=sweep_or	harsh_ternary.zag	72980568,992244056,2634
+decl_codegen_region=sweep_or	72980568,992244056,2634
+decl_type_edge=sweep_or	tm__TruthTable9
+decl_layout_edge=sweep_or	tm__TruthTable9
+decl_type_edge=sweep_or	[]u8
+decl_type_edge=sweep_or	void
+fn_call_edge=sweep_or	wire_at
+fn_call_edge=sweep_or	wire_at
+fn_call_edge=sweep_or	tm__ternary_or
+fn_call_edge=sweep_or	table_cell
+fn_call_edge=sweep_or	_zag_print
+fn_call_edge=sweep_or	_zag_println
+fn_call_edge=sweep_or	_zag_exit
+fn_call_edge=sweep_or	_zag_print
+fn_call_edge=sweep_or	_zag_println
+decl_module_edge=harsh_ternary.zag	sweep_xor
+decl_node=sweep_xor	harsh_ternary.zag	270839975,611434377,2636
+decl_codegen_region=sweep_xor	270839975,611434377,2636
+decl_type_edge=sweep_xor	tm__TruthTable9
+decl_layout_edge=sweep_xor	tm__TruthTable9
+decl_type_edge=sweep_xor	[]u8
+decl_type_edge=sweep_xor	void
+fn_call_edge=sweep_xor	wire_at
+fn_call_edge=sweep_xor	wire_at
+fn_call_edge=sweep_xor	tm__ternary_xor
+fn_call_edge=sweep_xor	table_cell
+fn_call_edge=sweep_xor	_zag_print
+fn_call_edge=sweep_xor	_zag_println
+fn_call_edge=sweep_xor	_zag_exit
+fn_call_edge=sweep_xor	_zag_print
+fn_call_edge=sweep_xor	_zag_println
+decl_module_edge=harsh_ternary.zag	sweep_consensus
+decl_node=sweep_consensus	harsh_ternary.zag	708743852,664101160,2640
+decl_codegen_region=sweep_consensus	708743852,664101160,2640
+decl_type_edge=sweep_consensus	tm__TruthTable9
+decl_layout_edge=sweep_consensus	tm__TruthTable9
+decl_type_edge=sweep_consensus	[]u8
+decl_type_edge=sweep_consensus	void
+fn_call_edge=sweep_consensus	wire_at
+fn_call_edge=sweep_consensus	wire_at
+fn_call_edge=sweep_consensus	tm__consensus
+fn_call_edge=sweep_consensus	table_cell
+fn_call_edge=sweep_consensus	_zag_print
+fn_call_edge=sweep_consensus	_zag_println
+fn_call_edge=sweep_consensus	_zag_exit
+fn_call_edge=sweep_consensus	_zag_print
+fn_call_edge=sweep_consensus	_zag_println
+decl_module_edge=harsh_ternary.zag	sweep_implication
+decl_node=sweep_implication	harsh_ternary.zag	629015033,791782395,2644
+decl_codegen_region=sweep_implication	629015033,791782395,2644
+decl_type_edge=sweep_implication	tm__TruthTable9
+decl_layout_edge=sweep_implication	tm__TruthTable9
+decl_type_edge=sweep_implication	[]u8
+decl_type_edge=sweep_implication	void
+fn_call_edge=sweep_implication	wire_at
+fn_call_edge=sweep_implication	wire_at
+fn_call_edge=sweep_implication	tm__implication
+fn_call_edge=sweep_implication	table_cell
+fn_call_edge=sweep_implication	_zag_print
+fn_call_edge=sweep_implication	_zag_println
+fn_call_edge=sweep_implication	_zag_exit
+fn_call_edge=sweep_implication	_zag_print
+fn_call_edge=sweep_implication	_zag_println
+decl_module_edge=harsh_ternary.zag	main
+decl_node=main	harsh_ternary.zag	249305073,906046583,5411
+decl_codegen_region=main	249305073,906046583,5411
+decl_type_edge=main	i32
+fn_call_edge=main	_zag_println
+fn_call_edge=main	sweep_and
+fn_call_edge=main	tm__table_and
+fn_call_edge=main	sweep_or
+fn_call_edge=main	tm__table_or
+fn_call_edge=main	sweep_xor
+fn_call_edge=main	tm__table_xor
+fn_call_edge=main	sweep_consensus
+fn_call_edge=main	tm__table_consensus
+fn_call_edge=main	sweep_implication
+fn_call_edge=main	tm__table_implication
+fn_call_edge=main	wire_at
+fn_call_edge=main	wire_at
+fn_call_edge=main	tm__ternary_xor
+fn_call_edge=main	tm__xor_mod3_compute
+fn_call_edge=main	_zag_println
+fn_call_edge=main	_zag_exit
+fn_call_edge=main	_zag_println
+fn_call_edge=main	wire_at
+fn_call_edge=main	tm__ternary_not
+fn_call_edge=main	_zag_println
+fn_call_edge=main	_zag_exit
+fn_call_edge=main	_zag_println
+fn_call_edge=main	_zag_println
+module_node=harsh_ternary.zag	927628370,143750655,4211
+module_node=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	428695430,447087553,3895
+module_node=/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag	510540295,757602901,3965
+import_edge=harsh_ternary.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag
+import_edge=harsh_ternary.zag	/home/micah/Desktop/Sylorlabs/flash/flash/stdlib/trit_math.zag
+checksum=319179742,420824838,82611

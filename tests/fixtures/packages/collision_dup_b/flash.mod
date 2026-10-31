@@ -1,0 +1,4 @@
+name = "collision_dup_b"
+version = "0.1.0"
+edition = "2026"
+

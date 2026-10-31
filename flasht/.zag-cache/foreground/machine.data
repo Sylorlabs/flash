@@ -1,0 +1,25 @@
+panic: slice index out of bounds
+panic: slice index out of bounds
+=panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+PcmPhaseShiftrowcolphase_aphase_bresultLatticeRoutefrom_xfrom_yfrom_zto_xto_yto_zpowerpolpanic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+insn usage: qemu_ppu32 <file.ppu32>
+qemu_ppu32: cannot read 
+qemu_ppu32: no executable insns
+qemu_ppu32: ok
+zag runtime: invalid negative allocation size
+zag runtime: allocation failed
+zag runtime: invalid negative allocation size
+zag runtime: large allocation provenance registry exhausted
+zag runtime: overlapping large allocation
+zag runtime: invalid or double free
+zag runtime: invalid unregistered large allocation
+zag runtime: large allocation unmap failed
+zag runtime: invalid or double free
+zag runtime: invalid negative realloc size
+zag runtime: realloc of invalid or freed allocation

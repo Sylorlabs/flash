@@ -87,6 +87,20 @@ tests/critic/run_critic.sh       # adversarial critic tests only (delegates to r
 tests/standalone_gate.sh         # Wave 7 gate: bundled flashz, no sibling zag
 ```
 
+## Operating-system status
+
+Flash is ready today for hosted systems programs and RayOS's native-host
+foundation. It is not yet a freestanding kernel compiler. In particular,
+`ppu32` lowers photonic surface routes, not arbitrary Flash functions, and the
+compiler now rejects attempts to turn an ordinary program into an empty PPU32
+image. The proposed `rayos-ternary` target also fails explicitly rather than
+substituting a hosted executable.
+
+The proven boundary and the remaining kernel-backend work are tracked in
+[`docs/OS_READINESS.md`](docs/OS_READINESS.md). Flashy is the Flash UI toolkit;
+it should gain a RayOS platform backend rather than being duplicated inside the
+language or operating system.
+
 ## File extension
 
 Flash sources use **`.flash`**. The legacy `.flash.zag` extension is still

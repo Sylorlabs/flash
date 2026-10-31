@@ -1,0 +1,14 @@
+fn main() i32 {
+    let values: ArrayList[t27] = ArrayList[t27]{
+        .data = null as *t27,
+        .len = 0,
+        .cap = 0,
+    };
+    push[t27](&values, 27);
+    if (len[t27](values) != 1 || get[t27](values, 0) != 27) {
+        free[t27](&values);
+        return 1;
+    }
+    free[t27](&values);
+    return 0;
+}

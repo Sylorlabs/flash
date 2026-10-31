@@ -1,0 +1,35 @@
+struct Box[T] {
+    value: T,
+    count: i32,
+}
+
+struct Pair[A, B] {
+    first: A,
+    second: B,
+}
+
+struct Empty {}
+
+fn ternary_identity(value: t27) t27 {
+    return value;
+}
+
+fn main() i32 {
+    let box: Box[i32] = Box[i32]{ .value = 7, .count = 1 };
+    let inferred = Box[i32]{ .value = 8, .count = 2 };
+    let nested: Pair[i32, Box[i32]] = Pair[i32, Box[i32]]{
+        .first = box.value,
+        .second = inferred,
+    };
+    let bytes: ArrayList[u8] = ArrayList[u8]{
+        .data = null as *u8,
+        .len = 0,
+        .cap = 0,
+    };
+    let ternary: Box[t27] = Box[t27]{ .value = 9 as t27, .count = 3 };
+    let callback: Box[fn(t27)t27] = Box[fn(t27)t27]{ .value = ternary_identity, .count = 4 };
+    let _empty = Empty{};
+    if (ternary.value != (9 as t27)) { return 1; }
+    if (callback.value(11 as t27) != (11 as t27)) { return 2; }
+    return box.value + nested.first + nested.second.value + bytes.len - 22;
+}

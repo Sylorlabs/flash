@@ -1,0 +1,9 @@
+struct Pair[A, B] {
+    first: A,
+    second: B,
+}
+
+fn main() i32 {
+    let bad = Pair[i32, i32]{ .first = 1 };
+    return 0;
+}

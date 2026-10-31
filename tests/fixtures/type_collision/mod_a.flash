@@ -1,0 +1,4 @@
+// mod_a.flash — defines a struct named `SharedType`
+struct SharedType {
+    x: i32,
+}

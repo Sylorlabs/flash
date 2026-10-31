@@ -1,0 +1,7 @@
+@import("collision_dup_a")
+@import("collision_dup_b")
+
+fn main() i32 {
+    return 0;
+}
+

@@ -40,6 +40,7 @@ struct FNode {
     names: ArrayList[[]u8],
     names2: ArrayList[[]u8],
     types: ArrayList[[]u8],
+    names3: ArrayList[[]u8],
 }
 
 struct FPr {
@@ -60,10 +61,15 @@ fn fn_blank(code: i32, line: i32) FNode {
         .a = 0, .b = 0, .c = 0, .flag = 0, .flag2 = 0,
         .kids = make[i32](2), .kids2 = make[i32](2),
         .names = make[[]u8](2), .names2 = make[[]u8](2), .types = make[[]u8](2),
+        .names3 = make[[]u8](2),
     };
 }
 
 fn fpp_push(p: *FPr, n: FNode) i32 {
+    // p.*.pool is *ArrayList[FNode] (a pointer field on FPr), so this passes
+    // the pointer directly to push — correct. (Contrast with fss_push in
+    // fsema_surface.flash, where pool is a *parameter* of type *ArrayList
+    // and pool.* would be a value copy — that was the real bug, now fixed.)
     push[FNode](p.*.pool, n);
     return len[FNode](p.*.pool.*) - 1;
 }
@@ -150,7 +156,26 @@ fn fpp_is_error_kw(p: *FPr) i32 {
     return 0;
 }
 
+fn fpp_parse_fn_type(p: *FPr) []u8 {
+    let _fn: FxToken = fpp_adv(p);
+    let _o: FxToken = fpp_adv(p);
+    let s: []u8 = "fn(";
+    let count: i32 = 0;
+    while (fpp_at(p, fx_rp()) == 0) {
+        if (count > 0) { s = _zag_str_concat(s, ","); }
+        s = _zag_str_concat(s, fpp_parse_type(p));
+        count = count + 1;
+        if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+    }
+    let _r: FxToken = fpp_adv(p);
+    let ret: []u8 = fpp_parse_type(p);
+    return _zag_str_concat(_zag_str_concat(s, ")"), ret);
+}
+
 fn fpp_parse_type(p: *FPr) []u8 {
+    if (fpp_at(p, fx_kw_fn()) == 1) {
+        return fpp_parse_fn_type(p);
+    }
     if (fpp_at_op(p, "*") == 1) {
         let _t: FxToken = fpp_adv(p);
         return _zag_str_concat("*", fpp_parse_type(p));
@@ -169,6 +194,10 @@ fn fpp_parse_type(p: *FPr) []u8 {
         return _zag_str_concat("[]", fpp_parse_type(p));
     }
     let nm: []u8 = fpp_adv(p).text;
+    if (fpp_at(p, fx_dot()) == 1) {
+        let _d: FxToken = fpp_adv(p);
+        nm = _zag_str_concat(_zag_str_concat(nm, "__"), fpp_adv(p).text);
+    }
     if (fpp_at(p, fx_lbracket()) == 1) {
         let _ob: FxToken = fpp_adv(p);
         let s: []u8 = _zag_str_concat(nm, "[");
@@ -188,10 +217,13 @@ fn fpp_parse_type(p: *FPr) []u8 {
 fn fpp_prec(op: []u8) i32 {
     if (@strEq(op, "||") == 1) { return 1; }
     if (@strEq(op, "&&") == 1) { return 2; }
-    if (@strEq(op, "==") == 1 || @strEq(op, "!=") == 1) { return 3; }
-    if (@strEq(op, "<") == 1 || @strEq(op, ">") == 1 || @strEq(op, "<=") == 1 || @strEq(op, ">=") == 1) { return 4; }
-    if (@strEq(op, "+") == 1 || @strEq(op, "-") == 1) { return 5; }
-    if (@strEq(op, "*") == 1 || @strEq(op, "/") == 1 || @strEq(op, "%") == 1) { return 6; }
+    if (@strEq(op, "^") == 1) { return 3; }
+    if (@strEq(op, "&") == 1) { return 4; }
+    if (@strEq(op, "==") == 1 || @strEq(op, "!=") == 1) { return 5; }
+    if (@strEq(op, "<") == 1 || @strEq(op, ">") == 1 || @strEq(op, "<=") == 1 || @strEq(op, ">=") == 1) { return 6; }
+    if (@strEq(op, "<<") == 1 || @strEq(op, ">>") == 1) { return 7; }
+    if (@strEq(op, "+") == 1 || @strEq(op, "-") == 1) { return 8; }
+    if (@strEq(op, "*") == 1 || @strEq(op, "/") == 1 || @strEq(op, "%") == 1) { return 9; }
     return 0;
 }
 
@@ -239,7 +271,7 @@ fn fpp_bin(p: *FPr, min: i32) i32 {
             if (prec > 0 && prec >= min) {
                 let _t: FxToken = fpp_adv(p);
                 let right: i32 = fpp_bin(p, prec + 1);
-                let n: FNode = fn_blank(16, 0);
+                let n: FNode = fn_blank(16, _t.line);
                 n.text = op;
                 n.a = left;
                 n.b = right;
@@ -454,7 +486,7 @@ fn fpp_primary(p: *FPr) i32 {
                 n.text = name;
                 let _ob: FxToken = fpp_adv(p);
                 while (fpp_at(p, fx_rbracket()) == 0) {
-                    push[[]u8](&n.names2, fpp_adv(p).text);
+                    push[[]u8](&n.names2, fpp_parse_type(p));
                     if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
                 }
                 let _rb: FxToken = fpp_adv(p);
@@ -516,7 +548,7 @@ fn fpp_stmt(p: *FPr) i32 {
     if (fpp_at(p, fx_kw_switch()) == 1) { return fpp_parse_switch(p); }
     if (fpp_at(p, fx_kw_let()) == 1) {
         let _t: FxToken = fpp_adv(p);
-        let n: FNode = fn_blank(2, 0);
+        let n: FNode = fn_blank(2, _t.line);
         n.text = fpp_adv(p).text;
         if (fpp_at(p, fx_colon()) == 1) {
             let _c: FxToken = fpp_adv(p);
@@ -533,7 +565,7 @@ fn fpp_stmt(p: *FPr) i32 {
     }
     if (fpp_at(p, fx_kw_return()) == 1) {
         let _t: FxToken = fpp_adv(p);
-        let n: FNode = fn_blank(3, 0);
+        let n: FNode = fn_blank(3, _t.line);
         if (fpp_at(p, fx_semi()) == 0) {
             n.a = fpp_expr(p);
             n.flag2 = 1;
@@ -544,7 +576,7 @@ fn fpp_stmt(p: *FPr) i32 {
     if (fpp_at(p, fx_kw_if()) == 1) {
         let _t: FxToken = fpp_adv(p);
         let _o: FxToken = fpp_adv(p);
-        let n: FNode = fn_blank(4, 0);
+        let n: FNode = fn_blank(4, _t.line);
         n.a = fpp_expr(p);
         let _c: FxToken = fpp_adv(p);
         if (fpp_at(p, fx_pipe()) == 1) {
@@ -568,7 +600,7 @@ fn fpp_stmt(p: *FPr) i32 {
     if (fpp_at(p, fx_kw_while()) == 1) {
         let _t: FxToken = fpp_adv(p);
         let _o: FxToken = fpp_adv(p);
-        let n: FNode = fn_blank(5, 0);
+        let n: FNode = fn_blank(5, _t.line);
         n.a = fpp_expr(p);
         let _c: FxToken = fpp_adv(p);
         n.kids = fpp_block(p);
@@ -626,6 +658,13 @@ fn fpp_parse_fn(p: *FPr) i32 {
         let _ob: FxToken = fpp_adv(p);
         while (fpp_at(p, fx_rbracket()) == 0) {
             push[[]u8](&n.names2, fpp_adv(p).text);
+            // Parse optional constraint: T: ConceptName
+            if (fpp_at(p, fx_colon()) == 1) {
+                let _co: FxToken = fpp_adv(p);
+                push[[]u8](&n.names3, fpp_adv(p).text);
+            } else {
+                push[[]u8](&n.names3, "");
+            }
             if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
         }
         let _rb: FxToken = fpp_adv(p);
@@ -729,6 +768,53 @@ fn fpp_parse_union(p: *FPr) i32 {
     return fpp_push(p, n);
 }
 
+// Parse a concept declaration: concept Name { method_sig; method_sig; ... }
+// Each method signature is: fn name(params) ret_type
+// Stored as FNode code 36: text=concept name, names=method names, types=method return types,
+// kids2=method parameter counts (as i32 values in the kids2 array).
+// The parameter types are stored sequentially in n.types after the return types.
+fn fpp_parse_concept(p: *FPr) i32 {
+    let is_pub: i32 = fpp_eat_pub(p);
+    let ctok: FxToken = fpp_adv(p);
+    let n: FNode = fn_blank(36, ctok.line);
+    n.flag = is_pub;
+    n.text = fpp_adv(p).text;
+    let _lb: FxToken = fpp_adv(p);
+    while (fpp_at(p, fx_rbrace()) == 0 && fpp_at(p, fx_eof()) == 0) {
+        // Parse: fn name(params) ret_type
+        if (fpp_at(p, fx_kw_fn()) == 1) {
+            let _fn_tok: FxToken = fpp_adv(p);
+            push[[]u8](&n.names, fpp_adv(p).text);
+            // Parse parameter list
+            let param_count: i32 = 0;
+            if (fpp_at(p, fx_lp()) == 1) {
+                let _lp: FxToken = fpp_adv(p);
+                while (fpp_at(p, fx_rp()) == 0 && fpp_at(p, fx_eof()) == 0) {
+                    let _pname: []u8 = fpp_adv(p).text;
+                    if (fpp_at(p, fx_colon()) == 1) {
+                        let _co: FxToken = fpp_adv(p);
+                        push[[]u8](&n.types, fpp_parse_type(p));
+                    } else {
+                        push[[]u8](&n.types, "void");
+                    }
+                    param_count = param_count + 1;
+                    if (fpp_at(p, fx_comma()) == 1) { let _c: FxToken = fpp_adv(p); }
+                }
+                let _rp: FxToken = fpp_adv(p);
+            }
+            push[i32](&n.kids2, param_count);
+            // Parse return type
+            push[[]u8](&n.types, fpp_parse_type(p));
+            fpp_eat_semi(p);
+        } else {
+            let bad: FxToken = fpp_adv(p);
+            fpp_err_at(p, "expected fn inside concept body", bad.line);
+        }
+    }
+    let _rb: FxToken = fpp_adv(p);
+    return fpp_push(p, n);
+}
+
 fn fpp_strip_quotes(s: []u8) []u8 {
     if (s.len >= 2) { return s[1..s.len - 1]; }
     return s;
@@ -810,6 +896,8 @@ fn fpp_parse_into(src: []u8, pool: *ArrayList[FNode]) FpResult {
             push[i32](&decls, fpp_parse_enum(&p));
         } else if (fpp_at(&p, fx_kw_union()) == 1) {
             push[i32](&decls, fpp_parse_union(&p));
+        } else if (fpp_at(&p, fx_kw_concept()) == 1) {
+            push[i32](&decls, fpp_parse_concept(&p));
         } else if (fpp_at(&p, fx_kw_extern()) == 1 || fpp_at(&p, fx_kw_fn()) == 1 || fpp_after_annots_kw_is(&p, fx_kw_fn()) == 1 || fpp_after_annots_kw_is(&p, fx_kw_extern()) == 1) {
             push[i32](&decls, fpp_parse_fn(&p));
         } else {

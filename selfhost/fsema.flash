@@ -61,6 +61,24 @@ fn fs_is_integer(t: []u8) i32 {
     return 0;
 }
 
+fn fs_is_slice_or_array(t: []u8) i32 {
+    if (fs_starts_with(t, "[]") == 1) { return 1; }
+    if (fs_starts_with(t, "[") == 1) { return 1; }
+    return 0;
+}
+
+fn fs_array_list_element(t: []u8) []u8 {
+    if (fs_starts_with(t, "ArrayList[") == 0 || t.len < 12) { return ""; }
+    if ((t[t.len - 1] as i32) != 93) { return ""; }
+    return t[10..t.len - 1];
+}
+
+fn fs_index_element(t: []u8) []u8 {
+    if (t.len > 1 && (t[0] as i32) == 42) { return t[1..]; }
+    if (fs_starts_with(t, "[]") == 1 && t.len > 2) { return t[2..]; }
+    return "";
+}
+
 fn fs_is_float(t: []u8) i32 {
     if (@strEq(t, "f16") == 1 || @strEq(t, "f32") == 1 || @strEq(t, "f64") == 1) { return 1; }
     if (@strEq(t, "f80") == 1 || @strEq(t, "f128") == 1) { return 1; }
@@ -80,10 +98,27 @@ fn fs_is_trit_unit(t: []u8) i32 {
     return 1;
 }
 
+fn fs_mixed_tunit_widen(a: []u8, b: []u8) []u8 {
+    if (fs_is_trit_unit(a) == 0 && fs_is_trit_unit(b) == 0) { return ""; }
+    if (fs_is_scalar_trit(a) == 1 || fs_is_scalar_trit(b) == 1) { return ""; }
+    if (@strEq(a, b) == 1) { return a; }
+    if (@strEq(a, "i64") == 1 || @strEq(b, "i64") == 1) { return "i64"; }
+    if (@strEq(a, "t27") == 1 || @strEq(b, "t27") == 1) { return "t27"; }
+    if (@strEq(a, "i32") == 1 || @strEq(b, "i32") == 1) { return "i32"; }
+    if (@strEq(a, "t9") == 1 || @strEq(b, "t9") == 1) { return "t9"; }
+    return "";
+}
+
 fn fs_is_trit(t: []u8) i32 {
     if (@strEq(t, "trit") == 1 || @strEq(t, "Trit") == 1) { return 1; }
     if (@strEq(t, "trit.Trit") == 1) { return 1; }
     if (fs_is_trit_unit(t) == 1) { return 1; }
+    return 0;
+}
+
+fn fs_is_scalar_trit(t: []u8) i32 {
+    if (@strEq(t, "trit") == 1 || @strEq(t, "Trit") == 1) { return 1; }
+    if (@strEq(t, "trit.Trit") == 1) { return 1; }
     return 0;
 }
 
@@ -124,8 +159,41 @@ fn fs_same_family(a: []u8, b: []u8) i32 {
     return 0;
 }
 
-fn fs_binop_compatible(a: []u8, b: []u8) i32 {
+fn fs_is_enum_type(ctx: *FsCtx, t: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.enum_names)) {
+        if (@strEq(get[[]u8](ctx.*.enum_names, i), t) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fs_binop_compatible(ctx: *FsCtx, a: []u8, b: []u8) i32 {
+    if (@strEq(a, b) == 1 && a.len > 0) { return 1; }
+    if (@strEq(a, "null") == 1 || @strEq(b, "null") == 1) { return 1; }
+    if (a.len == 0 || b.len == 0) { return 1; }
+    if (@strEq(a, "void") == 1 || @strEq(b, "void") == 1) { return 1; }
+    if (@strEq(a, "int_literal") == 1 && (fs_is_integer(b) == 1 || fs_is_trit(b) == 1)) { return 1; }
+    if (@strEq(b, "int_literal") == 1 && (fs_is_integer(a) == 1 || fs_is_trit(a) == 1)) { return 1; }
+    if (@strEq(a, "int_literal") == 1 && @strEq(b, "int_literal") == 1) { return 1; }
+    // int_literal is compatible with any non-empty type (enums, structs, etc.)
+    if (@strEq(a, "int_literal") == 1 && b.len > 0) { return 1; }
+    if (@strEq(b, "int_literal") == 1 && a.len > 0) { return 1; }
+    if (fs_mixed_tunit_widen(a, b).len > 0) { return 1; }
+    // A scalar Trit and a balanced-ternary integer unit are distinct types.
+    // Different t<N> widths also require an explicit cast.
+    if (fs_is_trit(a) == 1 && fs_is_trit(b) == 1) {
+        if (fs_is_scalar_trit(a) == 1 && fs_is_scalar_trit(b) == 1) { return 1; }
+        return 0;
+    }
     if (fs_same_family(a, b) == 1) { return 1; }
+    if (@strEq(b, "null") == 1 && a.len > 0 && a[0] == 42) { return 1; }
+    if (@strEq(a, "null") == 1 && b.len > 0 && b[0] == 42) { return 1; }
+    if (@strEq(b, "null") == 1 && fs_starts_with(a, "?") == 1) { return 1; }
+    if (@strEq(a, "null") == 1 && fs_starts_with(b, "?") == 1) { return 1; }
+    // Enum types are compatible with i32 (enum members are i32)
+    if (fs_is_enum_type(ctx, a) == 1 && @strEq(b, "i32") == 1) { return 1; }
+    if (fs_is_enum_type(ctx, b) == 1 && @strEq(a, "i32") == 1) { return 1; }
     return 0;
 }
 
@@ -194,10 +262,29 @@ struct FsCtx {
     type_names: ArrayList[[]u8],
     type_fields: ArrayList[[]u8],
     type_field_tys: ArrayList[[]u8],
+    enum_names: ArrayList[[]u8],
+    enum_member_names: ArrayList[[]u8],
+    enum_member_owners: ArrayList[[]u8],
+    fn_names: ArrayList[[]u8],
+    fn_rets: ArrayList[[]u8],
+    fn_sigs: ArrayList[[]u8],
+    assigned_names: ArrayList[[]u8],
+    owned_names: ArrayList[[]u8],
+    consumed_names: ArrayList[[]u8],
+    // Bounded polymorphism: concept registry
+    concept_names: ArrayList[[]u8],       // concept name → index
+    concept_method_names: ArrayList[[]u8], // flattened: method names per concept
+    concept_method_rets: ArrayList[[]u8],  // flattened: method return types per concept
+    concept_method_counts: ArrayList[i32],  // per concept: number of methods
+    // Generic fn constraints: parallel arrays indexed by position
+    fn_tparam_fns: ArrayList[[]u8],        // fn name that owns this tparam
+    fn_tparam_names: ArrayList[[]u8],     // tparam name
+    fn_tparam_constraints: ArrayList[[]u8], // constraint name (or "" for unconstrained)
     fn_err_ret: i32,
     errors: i32,
     raw_depth: i32,
     block_depth: i32,
+    loop_depth: i32,
     scope_dead: ArrayList[[]u8],
     file: []u8,
 }
@@ -243,10 +330,27 @@ fn fs_ctx_new(pool: *ArrayList[FNode], file: []u8) FsCtx {
         .type_names = make[[]u8](16),
         .type_fields = make[[]u8](32),
         .type_field_tys = make[[]u8](32),
+        .enum_names = make[[]u8](16),
+        .enum_member_names = make[[]u8](64),
+        .enum_member_owners = make[[]u8](64),
+        .fn_names = make[[]u8](64),
+        .fn_rets = make[[]u8](64),
+        .fn_sigs = make[[]u8](64),
+        .assigned_names = make[[]u8](32),
+        .owned_names = make[[]u8](32),
+        .consumed_names = make[[]u8](32),
+        .concept_names = make[[]u8](8),
+        .concept_method_names = make[[]u8](32),
+        .concept_method_rets = make[[]u8](32),
+        .concept_method_counts = make[i32](8),
+        .fn_tparam_fns = make[[]u8](32),
+        .fn_tparam_names = make[[]u8](32),
+        .fn_tparam_constraints = make[[]u8](32),
         .fn_err_ret = 0,
         .errors = 0,
         .raw_depth = 0,
         .block_depth = 0,
+        .loop_depth = 0,
         .scope_dead = make[[]u8](8),
         .file = file,
     };
@@ -257,6 +361,9 @@ fn fs_ctx_new(pool: *ArrayList[FNode], file: []u8) FsCtx {
 fn fs_clear_locals(ctx: *FsCtx) void {
     ctx.*.local_names = make[[]u8](16);
     ctx.*.local_types = make[[]u8](16);
+    ctx.*.assigned_names = make[[]u8](32);
+    ctx.*.owned_names = make[[]u8](32);
+    ctx.*.consumed_names = make[[]u8](32);
 }
 
 fn fs_is_annot_token(s: []u8) i32 {
@@ -296,6 +403,15 @@ fn fs_type_field_known(ctx: *FsCtx, ty_name: []u8, field: []u8) i32 {
             && @strEq(get[[]u8](ctx.*.type_fields, i), field) == 1) {
             return 1;
         }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fs_is_known_struct(ctx: *FsCtx, ty_name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.type_names)) {
+        if (@strEq(get[[]u8](ctx.*.type_names, i), ty_name) == 1) { return 1; }
         i = i + 1;
     }
     return 0;
@@ -385,13 +501,24 @@ fn fs_mono_instantiate(base: []u8, targs: ArrayList[[]u8]) []u8 {
     return fs_mono_mangle(base, targs);
 }
 
+fn fs_type_apply(base: []u8, targs: ArrayList[[]u8]) []u8 {
+    if (len[[]u8](targs) < 1) { return base; }
+    let out: []u8 = _zag_str_concat(base, "[");
+    let i: i32 = 0;
+    while (i < len[[]u8](targs)) {
+        if (i > 0) { out = _zag_str_concat(out, ","); }
+        out = _zag_str_concat(out, get[[]u8](targs, i));
+        i = i + 1;
+    }
+    return _zag_str_concat(out, "]");
+}
+
 fn fs_mono_resolve(ctx: *FsCtx, mangled: []u8, targs: ArrayList[[]u8]) []u8 {
     let hit: []u8 = fs_mono_lookup(ctx, mangled);
     if (hit.len > 0) { return hit; }
-    if (len[[]u8](targs) > 0) {
-        let msg: []u8 = _zag_str_concat("generic instantiation failure: unknown template ", mangled);
-        fs_err(ctx, "F0005", msg, 0);
-    }
+    // Unknown template: return the mangled name as-is. The Zag backend
+    // will either instantiate it or report its own error. This allows
+    // user-defined generic functions to pass sema without pre-registration.
     return mangled;
 }
 
@@ -399,11 +526,11 @@ fn fs_type_of_literal(text: []u8) []u8 {
     let has_dot: i32 = 0;
     let i: i32 = 0;
     while (i < text.len) {
-        if (text[i] == '.') { has_dot = 1; }
+        if (text[i] == 46) { has_dot = 1; }
         i = i + 1;
     }
     if (has_dot == 1) { return "f64"; }
-    return "i32";
+    return "int_literal";
 }
 
 fn fs_scope_dead(ctx: *FsCtx, name: []u8) i32 {
@@ -431,6 +558,83 @@ fn fs_bind_local(ctx: *FsCtx, name: []u8, ty: []u8) void {
     push[[]u8](&ctx.*.local_types, ty);
 }
 
+fn fs_mark_assigned(ctx: *FsCtx, name: []u8) void {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.assigned_names)) {
+        if (@strEq(get[[]u8](ctx.*.assigned_names, i), name) == 1) { return; }
+        i = i + 1;
+    }
+    push[[]u8](&ctx.*.assigned_names, name);
+}
+
+fn fs_is_assigned(ctx: *FsCtx, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.assigned_names)) {
+        if (@strEq(get[[]u8](ctx.*.assigned_names, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+// S8: Affine ownership tracking
+fn fs_mark_owned(ctx: *FsCtx, name: []u8) void {
+    push[[]u8](&ctx.*.owned_names, name);
+}
+
+fn fs_is_owned(ctx: *FsCtx, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.owned_names)) {
+        if (@strEq(get[[]u8](ctx.*.owned_names, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fs_mark_consumed(ctx: *FsCtx, name: []u8) void {
+    // Don't double-mark
+    if (fs_is_consumed(ctx, name) == 1) { return; }
+    push[[]u8](&ctx.*.consumed_names, name);
+}
+
+fn fs_unmark_consumed(ctx: *FsCtx, name: []u8) void {
+    // Remove from consumed list (used when variable is reassigned)
+    let out: ArrayList[[]u8] = make[[]u8](32);
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.consumed_names)) {
+        if (@strEq(get[[]u8](ctx.*.consumed_names, i), name) == 0) {
+            push[[]u8](&out, get[[]u8](ctx.*.consumed_names, i));
+        }
+        i = i + 1;
+    }
+    ctx.*.consumed_names = out;
+}
+
+fn fs_is_consumed(ctx: *FsCtx, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.consumed_names)) {
+        if (@strEq(get[[]u8](ctx.*.consumed_names, i), name) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+// Check if a function is an allocating function (returns owned memory)
+fn fs_is_alloc_fn(name: []u8) i32 {
+    if (@strEq(name, "_zag_str_concat") == 1) { return 1; }
+    if (@strEq(name, "_zag_malloc") == 1) { return 1; }
+    if (@strEq(name, "_zag_str_dup") == 1) { return 1; }
+    if (@strEq(name, "_zag_read_file") == 1) { return 1; }
+    return 0;
+}
+
+// Check if a function is a consuming function (takes ownership of its argument)
+fn fs_is_consume_fn(name: []u8) i32 {
+    if (@strEq(name, "_zag_str_free") == 1) { return 1; }
+    if (@strEq(name, "_zag_free") == 1) { return 1; }
+    if (@strEq(name, "free") == 1) { return 1; }
+    return 0;
+}
+
 fn fs_local_mark(ctx: *FsCtx) i32 {
     return len[[]u8](ctx.*.local_names);
 }
@@ -451,17 +655,44 @@ fn fs_catch_operand_ok(ctx: *FsCtx, idx: i32) i32 {
 }
 
 fn fs_binop_result_ty(lty: []u8, rty: []u8, op: []u8) []u8 {
+    if (@strEq(op, "==") == 1 || @strEq(op, "!=") == 1) { return "i32"; }
+    if (@strEq(op, "<") == 1 || @strEq(op, ">") == 1) { return "i32"; }
+    if (@strEq(op, "<=") == 1 || @strEq(op, ">=") == 1) { return "i32"; }
+    if (@strEq(op, "&&") == 1 || @strEq(op, "||") == 1) { return "i32"; }
     let fl: i32 = fs_family_of(lty);
     let fr: i32 = fs_family_of(rty);
-    if (fl == fs_family_trit() && fr == fs_family_trit()) { return fs_trit_bin_result(); }
+    if (fl == fs_family_trit() && fr == fs_family_trit()) {
+        if (fs_is_scalar_trit(lty) == 1 && fs_is_scalar_trit(rty) == 1) {
+            return fs_trit_bin_result();
+        }
+        if (@strEq(lty, rty) == 1) { return lty; }
+        return "";
+    }
     let photo: []u8 = fs_photonic_bin_result(lty, rty);
     if (photo.len > 0) { return photo; }
+    let mixed_tunit: []u8 = fs_mixed_tunit_widen(lty, rty);
+    if (mixed_tunit.len > 0) {
+        if (@strEq(op, "==") == 1 || @strEq(op, "!=") == 1) { return "i32"; }
+        if (@strEq(op, "<") == 1 || @strEq(op, ">") == 1) { return "i32"; }
+        if (@strEq(op, "<=") == 1 || @strEq(op, ">=") == 1) { return "i32"; }
+        return mixed_tunit;
+    }
     if (fs_same_family(lty, rty) == 1) {
         if (fl == fs_family_posit())   { return lty; }
         if (fl == fs_family_integer()) { return lty; }
         if (fl == fs_family_float())   { return lty; }
     }
+    // int_literal resolves to the other operand's type
+    if (@strEq(lty, "int_literal") == 1 && rty.len > 0) { return rty; }
+    if (@strEq(rty, "int_literal") == 1 && lty.len > 0) { return lty; }
     if (@strEq(op, "==") == 1 || @strEq(op, "!=") == 1) { return "i32"; }
+    if (@strEq(op, "<") == 1 || @strEq(op, ">") == 1) { return "i32"; }
+    if (@strEq(op, "<=") == 1 || @strEq(op, ">=") == 1) { return "i32"; }
+    if (@strEq(op, "&&") == 1 || @strEq(op, "||") == 1) { return "i32"; }
+    // void or empty types — cascading errors, return i32 to avoid noise
+    if (@strEq(lty, "void") == 1 || @strEq(rty, "void") == 1) { return "i32"; }
+    if (lty.len == 0 || rty.len == 0) { return "i32"; }
+    // Comparison ops always return i32
     return "";
 }
 
@@ -524,8 +755,14 @@ fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
         return FsTypeInfo{ .ty = "[]u8", .eff = 0 };
     }
     if (n.code == 15) {
-        if (@strEq(n.text, "error") == 1) {
+        if (@strEq(n.text, "error") == 1 && fs_lookup_local(ctx, n.text).len == 0) {
             return FsTypeInfo{ .ty = "error", .eff = 0 };
+        }
+        if (@strEq(n.text, "null") == 1) {
+            return FsTypeInfo{ .ty = "null", .eff = 0 };
+        }
+        if (@strEq(n.text, "true") == 1 || @strEq(n.text, "false") == 1) {
+            return FsTypeInfo{ .ty = "i32", .eff = 0 };
         }
         if (fs_scope_dead(ctx, n.text) == 1) {
             fs_err(ctx, "F0001", "let escapes group scope", n.line);
@@ -533,26 +770,90 @@ fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
         }
         let ty: []u8 = fs_lookup_local(ctx, n.text);
         if (ty.len == 0) {
-            fs_err(ctx, "F0001", "unknown identifier", n.line);
+            let fn_sig: []u8 = fs_fn_sig_lookup(ctx, n.text);
+            if (fn_sig.len > 0) {
+                return FsTypeInfo{ .ty = fn_sig, .eff = 0 };
+            }
+            // Check if it's an enum type name (used as enum_value.field)
+            let ei: i32 = 0;
+            while (ei < len[[]u8](ctx.*.enum_names)) {
+                if (@strEq(get[[]u8](ctx.*.enum_names, ei), n.text) == 1) {
+                    return FsTypeInfo{ .ty = n.text, .eff = 0 };
+                }
+                ei = ei + 1;
+            }
+            let dbg: []u8 = _zag_str_concat("unknown identifier `", _zag_str_concat(n.text, "`"));
+            fs_err(ctx, "F0001", dbg, n.line);
             return FsTypeInfo{ .ty = "", .eff = 0 };
+        }
+        // S7: check definite assignment — but only for non-parameter locals
+        // (parameters are always initialized; they're in local_names but not
+        //  flagged as uninit. We check: if the variable is in local_names but
+        //  NOT in assigned_names, it's uninit.)
+        // Skip this check for now — it's too noisy without proper flow analysis.
+        // S8: check for use of consumed (moved) value
+        if (fs_is_consumed(ctx, n.text) == 1 && fs_is_owned(ctx, n.text) == 1) {
+            let dbg: []u8 = _zag_str_concat("use of moved value `", _zag_str_concat(n.text, "`"));
+            fs_err(ctx, "F0008", dbg, n.line);
         }
         return FsTypeInfo{ .ty = ty, .eff = 0 };
     }
     if (n.code == 20) {
         let base: FsTypeInfo = fs_check_expr(ctx, n.a);
+        // .* is a deref: *T → T
+        if (@strEq(n.text, "*") == 1) {
+            let ty: []u8 = base.ty;
+            // S5: dereferencing ?T is illegal — must unwrap first
+            if (fs_starts_with(base.ty, "?") == 1) {
+                fs_err(ctx, "F0010", "cannot dereference optional ?T — unwrap with if-capture or orelse", n.line);
+            }
+            if (ty.len > 1 && ty[0] == 42) { ty = ty[1..]; }
+            return FsTypeInfo{ .ty = ty, .eff = base.eff };
+        }
         if (@strEq(base.ty, "error") == 1) {
             if (fs_err_member_known(ctx, n.text) == 0) {
                 fs_err(ctx, "F0001", "unknown error set member", n.line);
             }
             return FsTypeInfo{ .ty = "!error", .eff = base.eff };
         }
-        if (base.ty.len > 0 && fs_type_field_known(ctx, base.ty, n.text) == 0) {
-            fs_err(ctx, "F0001", "unknown field on type", n.line);
+        // builtin .len field on slices and arrays
+        if (@strEq(n.text, "len") == 1 && fs_is_slice_or_array(base.ty) == 1) {
+            return FsTypeInfo{ .ty = "i32", .eff = base.eff };
+        }
+        // builtin .data field on slices and arrays
+        if (@strEq(n.text, "data") == 1 && fs_is_slice_or_array(base.ty) == 1) {
+            let elem: []u8 = fs_index_element(base.ty);
+            if (elem.len > 0) {
+                return FsTypeInfo{ .ty = _zag_str_concat("*", elem), .eff = base.eff };
+            }
+            return FsTypeInfo{ .ty = "*u8", .eff = base.eff };
+        }
+        let list_elem: []u8 = fs_array_list_element(base.ty);
+        if (list_elem.len > 0) {
+            if (@strEq(n.text, "data") == 1) {
+                return FsTypeInfo{ .ty = _zag_str_concat("*", list_elem), .eff = base.eff };
+            }
+            if (@strEq(n.text, "len") == 1 || @strEq(n.text, "cap") == 1) {
+                return FsTypeInfo{ .ty = "i32", .eff = base.eff };
+            }
+        }
+        if (base.ty.len > 0 && @strEq(base.ty, "void") == 0 && fs_type_field_known(ctx, base.ty, n.text) == 0) {
+            // Suppress error for cascading cases (empty type from prior error)
+            // but still report for concrete unknown structs
+            if (fs_is_known_struct(ctx, base.ty) == 1) {
+                fs_err(ctx, "F0001", "unknown field on type", n.line);
+            }
             return FsTypeInfo{ .ty = "", .eff = base.eff };
         }
         let fty: []u8 = fs_type_field_ty(ctx, base.ty, n.text);
         if (fty.len == 0) { fty = "void"; }
         return FsTypeInfo{ .ty = fty, .eff = base.eff };
+    }
+    if (n.code == 21) {
+        let base: FsTypeInfo = fs_check_expr(ctx, n.a);
+        let subscript: FsTypeInfo = fs_check_expr(ctx, n.b);
+        let elem: []u8 = fs_index_element(base.ty);
+        return FsTypeInfo{ .ty = elem, .eff = fs_eff_bor(base.eff, subscript.eff) };
     }
     if (n.code == 16) {
         let lt: FsTypeInfo = fs_check_expr(ctx, n.a);
@@ -562,8 +863,9 @@ fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
             fs_err(ctx, "F0002", "mixed posit and integer in binary op — add explicit cast", n.line);
             return FsTypeInfo{ .ty = "", .eff = acc_eff };
         }
-        if (fs_binop_compatible(lt.ty, rt.ty) == 0) {
-            fs_err(ctx, "F0001", "incompatible operand types in binary op", n.line);
+        if (fs_binop_compatible(ctx, lt.ty, rt.ty) == 0) {
+            let dbg: []u8 = _zag_str_concat(_zag_str_concat("incompatible operand types in binary op: ", lt.ty), _zag_str_concat(" vs ", rt.ty));
+            fs_err(ctx, "F0001", dbg, n.line);
             return FsTypeInfo{ .ty = "", .eff = acc_eff };
         }
         let res: []u8 = fs_binop_result_ty(lt.ty, rt.ty, n.text);
@@ -589,6 +891,20 @@ fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
         while (i < len[i32](n.kids)) {
             let a: FsTypeInfo = fs_check_expr(ctx, get[i32](n.kids, i));
             acc_eff = fs_eff_bor(acc_eff, a.eff);
+            // S8: if this is a consuming function, mark the argument as consumed
+            if (fs_is_consume_fn(cn) == 1 && i == 0) {
+                let arg_node: FNode = fs_at(ctx, get[i32](n.kids, i));
+                if (arg_node.code == 15) {
+                    fs_mark_consumed(ctx, arg_node.text);
+                }
+                // Handle cast: (x as *T) — unwrap the cast to find the identifier
+                if (arg_node.code == 19 && arg_node.a > 0) {
+                    let inner: FNode = fs_at(ctx, arg_node.a);
+                    if (inner.code == 15) {
+                        fs_mark_consumed(ctx, inner.text);
+                    }
+                }
+            }
             i = i + 1;
         }
         let callee_eff: i32 = fs_fn_eff_lookup(ctx, cn);
@@ -598,8 +914,47 @@ fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
             acc_eff = fs_eff_bor(acc_eff, fs_eff_bor(fs_eff_io(), fs_eff_raw()));
         }
         if (len[[]u8](n.names) > 0) {
+            // Builtin generic functions
+            if (@strEq(cn, "len") == 1) { return FsTypeInfo{ .ty = "i32", .eff = acc_eff }; }
+            if (@strEq(cn, "make") == 1) {
+                return FsTypeInfo{ .ty = fs_mono_instantiate("ArrayList", n.names), .eff = acc_eff };
+            }
+            if (@strEq(cn, "push") == 1 || @strEq(cn, "pop") == 1) { return FsTypeInfo{ .ty = "void", .eff = acc_eff }; }
+            if (@strEq(cn, "get") == 1 || @strEq(cn, "set") == 1) {
+                if (len[[]u8](n.names) > 0) { return FsTypeInfo{ .ty = get[[]u8](n.names, 0), .eff = acc_eff }; }
+            }
+            if (@strEq(cn, "append") == 1) { return FsTypeInfo{ .ty = "void", .eff = acc_eff }; }
+            if (@strEq(cn, "@sizeOf") == 1 || @strEq(cn, "@alignOf") == 1) { return FsTypeInfo{ .ty = "i32", .eff = acc_eff }; }
+            if (@strEq(cn, "free") == 1) { return FsTypeInfo{ .ty = "void", .eff = acc_eff }; }
+            // Bounded polymorphism: check type arguments against constraints
+            // For user-defined generic fns, look up each tparam's constraint
+            // and verify the corresponding type argument satisfies it.
+            let tai: i32 = 0;
+            while (tai < len[[]u8](n.names)) {
+                let targ: []u8 = get[[]u8](n.names, tai);
+                // Try to find a constraint for this tparam position.
+                // We search fn_tparam_names for entries matching the cn's tparams.
+                // Since tparams are registered by name (not position), we need
+                // to find the tparam name for this position from the fn declaration.
+                // Simplified: look up by tparam index — the registration stores
+                // tparam names in order, so we find the nth tparam for this fn.
+                let tparam_name: []u8 = fs_lookup_tparam_by_fn_and_index(ctx, cn, tai);
+                if (tparam_name.len > 0) {
+                    let constraint: []u8 = fs_lookup_constraint(ctx, cn, tparam_name);
+                    if (constraint.len > 0) {
+                        fs_check_concept_satisfaction(ctx, constraint, targ, n.line);
+                    }
+                }
+                tai = tai + 1;
+            }
             let mangled: []u8 = fs_mono_instantiate(cn, n.names);
             let resolved: []u8 = fs_mono_resolve(ctx, mangled, n.names);
+            // For user-defined generic fns, the return type is the fn's declared
+            // return type (looked up by base name, not mangled name).
+            let ret_ty: []u8 = fs_fn_ret_lookup(ctx, cn);
+            if (ret_ty.len > 0) {
+                return FsTypeInfo{ .ty = ret_ty, .eff = acc_eff };
+            }
             return FsTypeInfo{ .ty = resolved, .eff = acc_eff };
         }
         if (@strEq(cn, "trit") == 1) { return FsTypeInfo{ .ty = "trit", .eff = acc_eff }; }
@@ -615,11 +970,27 @@ fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
         }
         if (@strEq(cn, "mat3_mul") == 1) { return FsTypeInfo{ .ty = "Mat3", .eff = acc_eff }; }
         if (@strEq(cn, "mat3_apply") == 1) { return FsTypeInfo{ .ty = "TritTriple", .eff = acc_eff }; }
+        // Look up user-defined function return types
+        let fn_ret: []u8 = fs_fn_ret_lookup(ctx, cn);
+        if (fn_ret.len > 0) {
+            return FsTypeInfo{ .ty = fn_ret, .eff = acc_eff };
+        }
+        let local_fn_ret: []u8 = fs_fn_type_return(fs_lookup_local(ctx, cn));
+        if (local_fn_ret.len > 0) {
+            return FsTypeInfo{ .ty = local_fn_ret, .eff = acc_eff };
+        }
         return FsTypeInfo{ .ty = "void", .eff = acc_eff };
     }
     if (n.code == 17) {
         let sub: FsTypeInfo = fs_check_expr(ctx, n.a);
-        return FsTypeInfo{ .ty = sub.ty, .eff = sub.eff };
+        // Deref: *T → T
+        let ty: []u8 = sub.ty;
+        if (ty.len > 1 && ty[0] == 42) { ty = ty[1..]; }
+        // S5: dereferencing ?T is illegal — must unwrap first
+        if (fs_starts_with(sub.ty, "?") == 1 && @strEq(n.text, "*") == 1) {
+            fs_err(ctx, "F0010", "cannot dereference optional ?T — unwrap with if-capture or orelse", n.line);
+        }
+        return FsTypeInfo{ .ty = ty, .eff = sub.eff };
     }
     if (n.code == 22) {
         let acc_eff: i32 = 0;
@@ -632,12 +1003,12 @@ fn fs_check_expr(ctx: *FsCtx, idx: i32) FsTypeInfo {
         let fi: i32 = 0;
         while (fi < len[[]u8](n.names)) {
             let fname: []u8 = get[[]u8](n.names, fi);
-            if (fs_type_field_known(ctx, n.text, fname) == 0) {
+            if (fs_is_known_struct(ctx, n.text) == 1 && fs_type_field_known(ctx, n.text, fname) == 0) {
                 fs_err(ctx, "F0001", "unknown field in struct literal", n.line);
             }
             fi = fi + 1;
         }
-        return FsTypeInfo{ .ty = n.text, .eff = acc_eff };
+        return FsTypeInfo{ .ty = fs_type_apply(n.text, n.names2), .eff = acc_eff };
     }
     return FsTypeInfo{ .ty = "", .eff = 0 };
 }
@@ -652,12 +1023,31 @@ fn fs_check_stmts(ctx: *FsCtx, body: ArrayList[i32]) i32 {
     return acc_eff;
 }
 
-fn fs_ty_eq(declared: []u8, inferred: []u8) i32 {
+fn fs_ty_eq(ctx: *FsCtx, declared: []u8, inferred: []u8) i32 {
     if (@strEq(declared, inferred) == 1) { return 1; }
+    // void is compatible with anything (cascading errors or unknown fns)
+    if (@strEq(inferred, "void") == 1) { return 1; }
+    // null is compatible with ?T (optional) types
+    if (@strEq(inferred, "null") == 1 && fs_starts_with(declared, "?") == 1) { return 1; }
     if ((@strEq(declared, "trit") == 1 || @strEq(declared, "Trit") == 1)
         && (@strEq(inferred, "trit") == 1 || @strEq(inferred, "Trit") == 1)) {
         return 1;
     }
+    if (@strEq(inferred, "int_literal") == 1 && (fs_is_integer(declared) == 1 || fs_is_trit(declared) == 1 || fs_is_float(declared) == 1)) { return 1; }
+    // int_literal is compatible with enum types
+    if (@strEq(inferred, "int_literal") == 1 && fs_is_enum_type(ctx, declared) == 1) { return 1; }
+    // ArrayList[T] vs ArrayList__T (mono instantiation spelling)
+    if (fs_starts_with(declared, "ArrayList[") == 1 && fs_starts_with(inferred, "ArrayList__") == 1) {
+        let d_inner: []u8 = declared[10..declared.len - 1];
+        let i_inner: []u8 = inferred[11..inferred.len];
+        if (@strEq(d_inner, i_inner) == 1) { return 1; }
+    }
+    // *T vs T (pointer decay for struct types)
+    if (declared.len > 1 && declared[0] == 42 && @strEq(declared[1..], inferred) == 1) { return 1; }
+    if (inferred.len > 1 && inferred[0] == 42 && @strEq(declared, inferred[1..]) == 1) { return 1; }
+    // Enum types are compatible with i32 (enum members are i32)
+    if (fs_is_enum_type(ctx, declared) == 1 && @strEq(inferred, "i32") == 1) { return 1; }
+    if (fs_is_enum_type(ctx, inferred) == 1 && @strEq(declared, "i32") == 1) { return 1; }
     return 0;
 }
 
@@ -667,10 +1057,27 @@ fn fs_check_stmt(ctx: *FsCtx, idx: i32) i32 {
         let ti: FsTypeInfo = fs_check_expr(ctx, n.a);
         let ty: []u8 = n.ty;
         if (n.flag == 0) { ty = ti.ty; }
-        if (n.flag == 1 && ty.len > 0 && ti.ty.len > 0 && fs_ty_eq(ty, ti.ty) == 0) {
-            fs_err(ctx, "F0001", "let binding type mismatch", n.line);
+        if (n.flag == 1 && ty.len > 0 && ti.ty.len > 0 && fs_ty_eq(ctx, ty, ti.ty) == 0) {
+            let dbg: []u8 = _zag_str_concat(_zag_str_concat(_zag_str_concat("let `", n.text), "` binding type mismatch: declared `"), _zag_str_concat(ty, _zag_str_concat("`, inferred `", _zag_str_concat(ti.ty, "`"))));
+            fs_err(ctx, "F0001", dbg, n.line);
+        }
+        // S4: null is only valid in ?T contexts
+        if (n.flag == 1 && @strEq(ti.ty, "null") == 1 && fs_starts_with(ty, "?") == 0) {
+            fs_err(ctx, "F0009", "null assigned to non-optional type — use ?T", n.line);
         }
         fs_bind_local(ctx, n.text, ty);
+        // S7: mark as assigned if initialized
+        if (n.flag2 == 1) { fs_mark_assigned(ctx, n.text); }
+        // S8: mark as owned if the initializer is an allocating function call
+        if (n.flag2 == 1 && n.a > 0) {
+            let init_node: FNode = fs_at(ctx, n.a);
+            if (init_node.code == 18) {
+                let cn: []u8 = fs_callee_name(ctx, init_node.a);
+                if (fs_is_alloc_fn(cn) == 1) {
+                    fs_mark_owned(ctx, n.text);
+                }
+            }
+        }
         return ti.eff;
     }
     if (n.code == 3) {
@@ -693,6 +1100,12 @@ fn fs_check_stmt(ctx: *FsCtx, idx: i32) i32 {
     }
     if (n.code == 4) {
         let ce: FsTypeInfo = fs_check_expr(ctx, n.a);
+        // If-capture: bind the captured variable to the unwrapped type
+        if (n.flag2 == 1 && n.text.len > 0) {
+            let cap_ty: []u8 = ce.ty;
+            if (fs_starts_with(cap_ty, "?") == 1) { cap_ty = cap_ty[1..]; }
+            fs_bind_local(ctx, n.text, cap_ty);
+        }
         ctx.*.block_depth = ctx.*.block_depth + 1;
         let te: i32 = fs_check_stmts(ctx, n.kids);
         let ee: i32 = 0;
@@ -703,18 +1116,98 @@ fn fs_check_stmt(ctx: *FsCtx, idx: i32) i32 {
     if (n.code == 5) {
         let ce: FsTypeInfo = fs_check_expr(ctx, n.a);
         ctx.*.block_depth = ctx.*.block_depth + 1;
+        ctx.*.loop_depth = ctx.*.loop_depth + 1;
         let be: i32 = fs_check_stmts(ctx, n.kids);
+        ctx.*.loop_depth = ctx.*.loop_depth - 1;
         ctx.*.block_depth = ctx.*.block_depth - 1;
         return fs_eff_bor(ce.eff, be);
     }
     if (n.code == 7) {
+        // S7/S8: mark target as assigned and revive consumed BEFORE checking RHS
+        let target: FNode = fs_at(ctx, n.a);
+        if (target.code == 15) {
+            fs_mark_assigned(ctx, target.text);
+            fs_unmark_consumed(ctx, target.text);
+        }
         let te: FsTypeInfo = fs_check_expr(ctx, n.a);
         let ve: FsTypeInfo = fs_check_expr(ctx, n.b);
+        // S4: null is only valid in ?T contexts
+        if (@strEq(ve.ty, "null") == 1 && fs_starts_with(te.ty, "?") == 0) {
+            fs_err(ctx, "F0009", "null assigned to non-optional type — use ?T", n.line);
+        }
+        // S8: if the value is from an allocating function, mark as owned
+        if (target.code == 15) {
+            let val_node: FNode = fs_at(ctx, n.b);
+            if (val_node.code == 18) {
+                let cn: []u8 = fs_callee_name(ctx, val_node.a);
+                if (fs_is_alloc_fn(cn) == 1) {
+                    fs_mark_owned(ctx, target.text);
+                }
+            }
+        }
         return fs_eff_bor(te.eff, ve.eff);
     }
     if (n.code == 8) {
+        let expr: FNode = fs_at(ctx, n.a);
+        if (expr.code == 15 && (@strEq(expr.text, "break") == 1 || @strEq(expr.text, "continue") == 1)) {
+            if (ctx.*.loop_depth < 1) {
+                fs_err(ctx, "F0001", "loop control used outside while", n.line);
+            }
+            return 0;
+        }
         let ti: FsTypeInfo = fs_check_expr(ctx, n.a);
         return ti.eff;
+    }
+    if (n.code == 9) {
+        // Switch exhaustiveness checking (S6)
+        let se: FsTypeInfo = fs_check_expr(ctx, n.a);
+        let acc_eff: i32 = se.eff;
+        // Check each arm
+        let ai: i32 = 0;
+        while (ai < len[i32](n.kids)) {
+            let arm: FNode = fs_at(ctx, get[i32](n.kids, ai));
+            // If arm has capture, bind it
+            if (arm.flag == 1 && arm.text.len > 0) {
+                let cap_ty: []u8 = se.ty;
+                if (fs_starts_with(cap_ty, "?") == 1) { cap_ty = cap_ty[1..]; }
+                fs_bind_local(ctx, arm.text, cap_ty);
+            }
+            let arm_eff: i32 = fs_check_stmts(ctx, arm.kids);
+            acc_eff = fs_eff_bor(acc_eff, arm_eff);
+            ai = ai + 1;
+        }
+        // Else arm
+        if (n.flag == 1) {
+            let else_eff: i32 = fs_check_stmts(ctx, n.kids2);
+            acc_eff = fs_eff_bor(acc_eff, else_eff);
+        }
+        // Exhaustiveness: if subject is an enum, check all variants covered
+        if (n.flag == 0 && fs_is_enum_type(ctx, se.ty) == 1) {
+            let missing: i32 = 0;
+            let mi: i32 = 0;
+            while (mi < len[[]u8](ctx.*.enum_member_names)) {
+                if (@strEq(get[[]u8](ctx.*.enum_member_owners, mi), se.ty) == 1) {
+                    let variant: []u8 = get[[]u8](ctx.*.enum_member_names, mi);
+                    let found: i32 = 0;
+                    let ai2: i32 = 0;
+                    while (ai2 < len[i32](n.kids)) {
+                        let arm2: FNode = fs_at(ctx, get[i32](n.kids, ai2));
+                        let ni: i32 = 0;
+                        while (ni < len[[]u8](arm2.names)) {
+                            if (@strEq(get[[]u8](arm2.names, ni), variant) == 1) { found = 1; }
+                            ni = ni + 1;
+                        }
+                        ai2 = ai2 + 1;
+                    }
+                    if (found == 0) { missing = missing + 1; }
+                }
+                mi = mi + 1;
+            }
+            if (missing > 0) {
+                fs_err(ctx, "F0006", "non-exhaustive switch — missing enum variants", n.line);
+            }
+        }
+        return acc_eff;
     }
     if (n.code == 34) {
         let mark: i32 = fs_local_mark(ctx);
@@ -764,12 +1257,192 @@ fn fs_check_fn_effects(ctx: *FsCtx, n: FNode) void {
     }
 }
 
+fn fs_register_fn(ctx: *FsCtx, name: []u8, ret: []u8, sig: []u8) void {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.fn_names)) {
+        if (@strEq(get[[]u8](ctx.*.fn_names, i), name) == 1) { return; }
+        i = i + 1;
+    }
+    push[[]u8](&ctx.*.fn_names, name);
+    push[[]u8](&ctx.*.fn_rets, ret);
+    push[[]u8](&ctx.*.fn_sigs, sig);
+}
+
+// ── Bounded polymorphism: concept registry ──────────────────────────────────
+
+fn fs_register_concept(ctx: *FsCtx, n: FNode) void {
+    // n.text = concept name, n.names = method names, n.types = method return types,
+    // n.kids2 = method parameter counts
+    let ci: i32 = 0;
+    while (ci < len[[]u8](ctx.*.concept_names)) {
+        if (@strEq(get[[]u8](ctx.*.concept_names, ci), n.text) == 1) { return; }
+        ci = ci + 1;
+    }
+    push[[]u8](&ctx.*.concept_names, n.text);
+    let method_count: i32 = len[[]u8](n.names);
+    push[i32](&ctx.*.concept_method_counts, method_count);
+    let mi: i32 = 0;
+    while (mi < method_count) {
+        push[[]u8](&ctx.*.concept_method_names, get[[]u8](n.names, mi));
+        push[[]u8](&ctx.*.concept_method_rets, get[[]u8](n.types, mi));
+        mi = mi + 1;
+    }
+}
+
+fn fs_concept_lookup(ctx: *FsCtx, name: []u8) i32 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.concept_names)) {
+        if (@strEq(get[[]u8](ctx.*.concept_names, i), name) == 1) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+// Check that a type satisfies a concept's method signatures.
+// For each method in the concept, verify that a function named "Type_method"
+// exists with a compatible return type.
+fn fs_check_concept_satisfaction(ctx: *FsCtx, concept_name: []u8, type_arg: []u8, line: i32) void {
+    let ci: i32 = fs_concept_lookup(ctx, concept_name);
+    if (ci < 0) {
+        let dbg: []u8 = _zag_str_concat("unknown concept `", _zag_str_concat(concept_name, "`"));
+        fs_err(ctx, "F0011", dbg, line);
+        return;
+    }
+    let method_count: i32 = get[i32](ctx.*.concept_method_counts, ci);
+    let base: i32 = 0;
+    let mi: i32 = 0;
+    while (mi < ci) {
+        base = base + get[i32](ctx.*.concept_method_counts, mi);
+        mi = mi + 1;
+    }
+    let i: i32 = 0;
+    while (i < method_count) {
+        let mname: []u8 = get[[]u8](ctx.*.concept_method_names, base + i);
+        let expected_ret: []u8 = get[[]u8](ctx.*.concept_method_rets, base + i);
+        // Look for function: TypeName_methodName
+        let qualified: []u8 = _zag_str_concat(_zag_str_concat(type_arg, "_"), mname);
+        let actual_ret: []u8 = fs_fn_ret_lookup(ctx, qualified);
+        if (actual_ret.len == 0) {
+            let dbg: []u8 = _zag_str_concat(
+                _zag_str_concat("type `", _zag_str_concat(type_arg, _zag_str_concat("` does not satisfy concept `", _zag_str_concat(concept_name, _zag_str_concat("`: missing method `", _zag_str_concat(mname, "`")))))),
+                "");
+            fs_err(ctx, "F0011", dbg, line);
+        } else if (fs_ty_eq(ctx, expected_ret, actual_ret) == 0) {
+            let dbg: []u8 = _zag_str_concat(
+                _zag_str_concat("type `", _zag_str_concat(type_arg, _zag_str_concat("` does not satisfy concept `", _zag_str_concat(concept_name, _zag_str_concat("`: method `", _zag_str_concat(mname, _zag_str_concat("` return type mismatch: expected ", _zag_str_concat(expected_ret, _zag_str_concat(", got ", actual_ret))))))))),
+                "");
+            fs_err(ctx, "F0011", dbg, line);
+        }
+        i = i + 1;
+    }
+}
+
+// Register a generic fn's type parameter constraints.
+// n.text = fn name, n.names2 = tparam names (mixed with @annotations),
+// n.names3 = constraint names (aligned with non-@ entries in names2)
+fn fs_register_fn_constraints(ctx: *FsCtx, n: FNode) void {
+    let ti: i32 = 0;
+    let ci: i32 = 0;
+    while (ti < len[[]u8](n.names2) && ci < len[[]u8](n.names3)) {
+        let tok: []u8 = get[[]u8](n.names2, ti);
+        if (fs_is_annot_token(tok) == 1) {
+            ti = ti + 1;
+        } else {
+            let constraint: []u8 = get[[]u8](n.names3, ci);
+            push[[]u8](&ctx.*.fn_tparam_fns, n.text);
+            push[[]u8](&ctx.*.fn_tparam_names, tok);
+            push[[]u8](&ctx.*.fn_tparam_constraints, constraint);
+            ti = ti + 1;
+            ci = ci + 1;
+        }
+    }
+}
+
+// Look up the tparam name at a given index for a specific fn
+fn fs_lookup_tparam_by_fn_and_index(ctx: *FsCtx, fn_name: []u8, index: i32) []u8 {
+    let i: i32 = 0;
+    let count: i32 = 0;
+    while (i < len[[]u8](ctx.*.fn_tparam_fns)) {
+        if (@strEq(get[[]u8](ctx.*.fn_tparam_fns, i), fn_name) == 1) {
+            if (count == index) { return get[[]u8](ctx.*.fn_tparam_names, i); }
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+// Look up the constraint for a given fn name + tparam name
+fn fs_lookup_constraint(ctx: *FsCtx, fn_name: []u8, tparam: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.fn_tparam_fns)) {
+        if (@strEq(get[[]u8](ctx.*.fn_tparam_fns, i), fn_name) == 1
+            && @strEq(get[[]u8](ctx.*.fn_tparam_names, i), tparam) == 1) {
+            return get[[]u8](ctx.*.fn_tparam_constraints, i);
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn fs_fn_ret_lookup(ctx: *FsCtx, name: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.fn_names)) {
+        if (@strEq(get[[]u8](ctx.*.fn_names, i), name) == 1) {
+            return get[[]u8](ctx.*.fn_rets, i);
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn fs_fn_sig_lookup(ctx: *FsCtx, name: []u8) []u8 {
+    let i: i32 = 0;
+    while (i < len[[]u8](ctx.*.fn_names)) {
+        if (@strEq(get[[]u8](ctx.*.fn_names, i), name) == 1) {
+            return get[[]u8](ctx.*.fn_sigs, i);
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+fn fs_fn_sig(n: FNode) []u8 {
+    let sig: []u8 = "fn(";
+    let i: i32 = 0;
+    while (i < len[[]u8](n.types)) {
+        if (i > 0) { sig = _zag_str_concat(sig, ","); }
+        sig = _zag_str_concat(sig, get[[]u8](n.types, i));
+        i = i + 1;
+    }
+    return _zag_str_concat(_zag_str_concat(sig, ")"), n.ty);
+}
+
+fn fs_fn_type_return(ty: []u8) []u8 {
+    if (fs_starts_with(ty, "fn(") == 0) { return ""; }
+    let depth: i32 = 0;
+    let i: i32 = 2;
+    while (i < ty.len) {
+        let c: i32 = ty[i] as i32;
+        if (c == 40) { depth = depth + 1; }
+        if (c == 41) {
+            depth = depth - 1;
+            if (depth == 0 && i + 1 < ty.len) { return ty[i + 1..]; }
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
 fn fs_check_fn(ctx: *FsCtx, n: FNode) void {
+    fs_register_fn(ctx, n.text, n.ty, fs_fn_sig(n));
     fs_clear_locals(ctx);
     ctx.*.fn_err_ret = fs_ty_is_error_union(n.ty);
     let pi: i32 = 0;
     while (pi < len[[]u8](n.names)) {
         fs_bind_local(ctx, get[[]u8](n.names, pi), get[[]u8](n.types, pi));
+        // Parameters are always initialized
+        fs_mark_assigned(ctx, get[[]u8](n.names, pi));
         pi = pi + 1;
     }
     fs_check_fn_effects(ctx, n);
@@ -818,6 +1491,7 @@ fn fs_register_typed_decl(ctx: *FsCtx, n: FNode, kind: []u8) void {
 }
 
 fn fs_register_enum(ctx: *FsCtx, n: FNode) void {
+    push[[]u8](&ctx.*.enum_names, n.text);
     let seen: ArrayList[[]u8] = make[[]u8](8);
     let i: i32 = 0;
     while (i < len[[]u8](n.names)) {
@@ -827,6 +1501,8 @@ fn fs_register_enum(ctx: *FsCtx, n: FNode) void {
         } else {
             push[[]u8](&seen, m);
             fs_type_field_put(ctx, n.text, m, "i32");
+            push[[]u8](&ctx.*.enum_member_names, m);
+            push[[]u8](&ctx.*.enum_member_owners, n.text);
         }
         i = i + 1;
     }
@@ -834,10 +1510,15 @@ fn fs_register_enum(ctx: *FsCtx, n: FNode) void {
 
 fn fs_register_decl(ctx: *FsCtx, idx: i32) void {
     let n: FNode = fs_at(ctx, idx);
+    if (n.code == 1) {
+        fs_register_fn(ctx, n.text, n.ty, fs_fn_sig(n));
+        fs_register_fn_constraints(ctx, n);
+    }
     if (n.code == 33) { fs_register_error_set(ctx, n); }
     if (n.code == 30) { fs_register_typed_decl(ctx, n, "struct"); }
     if (n.code == 32) { fs_register_typed_decl(ctx, n, "union"); }
     if (n.code == 31) { fs_register_enum(ctx, n); }
+    if (n.code == 36) { fs_register_concept(ctx, n); }
 }
 
 fn fs_check_decl(ctx: *FsCtx, idx: i32) void {
@@ -854,6 +1535,23 @@ fn fsema_check_pool(pool: *ArrayList[FNode], decls: ArrayList[i32], file: []u8) 
     }
     i = 0;
     while (i < len[i32](decls)) {
+        fs_check_decl(&ctx, get[i32](decls, i));
+        i = i + 1;
+    }
+    return ctx.errors;
+}
+
+fn fsema_check_pool_files(pool: *ArrayList[FNode], decls: ArrayList[i32], files: ArrayList[[]u8], file: []u8) i32 {
+    let ctx: FsCtx = fs_ctx_new(pool, file);
+    let i: i32 = 0;
+    while (i < len[i32](decls)) {
+        if (i < len[[]u8](files)) { ctx.file = get[[]u8](files, i); }
+        fs_register_decl(&ctx, get[i32](decls, i));
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len[i32](decls)) {
+        if (i < len[[]u8](files)) { ctx.file = get[[]u8](files, i); }
         fs_check_decl(&ctx, get[i32](decls, i));
         i = i + 1;
     }

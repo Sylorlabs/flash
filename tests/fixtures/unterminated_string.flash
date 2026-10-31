@@ -1,0 +1,2 @@
+fn main() i32 {
+    let value: []u8 = "unterminated

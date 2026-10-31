@@ -139,10 +139,13 @@ fn fp_parse_type(p: *FlashParser) []u8 {
 fn fp_op_prec(op: []u8) i32 {
     if (@strEq(op, "||")) { return 1; }
     if (@strEq(op, "&&")) { return 2; }
-    if (@strEq(op, "==") || @strEq(op, "!=")) { return 3; }
-    if (@strEq(op, "<") || @strEq(op, ">") || @strEq(op, "<=") || @strEq(op, ">=")) { return 4; }
-    if (@strEq(op, "+") || @strEq(op, "-")) { return 5; }
-    if (@strEq(op, "*") || @strEq(op, "/") || @strEq(op, "%")) { return 6; }
+    if (@strEq(op, "^")) { return 3; }
+    if (@strEq(op, "&")) { return 4; }
+    if (@strEq(op, "==") || @strEq(op, "!=")) { return 5; }
+    if (@strEq(op, "<") || @strEq(op, ">") || @strEq(op, "<=") || @strEq(op, ">=")) { return 6; }
+    if (@strEq(op, "<<") || @strEq(op, ">>")) { return 7; }
+    if (@strEq(op, "+") || @strEq(op, "-")) { return 8; }
+    if (@strEq(op, "*") || @strEq(op, "/") || @strEq(op, "%")) { return 9; }
     return 0;
 }
 

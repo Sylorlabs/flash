@@ -1,0 +1,22 @@
+# flash coordinate manifest
+name = ""
+version = ""
+peak_power_mw = 
+dominant_pol = 
+[paths]
+segment  { op = "", from = (, , ), to = (, , ), power_mw = , pol = , pcm_row = , pcm_col = , phase_a_rad = , phase_b_rad = , phase_result_rad = , lattice_op =  }
+panic: slice index out of bounds
+mutrit_addtrit_multrit_negtrit_nandwavebeamphase0.1.0trit_addtrit_multrit_nand
+(,,)(,,)remap deg= a= b= inv= axX= pc= next=compose=,,sig= det= mm=cap= count=mm1= mm2=lin= back=bounds=lanes= poolcap=off= ch= vox= lane= rot= back= nonecm_entries=cm100= rot= mm=(,,)group1=resolve_mm5=,,probespatial_probe: ok
+zag runtime: invalid negative allocation size
+zag runtime: allocation failed
+zag runtime: invalid negative allocation size
+zag runtime: large allocation provenance registry exhausted
+zag runtime: overlapping large allocation
+zag runtime: invalid or double free
+zag runtime: invalid unregistered large allocation
+zag runtime: large allocation unmap failed
+zag runtime: invalid or double free
+panic: division by zero
+zag runtime: invalid negative realloc size
+zag runtime: realloc of invalid or freed allocation

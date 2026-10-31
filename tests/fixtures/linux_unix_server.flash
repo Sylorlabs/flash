@@ -1,0 +1,225 @@
+@import("../../flash/runtime/linux.flash")
+
+fn unix_server_expect(ok: i32, message: []u8) i32 {
+    if (ok == 0) { _zag_print("FAIL "); _zag_println(message); return 1; }
+    return 0;
+}
+
+fn unix_server_fd_cloexec(fd: i64) i32 {
+    let flags: i64 = linux_fd_flags(fd);
+    if (flags >= 0 && (flags % 2) == 1) { return 1; }
+    return 0;
+}
+
+fn unix_server_fd_nonblocking(fd: i64) i32 {
+    let flags: i64 = linux_fd_status_flags(fd);
+    if (flags >= 0 && ((flags / linux_o_nonblock()) % 2) == 1) { return 1; }
+    return 0;
+}
+
+fn main() i32 {
+    let failures: i32 = 0;
+    let path: []u8 = _zag_str_concat("/tmp/flash-unix-server-",
+        _zag_i64_to_str(linux_getpid() as i64));
+    path = _zag_str_concat(path, ".sock");
+    let neighbor: []u8 = _zag_str_concat(path, ".neighbor");
+
+    let initial_cleanup: LinuxUnixUnlinkResult = linux_unix_unlink_exact(path);
+    let initial_neighbor_cleanup: LinuxUnixUnlinkResult = linux_unix_unlink_exact(neighbor);
+    failures = failures + unix_server_expect(initial_cleanup.path_valid == 1
+        && ((initial_cleanup.missing == 1 && initial_cleanup.error_code == (0 - 2))
+            || (initial_cleanup.removed == 1 && initial_cleanup.error_code == 0))
+        && initial_neighbor_cleanup.path_valid == 1
+        && ((initial_neighbor_cleanup.missing == 1
+                && initial_neighbor_cleanup.error_code == (0 - 2))
+            || (initial_neighbor_cleanup.removed == 1
+                && initial_neighbor_cleanup.error_code == 0)),
+        "exact initial cleanup handles absent or crashed-run paths");
+
+    let empty_listen: LinuxUnixListenResult = linux_unix_listen("", 1);
+    let invalid_backlog: LinuxUnixListenResult = linux_unix_listen(path, 0);
+    let excessive_backlog: LinuxUnixListenResult = linux_unix_listen(path, 4097);
+    let too_long: ArrayList[u8] = make[u8](108);
+    let long_listen: LinuxUnixListenResult = linux_unix_listen(
+        too_long.data[0..108], 1);
+    let empty_connect: LinuxConnectResult = linux_unix_connect("");
+    let long_connect: LinuxConnectResult = linux_unix_connect(too_long.data[0..108]);
+    failures = failures + unix_server_expect(empty_listen.error_code == (0 - 22)
+        && empty_listen.fd < 0 && invalid_backlog.error_code == (0 - 22)
+        && invalid_backlog.fd < 0 && excessive_backlog.error_code == (0 - 22)
+        && excessive_backlog.fd < 0 && long_listen.error_code == (0 - 22)
+        && long_listen.fd < 0 && empty_connect.error_code == (0 - 22)
+        && empty_connect.fd < 0 && long_connect.error_code == (0 - 22)
+        && long_connect.fd < 0,
+        "pathname and backlog bounds reject without descriptor or buffer ownership");
+    free[u8](&too_long);
+
+    let embedded: ArrayList[u8] = make[u8](3);
+    embedded.data[0] = 97; embedded.data[1] = 0; embedded.data[2] = 98;
+    let embedded_listen: LinuxUnixListenResult = linux_unix_listen(
+        embedded.data[0..3], 1);
+    let embedded_unlink: LinuxUnixUnlinkResult = linux_unix_unlink_exact(
+        embedded.data[0..3]);
+    let embedded_connect: LinuxConnectResult = linux_unix_connect(embedded.data[0..3]);
+    failures = failures + unix_server_expect(embedded_listen.error_code == (0 - 22)
+        && embedded_listen.fd < 0 && embedded_unlink.path_valid == 0
+        && embedded_unlink.error_code == (0 - 22)
+        && embedded_connect.connected == 0 && embedded_connect.fd < 0
+        && embedded_connect.error_code == (0 - 22),
+        "embedded NUL cannot truncate an exact pathname");
+    free[u8](&embedded);
+
+    let listener: LinuxUnixListenResult = linux_unix_listen(path, 8);
+    let listener_path_status: LinuxFileStatus = linux_unix_path_status_exact(path);
+    failures = failures + unix_server_expect(listener.listening == 1
+        && listener.path_bound == 1 && listener.fd >= 0
+        && listener.cloexec_applied == 1 && listener.nonblocking_applied == 1
+        && listener.permissions_applied == 1
+        && unix_server_fd_cloexec(listener.fd) == 1
+        && unix_server_fd_nonblocking(listener.fd) == 1
+        && listener_path_status.valid == 1
+        && (listener_path_status.mode % 512) == 384,
+        "listener owns one CLOEXEC nonblocking descriptor and an exact 0600 node");
+
+    if (listener.listening == 1) {
+        let timed: LinuxUnixAcceptResult = linux_unix_accept_timeout(listener.fd, 0);
+        failures = failures + unix_server_expect(timed.accepted == 0
+            && timed.timed_out == 1 && timed.error_code == (0 - 110)
+            && timed.fd < 0,
+            "empty listener accept observes an absolute zero deadline");
+
+        let duplicate: LinuxUnixListenResult = linux_unix_listen(path, 1);
+        failures = failures + unix_server_expect(duplicate.listening == 0
+            && duplicate.path_bound == 0 && duplicate.error_code == (0 - 98)
+            && duplicate.last_closed_fd >= 0 && duplicate.close_error == 0
+            && linux_fd_flags(duplicate.last_closed_fd) == (0 - 9),
+            "duplicate bind closes only its failed descriptor");
+
+        let client: LinuxConnectResult = linux_unix_connect(path);
+        failures = failures + unix_server_expect(client.connected == 1
+            && client.fd >= 0 && unix_server_fd_cloexec(client.fd) == 1,
+            "pathname client connects with CLOEXEC");
+        let accepted: LinuxUnixAcceptResult = linux_unix_accept_timeout(listener.fd, 1000);
+        failures = failures + unix_server_expect(accepted.accepted == 1
+            && accepted.timed_out == 0 && accepted.error_code == 0
+            && accepted.fd >= 0 && accepted.cloexec_applied == 1
+            && unix_server_fd_cloexec(accepted.fd) == 1,
+            "deadline-aware accept transfers one CLOEXEC descriptor");
+
+        if (client.connected == 1 && accepted.accepted == 1) {
+            let outgoing: LinuxByteBuffer = linux_buffer_new(5);
+            linux_buffer_set_byte(&outgoing, 0, 108);
+            linux_buffer_set_byte(&outgoing, 1, 105);
+            linux_buffer_set_byte(&outgoing, 2, 103);
+            linux_buffer_set_byte(&outgoing, 3, 104);
+            linux_buffer_set_byte(&outgoing, 4, 116);
+            let sent: LinuxWriteAllResult = linux_write_buffer_all(client.fd, &outgoing);
+            let incoming: LinuxByteBuffer = linux_buffer_new(5);
+            let got: i64 = linux_read_into(accepted.fd, &incoming);
+            failures = failures + unix_server_expect(sent.complete == 1
+                && sent.written == 5 && got == 5
+                && linux_buffer_byte(&incoming, 0) == 108
+                && linux_buffer_byte(&incoming, 4) == 116,
+                "accepted pathname stream carries exact payload bytes");
+            linux_buffer_free(&incoming); linux_buffer_free(&outgoing);
+        }
+        if (client.connected == 1) {
+            let client_fd: i64 = client.fd;
+            failures = failures + unix_server_expect(linux_close(client_fd) == 0
+                && linux_fd_flags(client_fd) == (0 - 9),
+                "client descriptor closes exactly once");
+        }
+        if (accepted.accepted == 1) {
+            let accepted_fd: i64 = accepted.fd;
+            failures = failures + unix_server_expect(linux_close(accepted_fd) == 0
+                && linux_fd_flags(accepted_fd) == (0 - 9),
+                "accepted descriptor closes exactly once");
+        }
+        let listener_fd: i64 = listener.fd;
+        failures = failures + unix_server_expect(linux_close(listener_fd) == 0
+            && linux_fd_flags(listener_fd) == (0 - 9),
+            "listener descriptor closes without implicit pathname removal");
+
+        let closed_accept: LinuxUnixAcceptResult = linux_unix_accept_timeout(
+            listener_fd, 0);
+        failures = failures + unix_server_expect(closed_accept.accepted == 0
+            && closed_accept.error_code == (0 - 9),
+            "closed listener descriptor reports EBADF");
+    }
+
+    let invalid_accept: LinuxUnixAcceptResult = linux_unix_accept_timeout(0 - 1, 1);
+    let aliased_accept: LinuxUnixAcceptResult = linux_unix_accept_timeout(4294967296, 1);
+    let invalid_deadline: LinuxUnixAcceptResult = linux_unix_accept_timeout(0, 0 - 1);
+    failures = failures + unix_server_expect(invalid_accept.error_code == (0 - 22)
+        && aliased_accept.error_code == (0 - 22)
+        && invalid_deadline.error_code == (0 - 22),
+        "invalid descriptors and negative timeouts fail before accept");
+
+    let stale: LinuxUnixListenResult = linux_unix_listen(path, 1);
+    failures = failures + unix_server_expect(stale.listening == 0
+        && stale.path_bound == 0 && stale.error_code == (0 - 98)
+        && stale.last_closed_fd >= 0
+        && linux_fd_flags(stale.last_closed_fd) == (0 - 9),
+        "closed listener leaves consumer-owned stale pathname");
+
+    let neighbor_listener: LinuxUnixListenResult = linux_unix_listen(neighbor, 1);
+    failures = failures + unix_server_expect(neighbor_listener.listening == 1,
+        "neighbor pathname listener is independently owned");
+    let exact_cleanup: LinuxUnixUnlinkResult = linux_unix_unlink_exact(path);
+    let neighbor_duplicate: LinuxUnixListenResult = linux_unix_listen(neighbor, 1);
+    failures = failures + unix_server_expect(exact_cleanup.removed == 1
+        && exact_cleanup.error_code == 0 && neighbor_duplicate.error_code == (0 - 98)
+        && neighbor_duplicate.last_closed_fd >= 0
+        && linux_fd_flags(neighbor_duplicate.last_closed_fd) == (0 - 9),
+        "exact cleanup does not remove a neighboring pathname");
+
+    let reopened: LinuxUnixListenResult = linux_unix_listen(path, 1);
+    failures = failures + unix_server_expect(reopened.listening == 1
+        && reopened.path_bound == 1,
+        "explicit cleanup permits exact pathname rebinding");
+    if (reopened.listening == 1) {
+        let reopened_fd: i64 = reopened.fd;
+        let _close_reopened: i64 = linux_close(reopened_fd);
+        failures = failures + unix_server_expect(
+            linux_fd_flags(reopened_fd) == (0 - 9),
+            "reopened listener has no descriptor leak");
+    }
+    if (neighbor_listener.listening == 1) {
+        let neighbor_fd: i64 = neighbor_listener.fd;
+        let _close_neighbor: i64 = linux_close(neighbor_fd);
+        failures = failures + unix_server_expect(
+            linux_fd_flags(neighbor_fd) == (0 - 9),
+            "neighbor listener has no descriptor leak");
+    }
+    let final_cleanup: LinuxUnixUnlinkResult = linux_unix_unlink_exact(path);
+    let final_neighbor_cleanup: LinuxUnixUnlinkResult = linux_unix_unlink_exact(neighbor);
+    let repeated_cleanup: LinuxUnixUnlinkResult = linux_unix_unlink_exact(path);
+    failures = failures + unix_server_expect(final_cleanup.removed == 1
+        && final_neighbor_cleanup.removed == 1 && repeated_cleanup.missing == 1
+        && repeated_cleanup.error_code == (0 - 2),
+        "final exact cleanup is complete and idempotently observable");
+
+    let pair: LinuxFdPair = linux_socketpair_stream();
+    failures = failures + unix_server_expect(pair.ok == 1
+        && unix_server_fd_cloexec(pair.first) == 1
+        && unix_server_fd_cloexec(pair.second) == 1,
+        "socketpair returns only CLOEXEC descriptors");
+    if (pair.ok == 1) {
+        let blocking_accept: LinuxUnixAcceptResult = linux_unix_accept_timeout(
+            pair.first, 0);
+        failures = failures + unix_server_expect(blocking_accept.accepted == 0
+            && blocking_accept.timed_out == 0
+            && blocking_accept.error_code == (0 - 22),
+            "deadline accept rejects a blocking descriptor before polling");
+        let first_fd: i64 = pair.first; let second_fd: i64 = pair.second;
+        let _close_first: i64 = linux_close(first_fd);
+        let _close_second: i64 = linux_close(second_fd);
+        failures = failures + unix_server_expect(linux_fd_flags(first_fd) == (0 - 9)
+            && linux_fd_flags(second_fd) == (0 - 9),
+            "socketpair descriptors close without leaks");
+    }
+
+    if (failures == 0) { _zag_println("linux_unix_server: ok"); return 0; }
+    _zag_print("linux_unix_server failures="); _zag_println(_zag_i64_to_str(failures as i64));
+    return 1;
+}

@@ -1,0 +1,28 @@
+format=zagd-candidates-v2
+advisory=true
+executable_authority=false
+source_changes=false
+semantic_detail_level=full
+lifetime_analysis_available=true
+lifetime_advice_supported=false
+lifetime_advice_automatic=false
+lifetime_advice_source_changes=false
+lifetime_provenance=proven-foreground-ast
+lifetime_pairs=0
+lifetime_reusable_bytes=0
+lifetime_analysis_bound=64
+lifetime_validity=linux-x86_64-local-raw-word-zalloc-exactly-one-zfree-no-alias-escape-call-exposure
+selection=unsupported-roadmap-alternatives
+cpu_profile=x86-64-v1
+target_cache_key=linux-x86_64|x86-64-v1|sse2
+source=192347095	170402879	3775
+semantic_identity=451364325	566773611	471
+target=933995045	343102918	27
+generated=5
+finalists=0
+candidate=11	automatic=0	supported=0	equivalent=0	provenance=unknown	evidence_basis=unknown	validity=no executable validity conditions established	rejected_reason=exact buffer lifetime and non-overlap proof unavailable	runtime_ns=-1	memory_bytes=-1
+candidate=12	automatic=0	supported=0	equivalent=0	provenance=unknown	evidence_basis=unknown	validity=no executable validity conditions established	rejected_reason=temporary byte-size and allocator-body lifetime proof unavailable	runtime_ns=-1	memory_bytes=-1
+candidate=21	automatic=0	supported=0	equivalent=0	provenance=unknown	evidence_basis=unknown	validity=no executable validity conditions established	rejected_reason=layout rewrite and public-ABI equivalence proof unavailable	runtime_ns=-1	memory_bytes=-1
+candidate=31	automatic=0	supported=0	equivalent=0	provenance=unknown	evidence_basis=unknown	validity=no executable validity conditions established	rejected_reason=parallel execution and ordering equivalence are not implemented	runtime_ns=-1	memory_bytes=-1
+candidate=41	automatic=0	supported=0	equivalent=0	provenance=unknown	evidence_basis=unknown	validity=no executable validity conditions established	rejected_reason=physical GPU dispatch and device equivalence validation are not implemented	runtime_ns=-1	memory_bytes=-1
+checksum_first=633553381

@@ -114,6 +114,48 @@ run_flashc_example() {
     echo
 }
 
+# Run a flashc example that is expected to panic at runtime.
+# Args: name src panic_pattern [panic_pattern...]
+# Passes iff the program exits non-zero AND each panic_pattern appears in output.
+run_flashc_runtime_panic() {
+    local name="$1"
+    local src="$2"
+    shift 2
+
+    local stem
+    stem="$(basename "$src")"
+    stem="${stem%.flash.zag}"
+    stem="${stem%.flash}"
+    local out="$BIN_DIR/${stem}.flash.out"
+
+    echo "== test [$((TESTS_RUN + 1))]: flashc runtime-panic $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    rm -f $RT_STATE_CACHE_GLOB /tmp/flash_rt_state.ptr
+    local run_output
+    local rc=0
+    run_output="$(cd "$ROOT" && "$FLASHC" "$src" -o "$out" --run 2>&1)" || rc=$?
+
+    if [[ "$rc" -eq 0 ]]; then
+        fail "flashc runtime-panic $name (expected non-zero exit, got 0)"
+        echo "$run_output"
+        return 1
+    fi
+
+    if (("$#" > 0)); then
+        local pat
+        for pat in "$@"; do
+            if ! assert_output_contains "flashc runtime-panic $name" "$pat" "$run_output"; then
+                fail "flashc runtime-panic $name (panic pattern missing)"
+                return 1
+            fi
+        done
+    fi
+
+    pass
+    echo
+}
+
 run_flashc_check_reject() {
     local name="$1"
     local src="$2"
@@ -184,6 +226,35 @@ run_flashc_critic_suite() {
         "$CRITIC_DIR/harsh_error_sugar.flash"
     run_flashc_check_reject "harsh_error_catch" \
         "$CRITIC_DIR/harsh_error_catch.flash"
+
+    run_flashc_check_accept "concept_demo (bounded polymorphism)" \
+        "$ROOT/examples/concept_demo.flash"
+    run_flashc_check_reject "concept_violation (missing concept method)" \
+        "$CRITIC_DIR/concept_violation.flash"
+    run_flashc_check_reject "concept_ret_mismatch (wrong return type)" \
+        "$CRITIC_DIR/concept_ret_mismatch.flash"
+
+    run_flashc_check_accept "module_demo (multi-module import, no collision)" \
+        "$ROOT/examples/module_demo.flash"
+    run_flashc_check_reject "module_collision (duplicate fn across modules)" \
+        "$CRITIC_DIR/module_collision.flash"
+    run_flashc_check_reject "type_collision (duplicate struct across modules)" \
+        "$CRITIC_DIR/type_collision.flash"
+
+    run_flashc_check_accept "function_value (callbacks in parameters, locals, and calls)" \
+        "$ROOT/tests/fixtures/function_value.flash"
+    run_flashc_check_accept "loop_control (break/continue inside while)" \
+        "$ROOT/tests/fixtures/loop_control.flash"
+    run_flashc_check_reject "loop_control_invalid (break outside while)" \
+        "$ROOT/tests/fixtures/loop_control_invalid.flash"
+    run_flashc_check_accept "concrete_generic_struct_literal (nested generic and fn types)" \
+        "$ROOT/tests/fixtures/concrete_generic_struct_literal.flash"
+    run_flashc_check_accept "arraylist_empty_push (explicit empty literal grows safely)" \
+        "$ROOT/tests/fixtures/arraylist_empty_push.flash"
+    run_flashc_check_accept "bitwise_ops (and/xor/shift parsing and typing)" \
+        "$ROOT/tests/fixtures/bitwise_ops.flash"
+    run_flashc_check_accept "softgpu_copy_bytes (guarded display transfer)" \
+        "$ROOT/tests/fixtures/softgpu_copy_bytes.flash"
 }
 
 run_fuzz_lex_smoke() {
@@ -370,6 +441,69 @@ run_flashc_example "error_catch_demo (try/catch/orelse/!T)" \
     "orelse_fb=99" \
     "errors=DivideByZero,Negative" \
     "error_catch_demo: ok"
+
+run_flashc_example "bounds_check_demo (ArrayList valid get/set/pop)" \
+    "$ROOT/examples/bounds_check_demo.flash" \
+    "a=10" \
+    "b=20" \
+    "c=30" \
+    "pop=30" \
+    "len=2" \
+    "set0=99" \
+    "bounds_check_demo: ok"
+
+run_flashc_example "allocator_demo (default + arena Allocator)" \
+    "$ROOT/examples/allocator_demo.flash" \
+    "allocator_demo: ok"
+
+run_flashc_example "concept_demo (bounded polymorphism + monomorphization)" \
+    "$ROOT/examples/concept_demo.flash" \
+    "concept_demo: ok"
+
+run_flashc_example "concept_multi (multi-tparam monomorphization)" \
+    "$ROOT/examples/concept_multi.flash" \
+    "concept_multi: ok"
+
+run_flashc_example "function_value (callback compile + invoke)" \
+    "$ROOT/tests/fixtures/function_value.flash"
+
+run_flashc_example "loop_control (lowered break + continue)" \
+    "$ROOT/tests/fixtures/loop_control.flash"
+
+run_flashc_example "concrete_generic_struct_literal (nested type lowering)" \
+    "$ROOT/tests/fixtures/concrete_generic_struct_literal.flash"
+
+run_flashc_example "string_free (owned runtime string release)" \
+    "$ROOT/tests/fixtures/string_free.flash"
+
+run_flashc_example "arraylist_empty_push (explicit empty literal allocation)" \
+    "$ROOT/tests/fixtures/arraylist_empty_push.flash"
+
+run_flashc_example "bitwise_ops (portable binary bootstrap lowering)" \
+    "$ROOT/tests/fixtures/bitwise_ops.flash"
+
+run_flashc_example "softgpu_copy_bytes (guarded display transfer)" \
+    "$ROOT/tests/fixtures/softgpu_copy_bytes.flash"
+
+run_flashc_runtime_panic "bounds_oob_get (ArrayList get past len)" \
+    "$ROOT/examples/bounds_oob_get.flash" \
+    "panic: ArrayList get OOB"
+
+run_flashc_runtime_panic "bounds_oob_negative (ArrayList get negative index)" \
+    "$ROOT/examples/bounds_oob_negative.flash" \
+    "panic: ArrayList get OOB"
+
+run_flashc_runtime_panic "bounds_oob_pop (ArrayList pop empty)" \
+    "$ROOT/examples/bounds_oob_pop.flash" \
+    "panic: ArrayList pop from empty list"
+
+run_flashc_runtime_panic "bounds_oob_set (ArrayList set past len)" \
+    "$ROOT/examples/bounds_oob_set.flash" \
+    "panic: ArrayList set OOB"
+
+run_flashc_runtime_panic "bounds_oob_set_negative (ArrayList set negative index)" \
+    "$ROOT/examples/bounds_oob_set_negative.flash" \
+    "panic: ArrayList set OOB"
 
 run_flashc_example "gfx_demo (softgpu fallback driver)" \
     "$ROOT/examples/gfx_demo.flash" \
@@ -741,6 +875,51 @@ run_standalone_gate() {
 }
 run_standalone_gate
 
+run_external_package_gate() {
+    local name="external package gate (FLASH_HOME runtime imports + build/run)"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    if ! bash "$ROOT/tests/external_package_gate.sh"; then
+        fail "$name"
+        return 1
+    fi
+
+    pass
+    echo
+}
+run_external_package_gate
+
+run_named_package_gate() {
+    local name="named package build/run (multiple deps + alias flattening)"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    if ! "$ROOT/tests/named_package_gate.sh"; then
+        fail "$name"
+        return 1
+    fi
+
+    pass
+    echo
+}
+run_named_package_gate
+
+run_named_collision_gate() {
+    local name="named package collision rejection"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    if ! "$ROOT/tests/named_collision_gate.sh"; then
+        fail "$name"
+        return 1
+    fi
+
+    pass
+    echo
+}
+run_named_collision_gate
+
 # ── Wave 8: hardware PCM + FIMG gate ─────────────────────────────────────────
 run_hardware_pcm_gate() {
     local name="hardware PCM manifest + FIMG v1 gate"
@@ -821,6 +1000,22 @@ run_flasht_ir_gate() {
 }
 run_flasht_ir_gate
 
+# ── OS target truth: unavailable kernel lowering must fail closed ────────────
+run_os_target_contract_gate() {
+    local name="OS target contract (no hosted or empty kernel fallback)"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    if ! "$ROOT/tests/os_target_contract_gate.sh"; then
+        fail "$name"
+        return 1
+    fi
+
+    pass
+    echo
+}
+run_os_target_contract_gate
+
 # ── Large photonic FIR and pure-source gates ─────────────────────────────────
 run_photonic_massive_gate() {
     local name="64-op balanced-ternary photonic FIR"
@@ -853,6 +1048,62 @@ run_pure_flash_tree_gate() {
     echo
 }
 run_pure_flash_tree_gate
+
+run_safety_gate() {
+    local name="Flash A+ safety checks (null/optional/switch/ownership)"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+    local FC1="$ROOT/.test_bin/flashc1"
+    if [[ ! -x "$FC1" ]]; then
+        FC1="$ROOT/flashc"
+    fi
+    if [[ ! -x "$FC1" ]]; then
+        fail "$name (no flashc1 binary found)"
+        return 1
+    fi
+    local fail_count=0
+    # Each case: file|expect  (expect=reject or accept)
+    local cases=(
+        "tests/safety/null_violation.flash|reject"
+        "tests/safety/null_ok.flash|accept"
+        "tests/safety/switch_non_exhaustive.flash|reject"
+        "tests/safety/switch_exhaustive_ok.flash|accept"
+        "tests/safety/switch_else_ok.flash|accept"
+        "tests/safety/optional_unwrap_violation.flash|reject"
+        "tests/safety/double_free.flash|reject"
+        "tests/safety/use_after_free.flash|reject"
+        "tests/safety/ownership_ok.flash|accept"
+    )
+    for entry in "${cases[@]}"; do
+        local file="${entry%%|*}"
+        local expect="${entry##*|}"
+        local full="$ROOT/$file"
+        if [[ ! -f "$full" ]]; then
+            echo "  SKIP: $file (not found)"
+            continue
+        fi
+        if "$FC1" "$full" --check >/dev/null 2>&1; then
+            local rc=0
+        else
+            local rc=1
+        fi
+        if [[ "$expect" == "reject" && $rc -ne 0 ]]; then
+            echo "  PASS: $file rejected as expected"
+        elif [[ "$expect" == "accept" && $rc -eq 0 ]]; then
+            echo "  PASS: $file accepted as expected"
+        else
+            echo "  FAIL: $file expected $expect but rc=$rc"
+            fail_count=$((fail_count + 1))
+        fi
+    done
+    if [[ $fail_count -gt 0 ]]; then
+        fail "$name ($fail_count cases failed)"
+        return 1
+    fi
+    pass
+    echo
+}
+run_safety_gate
 
 echo "============================================"
 echo "RESULT: $TESTS_PASSED / $TESTS_RUN passed"

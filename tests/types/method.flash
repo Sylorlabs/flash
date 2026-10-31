@@ -1,0 +1,37 @@
+// tests/types/method.flash — W9: method call syntax.
+//
+// Tests that c.doubled() works as sugar for Counter_doubled(c).
+
+@import("std/flash_std.flash")
+
+struct Counter {
+    hits: i32,
+}
+
+fn (c: Counter) doubled() i32 {
+    return c.hits * 2;
+}
+
+fn (c: Counter) tripled() i32 {
+    return c.hits * 3;
+}
+
+fn main() i32 {
+    let c: Counter = Counter{ .hits = 5 };
+
+    // Method call syntax (W9): c.doubled() lowers to Counter_doubled(c)
+    let d: i32 = c.doubled();
+    if (d != 10) { return 1; }
+
+    let t: i32 = c.tripled();
+    if (t != 15) { return 2; }
+
+    // Also test the mangled form still works
+    let d2: i32 = Counter_doubled(c);
+    if (d2 != 10) { return 3; }
+
+    flash_println_str_int("doubled=", d as i64);
+    flash_println_str_int("tripled=", t as i64);
+    flash_println("method: ok");
+    return 0;
+}

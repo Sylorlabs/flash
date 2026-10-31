@@ -1,0 +1,538 @@
+@import("std/flash_std.flash")
+@import("../flash/runtime/linux.flash")
+
+fn main() i32 {
+    let before: i64 = linux_monotonic_ms();
+    if (before < 0) { flash_println("FAIL monotonic time"); return 1; }
+    if (linux_getpid() < 1) { flash_println("FAIL process identity"); return 1; }
+    let socket_probe: i32 = linux_socketpair_probe();
+    if (socket_probe != 1) {
+        flash_print("FAIL unix socketpair code="); print_int32(socket_probe); flash_newline();
+        return 1;
+    }
+    let pipe: LinuxFdPair = linux_pipe_cloexec();
+    if (pipe.ok == 0) { flash_println("FAIL directional pipe create"); return 1; }
+    let pipe_read_flags: i64 = linux_fd_flags(pipe.first);
+    let pipe_write_flags: i64 = linux_fd_flags(pipe.second);
+    let pipe_read_status: i64 = linux_fd_status_flags(pipe.first);
+    let pipe_write_status: i64 = linux_fd_status_flags(pipe.second);
+    if (pipe_read_flags < 0 || pipe_write_flags < 0
+        || (pipe_read_flags % 2) != linux_fd_cloexec()
+        || (pipe_write_flags % 2) != linux_fd_cloexec()
+        || pipe_read_status < 0 || pipe_write_status < 0
+        || (pipe_read_status % 4) != linux_o_read_only()
+        || (pipe_write_status % 4) != linux_o_write_only()) {
+        let _close_bad_pipe_read: i64 = linux_close(pipe.first);
+        let _close_bad_pipe_write: i64 = linux_close(pipe.second);
+        flash_println("FAIL directional pipe flags"); return 1;
+    }
+    let pipe_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&pipe_message, 0, 112);
+    let pipe_written: LinuxWriteAllResult = linux_write_buffer_all(
+        pipe.second, &pipe_message);
+    let pipe_write_closed: i64 = linux_close(pipe.second);
+    let pipe_received: LinuxByteBuffer = linux_buffer_new(1);
+    let pipe_read: i64 = linux_read_into(pipe.first, &pipe_received);
+    let pipe_eof_buffer: LinuxByteBuffer = linux_buffer_new(1);
+    let pipe_eof: i64 = linux_read_into(pipe.first, &pipe_eof_buffer);
+    let pipe_read_closed: i64 = linux_close(pipe.first);
+    if (pipe_written.complete == 0 || pipe_written.written != 1
+        || pipe_write_closed != 0 || pipe_read != 1
+        || linux_buffer_byte(&pipe_received, 0) != 112
+        || pipe_eof != 0 || pipe_read_closed != 0) {
+        linux_buffer_free(&pipe_eof_buffer); linux_buffer_free(&pipe_received);
+        linux_buffer_free(&pipe_message);
+        flash_println("FAIL directional pipe transfer"); return 1;
+    }
+    linux_buffer_free(&pipe_eof_buffer); linux_buffer_free(&pipe_received);
+    linux_buffer_free(&pipe_message);
+
+    let bounded_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let bounded_message: LinuxByteBuffer = linux_buffer_new(3);
+    linux_buffer_set_byte(&bounded_message, 0, 114);
+    linux_buffer_set_byte(&bounded_message, 1, 103);
+    linux_buffer_set_byte(&bounded_message, 2, 98);
+    let bounded_write_status_before: i64 = linux_fd_status_flags(bounded_pipe.second);
+    let bounded_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        bounded_pipe.second, &bounded_message, linux_monotonic_ms() + 27);
+    let bounded_write_status_after: i64 = linux_fd_status_flags(bounded_pipe.second);
+    let _bounded_writer_closed: i64 = linux_close(bounded_pipe.second);
+    let bounded_read_status_before: i64 = linux_fd_status_flags(bounded_pipe.first);
+    let bounded_read: LinuxReadAllResult = linux_pipe_read_all_until(
+        bounded_pipe.first, 3, linux_monotonic_ms() + 27);
+    let bounded_read_status_after: i64 = linux_fd_status_flags(bounded_pipe.first);
+    let _bounded_reader_closed: i64 = linux_close(bounded_pipe.first);
+    if (bounded_pipe.ok == 0 || bounded_write.complete == 0
+        || bounded_write.written != 3
+        || bounded_write.error_code != 0 || bounded_write.cleanup_error_code != 0
+        || bounded_write_status_before != bounded_write_status_after
+        || bounded_read.complete == 0 || bounded_read.eof == 0
+        || bounded_read.read != 3 || bounded_read.too_large != 0
+        || bounded_read.error_code != 0 || bounded_read.cleanup_error_code != 0
+        || bounded_read.data.capacity_bytes > 3
+        || bounded_read_status_before != bounded_read_status_after
+        || linux_buffer_byte(&bounded_read.data, 0) != 114
+        || linux_buffer_byte(&bounded_read.data, 2) != 98) {
+        linux_read_all_result_free(&bounded_read);
+        linux_buffer_free(&bounded_message);
+        flash_println("FAIL bounded directional pipe EOF"); return 1;
+    }
+    linux_read_all_result_free(&bounded_read);
+    linux_buffer_free(&bounded_message);
+
+    let duplex_pair: LinuxFdPair = linux_socketpair_stream();
+    let duplex_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&duplex_message, 0, 100);
+    let duplex_write_status_before: i64 = linux_fd_status_flags(duplex_pair.first);
+    let duplex_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        duplex_pair.first, &duplex_message, linux_monotonic_ms() + 27);
+    let duplex_write_status_after: i64 = linux_fd_status_flags(duplex_pair.first);
+    let _duplex_writer_closed: i64 = linux_close(duplex_pair.first);
+    let duplex_read_status_before: i64 = linux_fd_status_flags(duplex_pair.second);
+    let duplex_read: LinuxReadAllResult = linux_pipe_read_all_until(
+        duplex_pair.second, 1, linux_monotonic_ms() + 27);
+    let duplex_read_status_after: i64 = linux_fd_status_flags(duplex_pair.second);
+    let _duplex_reader_closed: i64 = linux_close(duplex_pair.second);
+    if (duplex_pair.ok == 0 || duplex_write.complete == 0
+        || duplex_write.error_code != 0 || duplex_write.cleanup_error_code != 0
+        || duplex_write_status_before != duplex_write_status_after
+        || duplex_read.complete == 0 || duplex_read.eof == 0
+        || duplex_read.read != 1 || duplex_read.error_code != 0
+        || duplex_read.cleanup_error_code != 0
+        || duplex_read.data.capacity_bytes > 1
+        || duplex_read_status_before != duplex_read_status_after
+        || linux_buffer_byte(&duplex_read.data, 0) != 100) {
+        linux_read_all_result_free(&duplex_read); linux_buffer_free(&duplex_message);
+        flash_println("FAIL O_RDWR directional transfer"); return 1;
+    }
+    linux_read_all_result_free(&duplex_read); linux_buffer_free(&duplex_message);
+
+    let oversized_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let oversized_message: LinuxByteBuffer = linux_buffer_new(4);
+    linux_buffer_set_byte(&oversized_message, 0, 116);
+    linux_buffer_set_byte(&oversized_message, 1, 114);
+    linux_buffer_set_byte(&oversized_message, 2, 105);
+    linux_buffer_set_byte(&oversized_message, 3, 116);
+    let oversized_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        oversized_pipe.second, &oversized_message, linux_monotonic_ms() + 27);
+    let _oversized_writer_closed: i64 = linux_close(oversized_pipe.second);
+    let oversized_read: LinuxReadAllResult = linux_pipe_read_all_until(
+        oversized_pipe.first, 3, linux_monotonic_ms() + 27);
+    let _oversized_reader_closed: i64 = linux_close(oversized_pipe.first);
+    if (oversized_pipe.ok == 0 || oversized_write.complete == 0
+        || oversized_read.complete != 0 || oversized_read.too_large == 0
+        || oversized_read.error_code != (0 - 27)
+        || oversized_read.cleanup_error_code != 0 || oversized_read.read != 3
+        || oversized_read.data.capacity_bytes > 3
+        || linux_buffer_byte(&oversized_read.data, 0) != 116
+        || linux_buffer_byte(&oversized_read.data, 2) != 105) {
+        linux_read_all_result_free(&oversized_read);
+        linux_buffer_free(&oversized_message);
+        flash_println("FAIL bounded directional pipe size rejection"); return 1;
+    }
+    linux_read_all_result_free(&oversized_read);
+    linux_buffer_free(&oversized_message);
+
+    let closed_reader_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let closed_reader_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&closed_reader_message, 0, 120);
+    let _closed_reader: i64 = linux_close(closed_reader_pipe.first);
+    let sigpipe_pending_before: i64 = linux_sigpipe_pending_status();
+    let closed_reader_status_before: i64 = linux_fd_status_flags(
+        closed_reader_pipe.second);
+    let closed_reader_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        closed_reader_pipe.second, &closed_reader_message,
+        linux_monotonic_ms() + 27);
+    let closed_reader_status_after: i64 = linux_fd_status_flags(
+        closed_reader_pipe.second);
+    let sigpipe_pending_after: i64 = linux_sigpipe_pending_status();
+    let _closed_reader_writer: i64 = linux_close(closed_reader_pipe.second);
+    if (closed_reader_pipe.ok == 0 || closed_reader_write.complete != 0
+        || closed_reader_write.error_code != (0 - 32)
+        || closed_reader_write.cleanup_error_code != 0
+        || sigpipe_pending_before != 0 || sigpipe_pending_after != 0
+        || closed_reader_status_before != closed_reader_status_after) {
+        linux_buffer_free(&closed_reader_message);
+        flash_println("FAIL contained SIGPIPE EPIPE"); return 1;
+    }
+    linux_buffer_free(&closed_reader_message);
+
+    let blocked_mask: LinuxByteBuffer = linux_buffer_new(8);
+    linux_buffer_set_u64(&blocked_mask, 0, linux_sigpipe_mask());
+    let prior_mask: LinuxByteBuffer = linux_buffer_new(8);
+    let block_sigpipe_rc: i64 = _zag_raw_syscall(linux_sys_rt_sigprocmask(),
+        linux_sig_block(), blocked_mask.words.data as i64,
+        prior_mask.words.data as i64, linux_kernel_sigset_bytes(), 0, 0);
+    prior_mask.len = 8;
+    let blocked_reader_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let blocked_reader_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&blocked_reader_message, 0, 98);
+    let _blocked_reader_closed: i64 = linux_close(blocked_reader_pipe.first);
+    let blocked_reader_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        blocked_reader_pipe.second, &blocked_reader_message,
+        linux_monotonic_ms() + 27);
+    let current_mask: LinuxByteBuffer = linux_buffer_new(8);
+    let read_current_mask_rc: i64 = _zag_raw_syscall(
+        linux_sys_rt_sigprocmask(), linux_sig_block(), 0,
+        current_mask.words.data as i64, linux_kernel_sigset_bytes(), 0, 0);
+    current_mask.len = 8;
+    let blocked_pending_after: i64 = linux_sigpipe_pending_status();
+    let restore_prior_mask_rc: i64 = _zag_raw_syscall(
+        linux_sys_rt_sigprocmask(), linux_sig_setmask(),
+        prior_mask.words.data as i64, 0, linux_kernel_sigset_bytes(), 0, 0);
+    let _blocked_writer_closed: i64 = linux_close(blocked_reader_pipe.second);
+    if (block_sigpipe_rc != 0 || blocked_reader_pipe.ok == 0
+        || blocked_reader_write.error_code != (0 - 32)
+        || blocked_reader_write.cleanup_error_code != 0
+        || read_current_mask_rc != 0 || linux_sigpipe_mask_set(&current_mask) == 0
+        || blocked_pending_after != 0 || restore_prior_mask_rc != 0) {
+        linux_buffer_free(&current_mask); linux_buffer_free(&blocked_reader_message);
+        linux_buffer_free(&prior_mask); linux_buffer_free(&blocked_mask);
+        flash_println("FAIL blocked SIGPIPE mask preservation"); return 1;
+    }
+    linux_buffer_free(&current_mask); linux_buffer_free(&blocked_reader_message);
+    linux_buffer_free(&prior_mask); linux_buffer_free(&blocked_mask);
+
+    let ignored_action: LinuxByteBuffer = linux_buffer_new(32);
+    linux_buffer_set_u64(&ignored_action, 0, 1); // SIG_IGN
+    ignored_action.len = 32;
+    let prior_action: LinuxByteBuffer = linux_buffer_new(32);
+    let ignore_sigpipe_rc: i64 = _zag_raw_syscall(linux_sys_rt_sigaction(),
+        linux_sigpipe(), ignored_action.words.data as i64,
+        prior_action.words.data as i64, linux_kernel_sigset_bytes(), 0, 0);
+    prior_action.len = 32;
+    let ignored_reader_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let ignored_reader_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&ignored_reader_message, 0, 105);
+    let _ignored_reader_closed: i64 = linux_close(ignored_reader_pipe.first);
+    let ignored_reader_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        ignored_reader_pipe.second, &ignored_reader_message,
+        linux_monotonic_ms() + 27);
+    let ignored_pending_after: i64 = linux_sigpipe_pending_status();
+    let restore_sigpipe_action_rc: i64 = _zag_raw_syscall(
+        linux_sys_rt_sigaction(), linux_sigpipe(),
+        prior_action.words.data as i64, 0,
+        linux_kernel_sigset_bytes(), 0, 0);
+    let _ignored_writer_closed: i64 = linux_close(ignored_reader_pipe.second);
+    if (ignore_sigpipe_rc != 0 || ignored_reader_pipe.ok == 0
+        || ignored_reader_write.error_code != (0 - 32)
+        || ignored_reader_write.cleanup_error_code != 0
+        || ignored_pending_after != 0 || restore_sigpipe_action_rc != 0) {
+        linux_buffer_free(&ignored_reader_message); linux_buffer_free(&prior_action);
+        linux_buffer_free(&ignored_action);
+        flash_println("FAIL ignored SIGPIPE EPIPE containment"); return 1;
+    }
+    linux_buffer_free(&ignored_reader_message); linux_buffer_free(&prior_action);
+    linux_buffer_free(&ignored_action);
+
+    let pending_mask: LinuxByteBuffer = linux_buffer_new(8);
+    linux_buffer_set_u64(&pending_mask, 0, linux_sigpipe_mask());
+    let pending_prior_mask: LinuxByteBuffer = linux_buffer_new(8);
+    let pending_block_rc: i64 = _zag_raw_syscall(linux_sys_rt_sigprocmask(),
+        linux_sig_block(), pending_mask.words.data as i64,
+        pending_prior_mask.words.data as i64,
+        linux_kernel_sigset_bytes(), 0, 0);
+    pending_prior_mask.len = 8;
+    let thread_id: i64 = _zag_raw_syscall(linux_sys_gettid(), 0, 0, 0, 0, 0, 0);
+    let queue_pending_rc: i64 = _zag_raw_syscall(linux_sys_tgkill(),
+        linux_getpid() as i64, thread_id, linux_sigpipe(), 0, 0, 0);
+    let preexisting_pending_before: i64 = linux_sigpipe_pending_status();
+    let preexisting_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let preexisting_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&preexisting_message, 0, 112);
+    let _preexisting_reader_closed: i64 = linux_close(preexisting_pipe.first);
+    let preexisting_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        preexisting_pipe.second, &preexisting_message,
+        linux_monotonic_ms() + 27);
+    let preexisting_pending_after: i64 = linux_sigpipe_pending_status();
+    let pending_zero_timeout: LinuxByteBuffer = linux_buffer_new(16);
+    let consumed_preexisting: i64 = _zag_raw_syscall(
+        linux_sys_rt_sigtimedwait(), pending_mask.words.data as i64, 0,
+        pending_zero_timeout.words.data as i64,
+        linux_kernel_sigset_bytes(), 0, 0);
+    let pending_after_consume: i64 = linux_sigpipe_pending_status();
+    let pending_restore_rc: i64 = _zag_raw_syscall(
+        linux_sys_rt_sigprocmask(), linux_sig_setmask(),
+        pending_prior_mask.words.data as i64, 0,
+        linux_kernel_sigset_bytes(), 0, 0);
+    let _preexisting_writer_closed: i64 = linux_close(preexisting_pipe.second);
+    if (pending_block_rc != 0 || thread_id < 1 || queue_pending_rc != 0
+        || preexisting_pending_before != 1 || preexisting_pipe.ok == 0
+        || preexisting_write.error_code != (0 - 32)
+        || preexisting_write.cleanup_error_code != 0
+        || preexisting_pending_after != 1
+        || consumed_preexisting != linux_sigpipe()
+        || pending_after_consume != 0 || pending_restore_rc != 0) {
+        linux_buffer_free(&pending_zero_timeout); linux_buffer_free(&preexisting_message);
+        linux_buffer_free(&pending_prior_mask); linux_buffer_free(&pending_mask);
+        flash_println("FAIL preexisting SIGPIPE preservation"); return 1;
+    }
+    linux_buffer_free(&pending_zero_timeout); linux_buffer_free(&preexisting_message);
+    linux_buffer_free(&pending_prior_mask); linux_buffer_free(&pending_mask);
+
+    let stalled_writer_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let stalled_read_status_before: i64 = linux_fd_status_flags(
+        stalled_writer_pipe.first);
+    let stalled_read: LinuxReadAllResult = linux_pipe_read_all_until(
+        stalled_writer_pipe.first, 27, linux_monotonic_ms() + 9);
+    let stalled_read_status_after: i64 = linux_fd_status_flags(
+        stalled_writer_pipe.first);
+    let _stalled_reader_closed: i64 = linux_close(stalled_writer_pipe.first);
+    let _stalled_writer_closed: i64 = linux_close(stalled_writer_pipe.second);
+    if (stalled_writer_pipe.ok == 0 || stalled_read.complete != 0
+        || stalled_read.error_code != (0 - 110) || stalled_read.read != 0
+        || stalled_read_status_before != stalled_read_status_after) {
+        linux_read_all_result_free(&stalled_read);
+        flash_println("FAIL bounded pipe read timeout"); return 1;
+    }
+    linux_read_all_result_free(&stalled_read);
+
+    let stalled_reader_pipe: LinuxFdPair = linux_pipe_cloexec();
+    let stalled_write_data: LinuxByteBuffer = linux_buffer_new(1048576);
+    stalled_write_data.len = 1048576;
+    let stalled_write_status_before: i64 = linux_fd_status_flags(
+        stalled_reader_pipe.second);
+    let stalled_write: LinuxPipeWriteResult = linux_pipe_write_buffer_all_until(
+        stalled_reader_pipe.second, &stalled_write_data,
+        linux_monotonic_ms() + 9);
+    let stalled_write_status_after: i64 = linux_fd_status_flags(
+        stalled_reader_pipe.second);
+    let _stalled_write_reader_closed: i64 = linux_close(stalled_reader_pipe.first);
+    let _stalled_write_writer_closed: i64 = linux_close(stalled_reader_pipe.second);
+    if (stalled_reader_pipe.ok == 0 || stalled_write.complete != 0
+        || stalled_write.error_code != (0 - 110) || stalled_write.written < 1
+        || stalled_write.written >= stalled_write_data.len as i64
+        || stalled_write_status_before != stalled_write_status_after) {
+        linux_buffer_free(&stalled_write_data);
+        flash_println("FAIL bounded pipe partial write timeout"); return 1;
+    }
+    linux_buffer_free(&stalled_write_data);
+    let memory: LinuxSharedMemory = linux_shared_memory_create(27);
+    if (memory.valid == 0) { flash_println("FAIL shared memory create"); return 1; }
+    linux_shared_memory_set_byte(&memory, 0, 243);
+    linux_shared_memory_set_byte(&memory, 26, 81);
+    if (linux_shared_memory_byte(&memory, 0) != 243 || linux_shared_memory_byte(&memory, 26) != 81) {
+        linux_shared_memory_free(&memory); flash_println("FAIL shared memory access"); return 1;
+    }
+
+    // Strict absolute deadlines reject before sendmsg. With no payload byte on
+    // the peer, SCM_RIGHTS authority cannot have crossed the stream boundary.
+    let expired_pair: LinuxFdPair = linux_socketpair_stream();
+    let expired_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&expired_message, 0, 120);
+    let expired_send: LinuxWriteAllResult = linux_send_buffer_fd_all_until(
+        expired_pair.first, &expired_message, memory.fd, linux_monotonic_ms());
+    let expired_invalid: LinuxWriteAllResult = linux_send_buffer_fd_all_until(
+        expired_pair.first, &expired_message, 4294967296,
+        linux_monotonic_ms());
+    let expired_peer_ready: i32 = linux_poll_readable(expired_pair.second, 0);
+    let expired_owner_flags: i64 = linux_fd_flags(memory.fd);
+    if (expired_pair.ok == 0 || expired_send.complete != 0
+        || expired_send.written != 0 || expired_send.error_code != (0 - 110)
+        || expired_invalid.complete != 0 || expired_invalid.written != 0
+        || expired_invalid.error_code != (0 - 22)
+        || expired_peer_ready != 0 || expired_owner_flags < 0) {
+        linux_buffer_free(&expired_message);
+        if (expired_pair.first >= 0) { let _close_expired_first: i64 = linux_close(expired_pair.first); }
+        if (expired_pair.second >= 0) { let _close_expired_second: i64 = linux_close(expired_pair.second); }
+        linux_shared_memory_free(&memory);
+        flash_println("FAIL strict expired descriptor deadline"); return 1;
+    }
+    linux_buffer_free(&expired_message);
+    let _close_expired_first: i64 = linux_close(expired_pair.first);
+    let _close_expired_second: i64 = linux_close(expired_pair.second);
+
+    // Force sendmsg to carry one byte and the descriptor, then finish the
+    // remaining bytes through the ordinary exact-send tail under the same
+    // supplied absolute deadline.
+    let split_pair: LinuxFdPair = linux_socketpair_stream();
+    let split_message: LinuxByteBuffer = linux_buffer_new(5);
+    linux_buffer_set_byte(&split_message, 0, 102);
+    linux_buffer_set_byte(&split_message, 1, 114);
+    linux_buffer_set_byte(&split_message, 2, 97);
+    linux_buffer_set_byte(&split_message, 3, 109);
+    linux_buffer_set_byte(&split_message, 4, 101);
+    let split_send: LinuxWriteAllResult = linux_send_buffer_fd_all_until_chunked(
+        split_pair.first, &split_message, memory.fd, 1,
+        linux_monotonic_ms() + 27, 0);
+    if (split_pair.ok == 0 || split_send.complete == 0
+        || split_send.written != 5 || split_send.error_code != 0) {
+        linux_buffer_free(&split_message);
+        if (split_pair.first >= 0) {
+            let _close_split_first_send_failure: i64 = linux_close(split_pair.first);
+        }
+        if (split_pair.second >= 0) {
+            let _close_split_second_send_failure: i64 = linux_close(split_pair.second);
+        }
+        linux_shared_memory_free(&memory);
+        flash_println("FAIL absolute descriptor partial send"); return 1;
+    }
+    let split_first: LinuxReceiveFdResult = linux_receive_buffer_fd(
+        split_pair.second, 1);
+    let split_tail: LinuxByteBuffer = linux_buffer_new(4);
+    let split_tail_got: i64 = linux_read_into(split_pair.second, &split_tail);
+    let split_owner_flags: i64 = linux_fd_flags(memory.fd);
+    if (split_first.ok == 0 || split_first.has_fd == 0
+        || split_first.fd_count != 1 || split_first.excess_fd_count != 0
+        || linux_buffer_byte(&split_first.data, 0) != 102
+        || split_tail_got != 4 || linux_buffer_byte(&split_tail, 0) != 114
+        || linux_buffer_byte(&split_tail, 3) != 101
+        || split_owner_flags < 0) {
+        if (split_first.received_fd >= 0) {
+            let _close_split_received_failure: i64 = linux_close(split_first.received_fd);
+        }
+        linux_buffer_free(&split_tail); linux_buffer_free(&split_first.data);
+        linux_buffer_free(&split_message);
+        if (split_pair.first >= 0) { let _close_split_first_failure: i64 = linux_close(split_pair.first); }
+        if (split_pair.second >= 0) { let _close_split_second_failure: i64 = linux_close(split_pair.second); }
+        linux_shared_memory_free(&memory);
+        flash_println("FAIL absolute descriptor partial tail"); return 1;
+    }
+    let _close_split_received: i64 = linux_close(split_first.received_fd);
+    linux_buffer_free(&split_tail); linux_buffer_free(&split_first.data);
+    linux_buffer_free(&split_message);
+    let _close_split_first: i64 = linux_close(split_pair.first);
+    let _close_split_second: i64 = linux_close(split_pair.second);
+
+    // Relative timeout compatibility still permits its historical initial
+    // nonblocking sendmsg at timeout zero. The forced tail receives no fresh
+    // deadline, so exactly the first byte and one descriptor arrive.
+    let relative_pair: LinuxFdPair = linux_socketpair_stream();
+    let relative_message: LinuxByteBuffer = linux_buffer_new(3);
+    linux_buffer_set_byte(&relative_message, 0, 111);
+    linux_buffer_set_byte(&relative_message, 1, 108);
+    linux_buffer_set_byte(&relative_message, 2, 100);
+    let relative_send: LinuxWriteAllResult = linux_send_buffer_fd_all_timeout_chunked(
+        relative_pair.first, &relative_message, memory.fd, 1, 0);
+    if (relative_pair.ok == 0 || relative_send.complete != 0
+        || relative_send.written != 1 || relative_send.error_code != (0 - 110)) {
+        linux_buffer_free(&relative_message);
+        if (relative_pair.first >= 0) {
+            let _close_relative_first_send_failure: i64 = linux_close(relative_pair.first);
+        }
+        if (relative_pair.second >= 0) {
+            let _close_relative_second_send_failure: i64 = linux_close(relative_pair.second);
+        }
+        linux_shared_memory_free(&memory);
+        flash_println("FAIL relative descriptor initial attempt"); return 1;
+    }
+    let relative_first: LinuxReceiveFdResult = linux_receive_buffer_fd(
+        relative_pair.second, 1);
+    let relative_tail_ready: i32 = linux_poll_readable(relative_pair.second, 0);
+    let relative_owner_flags: i64 = linux_fd_flags(memory.fd);
+    if (relative_first.ok == 0 || relative_first.has_fd == 0
+        || relative_first.fd_count != 1 || relative_first.excess_fd_count != 0
+        || linux_buffer_byte(&relative_first.data, 0) != 111
+        || relative_tail_ready != 0 || relative_owner_flags < 0) {
+        if (relative_first.received_fd >= 0) {
+            let _close_relative_received_failure: i64 = linux_close(relative_first.received_fd);
+        }
+        linux_buffer_free(&relative_first.data); linux_buffer_free(&relative_message);
+        if (relative_pair.first >= 0) { let _close_relative_first_failure: i64 = linux_close(relative_pair.first); }
+        if (relative_pair.second >= 0) { let _close_relative_second_failure: i64 = linux_close(relative_pair.second); }
+        linux_shared_memory_free(&memory);
+        flash_println("FAIL relative descriptor timeout compatibility"); return 1;
+    }
+    let _close_relative_received: i64 = linux_close(relative_first.received_fd);
+    linux_buffer_free(&relative_first.data); linux_buffer_free(&relative_message);
+    let _close_relative_first: i64 = linux_close(relative_pair.first);
+    let _close_relative_second: i64 = linux_close(relative_pair.second);
+
+    // A non-reading peer can fill the stream after the descriptor-bearing
+    // first byte. Drain exactly the reported progress and prove every later
+    // recvmsg is data-only: the descriptor was attached at most once.
+    let stalled_fd_pair: LinuxFdPair = linux_socketpair_stream();
+    let stalled_fd_message: LinuxByteBuffer = linux_buffer_new(1048576);
+    stalled_fd_message.len = stalled_fd_message.capacity_bytes;
+    let stalled_fd_send: LinuxWriteAllResult = linux_send_buffer_fd_all_until_chunked(
+        stalled_fd_pair.first, &stalled_fd_message, memory.fd, 1,
+        linux_monotonic_ms() + 9, 0);
+    if (stalled_fd_pair.ok == 0 || stalled_fd_send.complete != 0
+        || stalled_fd_send.written < 1
+        || stalled_fd_send.written >= stalled_fd_message.len as i64
+        || stalled_fd_send.error_code != (0 - 110)) {
+        linux_buffer_free(&stalled_fd_message);
+        if (stalled_fd_pair.first >= 0) {
+            let _close_stalled_fd_first_send_failure: i64 = linux_close(
+                stalled_fd_pair.first);
+        }
+        if (stalled_fd_pair.second >= 0) {
+            let _close_stalled_fd_second_send_failure: i64 = linux_close(
+                stalled_fd_pair.second);
+        }
+        linux_shared_memory_free(&memory);
+        flash_println("FAIL stalled absolute descriptor send"); return 1;
+    }
+    let stalled_fd_first: LinuxReceiveFdResult = linux_receive_buffer_fd(
+        stalled_fd_pair.second, 1);
+    let stalled_fd_drained: i64 = 1;
+    let stalled_fd_drain_error: i32 = 0;
+    let stalled_fd_duplicate: i32 = 0;
+    while (stalled_fd_drained < stalled_fd_send.written
+        && stalled_fd_drain_error == 0) {
+        let stalled_fd_remaining: i64 = stalled_fd_send.written - stalled_fd_drained;
+        let stalled_fd_capacity: i32 = stalled_fd_remaining as i32;
+        if (stalled_fd_capacity > linux_receive_fd_max_payload()) {
+            stalled_fd_capacity = linux_receive_fd_max_payload();
+        }
+        let stalled_fd_chunk: LinuxReceiveFdResult = linux_receive_buffer_fd(
+            stalled_fd_pair.second, stalled_fd_capacity);
+        if (stalled_fd_chunk.got < 1 || stalled_fd_chunk.ok == 0) {
+            stalled_fd_drain_error = 1;
+        } else {
+            stalled_fd_drained = stalled_fd_drained + stalled_fd_chunk.got;
+        }
+        if (stalled_fd_chunk.fd_count != 0 || stalled_fd_chunk.has_fd != 0) {
+            stalled_fd_duplicate = 1;
+        }
+        if (stalled_fd_chunk.received_fd >= 0) {
+            let _close_stalled_duplicate: i64 = linux_close(
+                stalled_fd_chunk.received_fd);
+        }
+        linux_buffer_free(&stalled_fd_chunk.data);
+    }
+    let stalled_fd_tail_ready: i32 = linux_poll_readable(stalled_fd_pair.second, 0);
+    let stalled_fd_owner_flags: i64 = linux_fd_flags(memory.fd);
+    if (stalled_fd_first.ok == 0 || stalled_fd_first.has_fd == 0
+        || stalled_fd_first.fd_count != 1 || stalled_fd_first.excess_fd_count != 0
+        || stalled_fd_drained != stalled_fd_send.written
+        || stalled_fd_drain_error != 0 || stalled_fd_duplicate != 0
+        || stalled_fd_tail_ready != 0 || stalled_fd_owner_flags < 0) {
+        if (stalled_fd_first.received_fd >= 0) {
+            let _close_stalled_received_failure: i64 = linux_close(
+                stalled_fd_first.received_fd);
+        }
+        linux_buffer_free(&stalled_fd_first.data);
+        linux_buffer_free(&stalled_fd_message);
+        if (stalled_fd_pair.first >= 0) { let _close_stalled_fd_first_failure: i64 = linux_close(stalled_fd_pair.first); }
+        if (stalled_fd_pair.second >= 0) { let _close_stalled_fd_second_failure: i64 = linux_close(stalled_fd_pair.second); }
+        linux_shared_memory_free(&memory);
+        flash_println("FAIL stalled absolute descriptor deadline"); return 1;
+    }
+    let _close_stalled_received: i64 = linux_close(stalled_fd_first.received_fd);
+    linux_buffer_free(&stalled_fd_first.data); linux_buffer_free(&stalled_fd_message);
+    let _close_stalled_fd_first: i64 = linux_close(stalled_fd_pair.first);
+    let _close_stalled_fd_second: i64 = linux_close(stalled_fd_pair.second);
+
+    let pair: LinuxFdPair = linux_socketpair_stream();
+    if (pair.ok == 0) { linux_shared_memory_free(&memory); flash_println("FAIL descriptor peer"); return 1; }
+    let descriptor_message: LinuxByteBuffer = linux_buffer_new(1);
+    linux_buffer_set_byte(&descriptor_message, 0, 109);
+    let descriptor_sent: i64 = linux_send_buffer_fd(pair.first, &descriptor_message, memory.fd);
+    let descriptor_received: LinuxReceiveFdResult = linux_receive_buffer_fd(pair.second, 1);
+    if (descriptor_sent != 1 || descriptor_received.ok == 0 || descriptor_received.received_fd < 0
+        || descriptor_received.got != 1 || linux_buffer_byte(&descriptor_received.data, 0) != 109) {
+        if (descriptor_received.received_fd >= 0) { let _close_received: i64 = linux_close(descriptor_received.received_fd); }
+        linux_buffer_free(&descriptor_received.data); linux_buffer_free(&descriptor_message);
+        let _close_first: i64 = linux_close(pair.first); let _close_second: i64 = linux_close(pair.second);
+        linux_shared_memory_free(&memory); flash_println("FAIL descriptor transfer"); return 1;
+    }
+    let _close_received: i64 = linux_close(descriptor_received.received_fd);
+    linux_buffer_free(&descriptor_received.data); linux_buffer_free(&descriptor_message);
+    let _close_first: i64 = linux_close(pair.first); let _close_second: i64 = linux_close(pair.second);
+    linux_shared_memory_free(&memory);
+    let after: i64 = linux_monotonic_ms();
+    if (after < before) { flash_println("FAIL monotonic ordering"); return 1; }
+    flash_println("linux_runtime_demo: ok");
+    return 0;
+}

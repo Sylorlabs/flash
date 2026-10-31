@@ -1,0 +1,792 @@
+format=zag-semantic-manifest-v1
+advisory=true
+executable_authority=false
+complete=true
+detail_level=full
+module=flashc_test.zag
+profile=strict
+source=192347095,170402879,3775
+public=216613626,131542391,0
+effects=216613626,131542391,0
+layouts=216613626,131542391,0
+graph=515063235,310608271,18102
+graph_complete=0
+decl_fn=_zag_malloc	602239870,679158606,173	line=16	effect=3
+fact_fn=_zag_malloc	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_realloc	434696450,638818083,204	line=17	effect=3
+fact_fn=_zag_realloc	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_free	255116002,482010143,162	line=18	effect=1
+fact_fn=_zag_free	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_memcpy	808819735,117690231,220	line=19	effect=0
+fact_fn=_zag_memcpy	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_memcmp	767740451,363745733,215	line=20	effect=0
+fact_fn=_zag_memcmp	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strlen	460684129,915341804,156	line=23	effect=0
+fact_fn=_zag_strlen	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strcmp	694989196,564761593,187	line=24	effect=0
+fact_fn=_zag_strcmp	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strcmp_ord	965745539,79877324,191	line=25	effect=0
+fact_fn=_zag_strcmp_ord	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strdup	399685385,325081363,165	line=26	effect=1
+fact_fn=_zag_strdup	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_concat	54518050,147982360,200	line=27	effect=1
+fact_fn=_zag_str_concat	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_index_of_byte	450277703,616871466,197	line=28	effect=0
+fact_fn=_zag_str_index_of_byte	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_i64_to_str	774889173,762720612,168	line=29	effect=1
+fact_fn=_zag_i64_to_str	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_u64_to_str	459904823,800247324,168	line=30	effect=1
+fact_fn=_zag_u64_to_str	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_to_i64	604981581,785716214,160	line=31	effect=0
+fact_fn=_zag_str_to_i64	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_print	410386809,842218209,161	line=34	effect=4
+fact_fn=_zag_print	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_println	953727822,993815596,163	line=35	effect=4
+fact_fn=_zag_println	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_eprintln	783295709,969170529,164	line=36	effect=4
+fact_fn=_zag_eprintln	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_flush	217076049,844902298,132	line=37	effect=4
+fact_fn=_zag_flush	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_read_file	341286734,397383280,178	line=41	effect=5
+fact_fn=_zag_read_file	effect_free=0	leaf=1	constant_return=0	alloc=1	io=1
+decl_fn=_zag_write_file	479036127,452317086,205	line=42	effect=4
+fact_fn=_zag_write_file	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_write_exec	732880525,912565347,205	line=44	effect=4
+fact_fn=_zag_write_exec	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_file_exists	738793763,819522761,169	line=45	effect=4
+fact_fn=_zag_file_exists	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_exec_cmd	602643484,16573448,165	line=48	effect=4
+fact_fn=_zag_exec_cmd	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_exec_capture	542443913,342308047,180	line=49	effect=5
+fact_fn=_zag_exec_capture	effect_free=0	leaf=1	constant_return=0	alloc=1	io=1
+decl_fn=_zag_exit	405275641,368471588,162	line=52	effect=4
+fact_fn=_zag_exit	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_argc	998942557,695012765,130	line=55	effect=4
+fact_fn=_zag_argc	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_arg	882280767,899487250,160	line=56	effect=4
+fact_fn=_zag_arg	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_getenv	977116258,601522591,165	line=57	effect=4
+fact_fn=_zag_getenv	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_slice_ptr	445180039,853621880,159	line=59	effect=0
+fact_fn=_zag_slice_ptr	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_read_fd	969270656,322067489,224	line=60	effect=4
+fact_fn=_zag_read_fd	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_clock_monotonic_ms	592918630,470527004,144	line=61	effect=4
+fact_fn=_zag_clock_monotonic_ms	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_raw_syscall	693351262,901525871,353	line=62	effect=4
+fact_fn=_zag_raw_syscall	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=process_arg_count	609146573,746032931,254	line=7	effect=4
+fact_fn=process_arg_count	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=process_arg_count	_zag_argc
+expr_fact=process_arg_count	return	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=process_arg_count	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+decl_fn=process_arg	534339967,109936512,314	line=11	effect=4
+fact_fn=process_arg	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=process_arg	_zag_arg
+expr_fact=process_arg	return	type=[]u8	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=process_arg	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=process_arg	return.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=process_run_shell	293948833,464436389,329	line=15	effect=4
+fact_fn=process_run_shell	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=process_run_shell	_zag_exec_cmd
+expr_fact=process_run_shell	return	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=process_run_shell	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=process_run_shell	return.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=process_exit	702791570,597890328,316	line=19	effect=4
+fact_fn=process_exit	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=process_exit	_zag_exit
+expr_fact=process_exit	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=process_exit	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=process_exit	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=fct_fail	946656400,515156380,645	line=8	effect=4
+fact_fn=fct_fail	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=fct_fail	_zag_print
+call_edge=fct_fail	_zag_println
+call_edge=fct_fail	process_exit
+expr_fact=fct_fail	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_fail	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_fail	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_fail	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_fail	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_fail	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_fail	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_fail	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_fail	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=fct_run	799336581,535000077,986	line=14	effect=4
+fact_fn=fct_run	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=fct_run	process_run_shell
+call_edge=fct_run	_zag_print
+call_edge=fct_run	_zag_println
+call_edge=fct_run	process_exit
+expr_fact=fct_run	let.rc	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run	let.rc.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run	let.rc.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_run	rc	i32	basis=explicit
+expr_fact=fct_run	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=fct_run_expect_fail	234103095,303512672,1010	line=23	effect=4
+fact_fn=fct_run_expect_fail	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=fct_run_expect_fail	process_run_shell
+call_edge=fct_run_expect_fail	_zag_print
+call_edge=fct_run_expect_fail	_zag_println
+call_edge=fct_run_expect_fail	process_exit
+expr_fact=fct_run_expect_fail	let.rc	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_fail	let.rc.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	let.rc.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_run_expect_fail	rc	i32	basis=explicit
+expr_fact=fct_run_expect_fail	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_fail	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=fct_run_expect_rc	800502114,138191973,1691	line=32	effect=4
+fact_fn=fct_run_expect_rc	effect_free=0	leaf=0	constant_return=0	alloc=0	io=1
+call_edge=fct_run_expect_rc	process_run_shell
+call_edge=fct_run_expect_rc	_zag_print
+call_edge=fct_run_expect_rc	print_i32
+call_edge=fct_run_expect_rc	_zag_print
+call_edge=fct_run_expect_rc	print_i32
+call_edge=fct_run_expect_rc	_zag_print
+call_edge=fct_run_expect_rc	_zag_println
+call_edge=fct_run_expect_rc	process_exit
+expr_fact=fct_run_expect_rc	let.rc	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	let.rc.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	let.rc.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_run_expect_rc	rc	i32	basis=explicit
+expr_fact=fct_run_expect_rc	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement	type=unknown	type_basis=unknown	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement	type=unknown	type_basis=unknown	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_run_expect_rc	statement.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=fct_flashc_reject	246367598,412502090,1643	line=45	effect=5
+fact_fn=fct_flashc_reject	effect_free=0	leaf=0	constant_return=0	alloc=1	io=1
+call_edge=fct_flashc_reject	_zag_str_concat
+call_edge=fct_flashc_reject	_zag_str_concat
+call_edge=fct_flashc_reject	_zag_str_concat
+call_edge=fct_flashc_reject	_zag_str_concat
+call_edge=fct_flashc_reject	_zag_str_concat
+call_edge=fct_flashc_reject	_zag_str_concat
+call_edge=fct_flashc_reject	fct_run_expect_fail
+expr_fact=fct_flashc_reject	let.src	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc_reject	let.src.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.src.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc_reject	let.src.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.src.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.src.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.src.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_flashc_reject	src	[]u8	basis=explicit
+expr_fact=fct_flashc_reject	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.check_cmd	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc_reject	let.check_cmd.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.check_cmd.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc_reject	let.check_cmd.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.check_cmd.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.check_cmd.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	let.check_cmd.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_flashc_reject	check_cmd	[]u8	basis=explicit
+expr_fact=fct_flashc_reject	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_flashc_reject	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc_reject	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=fct_flashc	147222423,330725044,4522	line=54	effect=5
+fact_fn=fct_flashc	effect_free=0	leaf=0	constant_return=0	alloc=1	io=1
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	fct_run
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	fct_run
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	_zag_str_concat
+call_edge=fct_flashc	fct_run
+call_edge=fct_flashc	_zag_file_exists
+call_edge=fct_flashc	fct_fail
+expr_fact=fct_flashc	let.src	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.src.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.src.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.src.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.src.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.src.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.src.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_flashc	src	[]u8	basis=explicit
+expr_fact=fct_flashc	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.check_cmd	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.check_cmd.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.check_cmd.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.check_cmd.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.check_cmd.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.check_cmd.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.check_cmd.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_flashc	check_cmd	[]u8	basis=explicit
+expr_fact=fct_flashc	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_flashc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.emit_cmd	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.emit_cmd.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.emit_cmd.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.emit_cmd.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.emit_cmd.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.emit_cmd.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.emit_cmd.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_flashc	emit_cmd	[]u8	basis=explicit
+expr_fact=fct_flashc	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_flashc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.out	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.out.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.out.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.out.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.out.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.out.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.out.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_flashc	out	[]u8	basis=explicit
+expr_fact=fct_flashc	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.build_cmd	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.build_cmd.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.build_cmd.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	let.build_cmd.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.build_cmd.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.build_cmd.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	let.build_cmd.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=fct_flashc	build_cmd	[]u8	basis=explicit
+expr_fact=fct_flashc	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=fct_flashc	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_flashc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	if.condition	type=bool	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_flashc	if.condition.left	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_flashc	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=fct_flashc	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=fct_flashc	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=main	257294342,669255037,5736	line=79	effect=5
+fact_fn=main	effect_free=0	leaf=0	constant_return=0	alloc=1	io=1
+call_edge=main	_zag_println
+call_edge=main	_zag_file_exists
+call_edge=main	_zag_file_exists
+call_edge=main	_zag_file_exists
+call_edge=main	_zag_str_concat
+call_edge=main	fct_fail
+call_edge=main	fct_flashc
+call_edge=main	fct_flashc
+call_edge=main	fct_flashc
+call_edge=main	fct_flashc_reject
+call_edge=main	fct_flashc_reject
+call_edge=main	fct_flashc_reject
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	_zag_str_concat
+call_edge=main	fct_run_expect_rc
+call_edge=main	_zag_println
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.root	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	root	[]u8	basis=explicit
+expr_fact=main	if.condition	type=bool	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	if.condition.left	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition	type=bool	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	if.condition.left	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition	type=bool	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	if.condition.left	type=i32	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	if.condition.left.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.trit_src	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	let.trit_src.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.trit_src.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	let.trit_src.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.trit_src.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.trit_src.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.trit_src.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	trit_src	[]u8	basis=explicit
+expr_fact=main	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.trit_out	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	let.trit_out.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.trit_out.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	let.trit_out.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.trit_out.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.trit_out.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.trit_out.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	trit_out	[]u8	basis=explicit
+expr_fact=main	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.run_cmd	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	let.run_cmd.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.run_cmd.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	let.run_cmd.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	let.run_cmd.arg0.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.run_cmd.arg0.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	let.run_cmd.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	run_cmd	[]u8	basis=explicit
+expr_fact=main	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=main	assign.value.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_malloc
+decl_node=_zag_malloc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	602239870,679158606,173
+decl_codegen_region=_zag_malloc	602239870,679158606,173
+decl_type_edge=_zag_malloc	i32
+decl_type_edge=_zag_malloc	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_realloc
+decl_node=_zag_realloc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	434696450,638818083,204
+decl_codegen_region=_zag_realloc	434696450,638818083,204
+decl_type_edge=_zag_realloc	*i8
+decl_type_edge=_zag_realloc	i32
+decl_type_edge=_zag_realloc	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_free
+decl_node=_zag_free	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	255116002,482010143,162
+decl_codegen_region=_zag_free	255116002,482010143,162
+decl_type_edge=_zag_free	*i8
+decl_type_edge=_zag_free	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_memcpy
+decl_node=_zag_memcpy	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	808819735,117690231,220
+decl_codegen_region=_zag_memcpy	808819735,117690231,220
+decl_type_edge=_zag_memcpy	*i8
+decl_type_edge=_zag_memcpy	*i8
+decl_type_edge=_zag_memcpy	i32
+decl_type_edge=_zag_memcpy	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_memcmp
+decl_node=_zag_memcmp	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	767740451,363745733,215
+decl_codegen_region=_zag_memcmp	767740451,363745733,215
+decl_type_edge=_zag_memcmp	*i8
+decl_type_edge=_zag_memcmp	*i8
+decl_type_edge=_zag_memcmp	i32
+decl_type_edge=_zag_memcmp	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strlen
+decl_node=_zag_strlen	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	460684129,915341804,156
+decl_codegen_region=_zag_strlen	460684129,915341804,156
+decl_type_edge=_zag_strlen	[]u8
+decl_type_edge=_zag_strlen	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strcmp
+decl_node=_zag_strcmp	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	694989196,564761593,187
+decl_codegen_region=_zag_strcmp	694989196,564761593,187
+decl_type_edge=_zag_strcmp	[]u8
+decl_type_edge=_zag_strcmp	[]u8
+decl_type_edge=_zag_strcmp	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strcmp_ord
+decl_node=_zag_strcmp_ord	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	965745539,79877324,191
+decl_codegen_region=_zag_strcmp_ord	965745539,79877324,191
+decl_type_edge=_zag_strcmp_ord	[]u8
+decl_type_edge=_zag_strcmp_ord	[]u8
+decl_type_edge=_zag_strcmp_ord	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strdup
+decl_node=_zag_strdup	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	399685385,325081363,165
+decl_codegen_region=_zag_strdup	399685385,325081363,165
+decl_type_edge=_zag_strdup	[]u8
+decl_type_edge=_zag_strdup	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_concat
+decl_node=_zag_str_concat	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	54518050,147982360,200
+decl_codegen_region=_zag_str_concat	54518050,147982360,200
+decl_type_edge=_zag_str_concat	[]u8
+decl_type_edge=_zag_str_concat	[]u8
+decl_type_edge=_zag_str_concat	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_index_of_byte
+decl_node=_zag_str_index_of_byte	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	450277703,616871466,197
+decl_codegen_region=_zag_str_index_of_byte	450277703,616871466,197
+decl_type_edge=_zag_str_index_of_byte	[]u8
+decl_type_edge=_zag_str_index_of_byte	i32
+decl_type_edge=_zag_str_index_of_byte	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_i64_to_str
+decl_node=_zag_i64_to_str	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	774889173,762720612,168
+decl_codegen_region=_zag_i64_to_str	774889173,762720612,168
+decl_type_edge=_zag_i64_to_str	i64
+decl_type_edge=_zag_i64_to_str	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_u64_to_str
+decl_node=_zag_u64_to_str	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	459904823,800247324,168
+decl_codegen_region=_zag_u64_to_str	459904823,800247324,168
+decl_type_edge=_zag_u64_to_str	u64
+decl_type_edge=_zag_u64_to_str	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_to_i64
+decl_node=_zag_str_to_i64	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	604981581,785716214,160
+decl_codegen_region=_zag_str_to_i64	604981581,785716214,160
+decl_type_edge=_zag_str_to_i64	[]u8
+decl_type_edge=_zag_str_to_i64	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_print
+decl_node=_zag_print	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	410386809,842218209,161
+decl_codegen_region=_zag_print	410386809,842218209,161
+decl_type_edge=_zag_print	[]u8
+decl_type_edge=_zag_print	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_println
+decl_node=_zag_println	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	953727822,993815596,163
+decl_codegen_region=_zag_println	953727822,993815596,163
+decl_type_edge=_zag_println	[]u8
+decl_type_edge=_zag_println	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_eprintln
+decl_node=_zag_eprintln	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	783295709,969170529,164
+decl_codegen_region=_zag_eprintln	783295709,969170529,164
+decl_type_edge=_zag_eprintln	[]u8
+decl_type_edge=_zag_eprintln	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_flush
+decl_node=_zag_flush	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	217076049,844902298,132
+decl_codegen_region=_zag_flush	217076049,844902298,132
+decl_type_edge=_zag_flush	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_read_file
+decl_node=_zag_read_file	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	341286734,397383280,178
+decl_codegen_region=_zag_read_file	341286734,397383280,178
+decl_type_edge=_zag_read_file	[]u8
+decl_type_edge=_zag_read_file	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_write_file
+decl_node=_zag_write_file	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	479036127,452317086,205
+decl_codegen_region=_zag_write_file	479036127,452317086,205
+decl_type_edge=_zag_write_file	[]u8
+decl_type_edge=_zag_write_file	[]u8
+decl_type_edge=_zag_write_file	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_write_exec
+decl_node=_zag_write_exec	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	732880525,912565347,205
+decl_codegen_region=_zag_write_exec	732880525,912565347,205
+decl_type_edge=_zag_write_exec	[]u8
+decl_type_edge=_zag_write_exec	[]u8
+decl_type_edge=_zag_write_exec	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_file_exists
+decl_node=_zag_file_exists	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	738793763,819522761,169
+decl_codegen_region=_zag_file_exists	738793763,819522761,169
+decl_type_edge=_zag_file_exists	[]u8
+decl_type_edge=_zag_file_exists	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exec_cmd
+decl_node=_zag_exec_cmd	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	602643484,16573448,165
+decl_codegen_region=_zag_exec_cmd	602643484,16573448,165
+decl_type_edge=_zag_exec_cmd	[]u8
+decl_type_edge=_zag_exec_cmd	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exec_capture
+decl_node=_zag_exec_capture	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	542443913,342308047,180
+decl_codegen_region=_zag_exec_capture	542443913,342308047,180
+decl_type_edge=_zag_exec_capture	[]u8
+decl_type_edge=_zag_exec_capture	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exit
+decl_node=_zag_exit	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	405275641,368471588,162
+decl_codegen_region=_zag_exit	405275641,368471588,162
+decl_type_edge=_zag_exit	i32
+decl_type_edge=_zag_exit	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_argc
+decl_node=_zag_argc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	998942557,695012765,130
+decl_codegen_region=_zag_argc	998942557,695012765,130
+decl_type_edge=_zag_argc	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_arg
+decl_node=_zag_arg	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	882280767,899487250,160
+decl_codegen_region=_zag_arg	882280767,899487250,160
+decl_type_edge=_zag_arg	i32
+decl_type_edge=_zag_arg	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_getenv
+decl_node=_zag_getenv	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	977116258,601522591,165
+decl_codegen_region=_zag_getenv	977116258,601522591,165
+decl_type_edge=_zag_getenv	[]u8
+decl_type_edge=_zag_getenv	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_slice_ptr
+decl_node=_zag_slice_ptr	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	445180039,853621880,159
+decl_codegen_region=_zag_slice_ptr	445180039,853621880,159
+decl_type_edge=_zag_slice_ptr	[]u8
+decl_type_edge=_zag_slice_ptr	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_read_fd
+decl_node=_zag_read_fd	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	969270656,322067489,224
+decl_codegen_region=_zag_read_fd	969270656,322067489,224
+decl_type_edge=_zag_read_fd	i64
+decl_type_edge=_zag_read_fd	*i8
+decl_type_edge=_zag_read_fd	i64
+decl_type_edge=_zag_read_fd	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_clock_monotonic_ms
+decl_node=_zag_clock_monotonic_ms	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	592918630,470527004,144
+decl_codegen_region=_zag_clock_monotonic_ms	592918630,470527004,144
+decl_type_edge=_zag_clock_monotonic_ms	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_raw_syscall
+decl_node=_zag_raw_syscall	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	693351262,901525871,353
+decl_codegen_region=_zag_raw_syscall	693351262,901525871,353
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	process_arg_count
+decl_node=process_arg_count	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	609146573,746032931,254
+decl_codegen_region=process_arg_count	609146573,746032931,254
+decl_type_edge=process_arg_count	i32
+fn_call_edge=process_arg_count	_zag_argc
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	process_arg
+decl_node=process_arg	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	534339967,109936512,314
+decl_codegen_region=process_arg	534339967,109936512,314
+decl_type_edge=process_arg	i32
+decl_type_edge=process_arg	[]u8
+fn_call_edge=process_arg	_zag_arg
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	process_run_shell
+decl_node=process_run_shell	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	293948833,464436389,329
+decl_codegen_region=process_run_shell	293948833,464436389,329
+decl_type_edge=process_run_shell	[]u8
+decl_type_edge=process_run_shell	i32
+fn_call_edge=process_run_shell	_zag_exec_cmd
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	process_exit
+decl_node=process_exit	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	702791570,597890328,316
+decl_codegen_region=process_exit	702791570,597890328,316
+decl_type_edge=process_exit	i32
+decl_type_edge=process_exit	void
+fn_call_edge=process_exit	_zag_exit
+decl_module_edge=flashc_test.zag	fct_fail
+decl_node=fct_fail	flashc_test.zag	946656400,515156380,645
+decl_codegen_region=fct_fail	946656400,515156380,645
+decl_type_edge=fct_fail	[]u8
+decl_type_edge=fct_fail	void
+fn_call_edge=fct_fail	_zag_print
+fn_call_edge=fct_fail	_zag_println
+fn_call_edge=fct_fail	process_exit
+decl_module_edge=flashc_test.zag	fct_run
+decl_node=fct_run	flashc_test.zag	799336581,535000077,986
+decl_codegen_region=fct_run	799336581,535000077,986
+decl_type_edge=fct_run	[]u8
+decl_type_edge=fct_run	void
+fn_call_edge=fct_run	process_run_shell
+fn_call_edge=fct_run	_zag_print
+fn_call_edge=fct_run	_zag_println
+fn_call_edge=fct_run	process_exit
+decl_module_edge=flashc_test.zag	fct_run_expect_fail
+decl_node=fct_run_expect_fail	flashc_test.zag	234103095,303512672,1010
+decl_codegen_region=fct_run_expect_fail	234103095,303512672,1010
+decl_type_edge=fct_run_expect_fail	[]u8
+decl_type_edge=fct_run_expect_fail	void
+fn_call_edge=fct_run_expect_fail	process_run_shell
+fn_call_edge=fct_run_expect_fail	_zag_print
+fn_call_edge=fct_run_expect_fail	_zag_println
+fn_call_edge=fct_run_expect_fail	process_exit
+decl_module_edge=flashc_test.zag	fct_run_expect_rc
+decl_node=fct_run_expect_rc	flashc_test.zag	800502114,138191973,1691
+decl_codegen_region=fct_run_expect_rc	800502114,138191973,1691
+decl_type_edge=fct_run_expect_rc	[]u8
+decl_type_edge=fct_run_expect_rc	i32
+decl_type_edge=fct_run_expect_rc	void
+fn_call_edge=fct_run_expect_rc	process_run_shell
+fn_call_edge=fct_run_expect_rc	_zag_print
+fn_call_edge=fct_run_expect_rc	_zag_print
+fn_call_edge=fct_run_expect_rc	_zag_print
+fn_call_edge=fct_run_expect_rc	_zag_println
+fn_call_edge=fct_run_expect_rc	process_exit
+decl_module_edge=flashc_test.zag	fct_flashc_reject
+decl_node=fct_flashc_reject	flashc_test.zag	246367598,412502090,1643
+decl_codegen_region=fct_flashc_reject	246367598,412502090,1643
+decl_type_edge=fct_flashc_reject	[]u8
+decl_type_edge=fct_flashc_reject	[]u8
+decl_type_edge=fct_flashc_reject	void
+fn_call_edge=fct_flashc_reject	_zag_str_concat
+fn_call_edge=fct_flashc_reject	_zag_str_concat
+fn_call_edge=fct_flashc_reject	_zag_str_concat
+fn_call_edge=fct_flashc_reject	_zag_str_concat
+fn_call_edge=fct_flashc_reject	_zag_str_concat
+fn_call_edge=fct_flashc_reject	_zag_str_concat
+fn_call_edge=fct_flashc_reject	fct_run_expect_fail
+decl_module_edge=flashc_test.zag	fct_flashc
+decl_node=fct_flashc	flashc_test.zag	147222423,330725044,4522
+decl_codegen_region=fct_flashc	147222423,330725044,4522
+decl_type_edge=fct_flashc	[]u8
+decl_type_edge=fct_flashc	[]u8
+decl_type_edge=fct_flashc	void
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	fct_run
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	fct_run
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	_zag_str_concat
+fn_call_edge=fct_flashc	fct_run
+fn_call_edge=fct_flashc	_zag_file_exists
+fn_call_edge=fct_flashc	fct_fail
+decl_module_edge=flashc_test.zag	main
+decl_node=main	flashc_test.zag	257294342,669255037,5736
+decl_codegen_region=main	257294342,669255037,5736
+decl_type_edge=main	i32
+fn_call_edge=main	_zag_println
+fn_call_edge=main	_zag_file_exists
+fn_call_edge=main	_zag_file_exists
+fn_call_edge=main	_zag_file_exists
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	fct_fail
+fn_call_edge=main	fct_flashc
+fn_call_edge=main	fct_flashc
+fn_call_edge=main	fct_flashc
+fn_call_edge=main	fct_flashc_reject
+fn_call_edge=main	fct_flashc_reject
+fn_call_edge=main	fct_flashc_reject
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	_zag_str_concat
+fn_call_edge=main	fct_run_expect_rc
+fn_call_edge=main	_zag_println
+module_node=flashc_test.zag	192347095,170402879,3775
+module_node=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	428695430,447087553,3895
+module_node=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag	976623515,156923330,570
+import_edge=flashc_test.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag
+import_edge=flashc_test.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/selfhost/std/process.zag
+checksum=527312838,361813088,54456

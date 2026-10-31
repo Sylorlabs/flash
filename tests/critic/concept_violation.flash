@@ -1,0 +1,27 @@
+// concept_violation.flash — must FAIL stage-1 --check.
+// BadType does not implement the Numeric concept (missing doubled method).
+
+concept Numeric {
+    fn value(self: i32) i32;
+    fn doubled(self: i32) i32;
+}
+
+struct BadType {
+    x: i32,
+}
+
+fn BadType_value(self: BadType) i32 {
+    return self.x;
+}
+
+// BadType_doubled is intentionally missing.
+
+fn double_it[T: Numeric](x: T) i32 {
+    return T_doubled(x);
+}
+
+fn main() i32 {
+    let b: BadType = BadType{ .x = 1 };
+    let result: i32 = double_it[BadType](b);
+    return result;
+}

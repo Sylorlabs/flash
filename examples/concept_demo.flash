@@ -1,0 +1,43 @@
+// concept_demo.flash — bounded polymorphism with concepts.
+//
+// A concept declares required method signatures. A generic fn with
+// [T: ConceptName] constrains T to satisfy the concept. The compiler:
+//   1. Checks that type arguments satisfy concept constraints at call sites.
+//   2. Monomorphizes the generic function body, substituting T with the
+//      concrete type (e.g., T_doubled → Counter_doubled).
+
+concept Numeric {
+    fn value(self: i32) i32;
+    fn doubled(self: i32) i32;
+}
+
+struct Counter {
+    count: i32,
+}
+
+fn Counter_value(self: Counter) i32 {
+    return self.count;
+}
+
+fn Counter_doubled(self: Counter) i32 {
+    return self.count * 2;
+}
+
+// Generic function with concept constraint. The body uses T_doubled(x),
+// which the monomorphization pass rewrites to Counter_doubled(x) when
+// instantiated with T=Counter.
+fn double_it[T: Numeric](x: T) i32 {
+    return T_doubled(x);
+}
+
+fn main() i32 {
+    let c: Counter = Counter{ .count = 21 };
+    // The concept constraint check happens here: the compiler verifies
+    // that Counter satisfies Numeric (has value and doubled methods with
+    // matching return types). Then the monomorphization pass creates
+    // double_it__Counter with T_doubled → Counter_doubled.
+    let result: i32 = double_it[Counter](c);
+    if (result != 42) { return 1; }
+    _zag_println("concept_demo: ok");
+    return 0;
+}

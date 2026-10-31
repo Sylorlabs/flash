@@ -72,7 +72,7 @@ fn fe_t_width(ty: []u8) i32 {
     return w;
 }
 
-fn fe_type(ty: []u8) []u8 {
+fn fe_type_atom(ty: []u8) []u8 {
     if (@strEq(ty, "trit") == 1)  { return "Trit"; }
     if (@strEq(ty, "wave") == 1)  { return "Wave"; }
     if (@strEq(ty, "beam") == 1)  { return "Beam"; }
@@ -86,18 +86,43 @@ fn fe_type(ty: []u8) []u8 {
     return ty;
 }
 
+fn fe_type_word_char(c: i32) i32 {
+    if (c >= 48 && c <= 57) { return 1; }
+    if (c >= 65 && c <= 90) { return 1; }
+    if (c >= 97 && c <= 122) { return 1; }
+    if (c == 95) { return 1; }
+    return 0;
+}
+
+fn fe_type(ty: []u8) []u8 {
+    let out: []u8 = "";
+    let i: i32 = 0;
+    while (i < ty.len) {
+        let c: i32 = ty[i] as i32;
+        if (fe_type_word_char(c) == 1) {
+            let start: i32 = i;
+            while (i < ty.len && fe_type_word_char(ty[i] as i32) == 1) { i = i + 1; }
+            out = _zag_str_concat(out, fe_type_atom(ty[start..i]));
+        } else {
+            out = _zag_str_concat(out, ty[i..i + 1]);
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
 fn fe_is_hex_lit(text: []u8) i32 {
     if (text.len < 3) { return 0; }
-    if ((text[0] as i32) != '0') { return 0; }
+    if ((text[0] as i32) != 48) { return 0; }
     let c1: i32 = text[1] as i32;
-    if (c1 != 'x' && c1 != 'X') { return 0; }
+    if (c1 != 120 && c1 != 88) { return 0; }
     return 1;
 }
 
 fn fe_hex_val(c: i32) i32 {
-    if (c >= '0' && c <= '9') { return c - '0'; }
-    if (c >= 'a' && c <= 'f') { return c - 'a' + 10; }
-    if (c >= 'A' && c <= 'F') { return c - 'A' + 10; }
+    if (c >= 48 && c <= 57) { return c - 48; }
+    if (c >= 97 && c <= 102) { return c - 97 + 10; }
+    if (c >= 65 && c <= 70) { return c - 65 + 10; }
     return 0;
 }
 
@@ -187,17 +212,307 @@ fn fe_targs_str(targs: ArrayList[[]u8]) []u8 {
     return _zag_str_concat(s, "]");
 }
 
+// ── Monomorphization pass ───────────────────────────────────────────────────
+//
+// User-defined generic functions cannot be emitted as-is because the Zag
+// backend has no generic support for Flash-level functions. This pass:
+//   1. Finds all user-defined generic function declarations.
+//   2. Walks all function bodies for call sites with concrete type args.
+//   3. For each unique (fn_name, type_args) instantiation, deep-copies the
+//      generic function's AST with type parameters substituted by concrete
+//      types, renames it to the mangled name, and adds it to the pool/decls.
+//   4. Rewrites call sites to use the mangled name (no type args).
+//   5. The emitter skips generic declarations (tparam_count > 0) and only
+//      emits the specialized copies.
+
+fn fe_is_ident_char(c: i32) i32 {
+    if (c >= 65 && c <= 90) { return 1; }  // A-Z
+    if (c >= 97 && c <= 122) { return 1; } // a-z
+    if (c >= 48 && c <= 57) { return 1; }  // 0-9
+    if (c == 95) { return 1; }              // _
+    return 0;
+}
+
+// Replace all occurrences of tparam as a word token in s with targ.
+// Word boundary: preceded by non-ident char (or start), followed by
+// non-letter/digit (but _ is allowed, for method dispatch: T_method → Counter_method).
+fn fe_mono_subst_str(s: []u8, tparam: []u8, targ: []u8) []u8 {
+    if (s.len == 0 || tparam.len == 0) { return s; }
+    if (tparam.len > s.len) { return s; }
+    let result: ArrayList[u8] = make[u8](s.len + targ.len);
+    let i: i32 = 0;
+    while (i < s.len) {
+        if (i + tparam.len <= s.len) {
+            let match: i32 = 1;
+            let j: i32 = 0;
+            while (j < tparam.len) {
+                if (s[i + j] != tparam[j]) { match = 0; }
+                j = j + 1;
+            }
+            if (match == 1) {
+                // Check word boundary before
+                let prev_ok: i32 = 1;
+                if (i > 0) {
+                    if (fe_is_ident_char(s[i - 1] as i32) == 1) { prev_ok = 0; }
+                }
+                // Check word boundary after (allow _ for method dispatch)
+                let next_ok: i32 = 1;
+                if (i + tparam.len < s.len) {
+                    let next: i32 = s[i + tparam.len] as i32;
+                    if ((next >= 65 && next <= 90) || (next >= 97 && next <= 122) || (next >= 48 && next <= 57)) {
+                        next_ok = 0;
+                    }
+                }
+                if (prev_ok == 1 && next_ok == 1) {
+                    let k: i32 = 0;
+                    while (k < targ.len) {
+                        push[u8](&result, targ[k]);
+                        k = k + 1;
+                    }
+                    i = i + tparam.len;
+                } else {
+                    push[u8](&result, s[i]);
+                    i = i + 1;
+                }
+            } else {
+                push[u8](&result, s[i]);
+                i = i + 1;
+            }
+        } else {
+            push[u8](&result, s[i]);
+            i = i + 1;
+        }
+    }
+    return result.data[0..result.len];
+}
+
+// Apply all tparam→targ substitutions to a string.
+fn fe_mono_subst_all(s: []u8, tparams: ArrayList[[]u8], targs: ArrayList[[]u8]) []u8 {
+    let result: []u8 = s;
+    let i: i32 = 0;
+    while (i < len[[]u8](tparams)) {
+        result = fe_mono_subst_str(result, get[[]u8](tparams, i), get[[]u8](targs, i));
+        i = i + 1;
+    }
+    return result;
+}
+
+// Deep-copy a node from the pool with type parameter substitution, return new index.
+fn fe_mono_copy_node(pool: *ArrayList[FNode], idx: i32, tparams: ArrayList[[]u8], targs: ArrayList[[]u8]) i32 {
+    let n: FNode = fe_at(pool, idx);
+    let copy: FNode = fn_blank(n.code, n.line);
+    copy.text = fe_mono_subst_all(n.text, tparams, targs);
+    copy.ty = fe_mono_subst_all(n.ty, tparams, targs);
+    copy.flag = n.flag;
+    copy.flag2 = n.flag2;
+    // Recursively copy child nodes referenced by a, b, c
+    if (n.a > 0) { copy.a = fe_mono_copy_node(pool, n.a, tparams, targs); }
+    if (n.b > 0) { copy.b = fe_mono_copy_node(pool, n.b, tparams, targs); }
+    if (n.c > 0) { copy.c = fe_mono_copy_node(pool, n.c, tparams, targs); }
+    // Copy kids (child statement indices)
+    let i: i32 = 0;
+    while (i < len[i32](n.kids)) {
+        push[i32](&copy.kids, fe_mono_copy_node(pool, get[i32](n.kids, i), tparams, targs));
+        i = i + 1;
+    }
+    // Copy kids2 (annotation counts — not type-related)
+    let j: i32 = 0;
+    while (j < len[i32](n.kids2)) {
+        push[i32](&copy.kids2, get[i32](n.kids2, j));
+        j = j + 1;
+    }
+    // Copy names with substitution
+    let k: i32 = 0;
+    while (k < len[[]u8](n.names)) {
+        push[[]u8](&copy.names, fe_mono_subst_all(get[[]u8](n.names, k), tparams, targs));
+        k = k + 1;
+    }
+    // Copy names2 with substitution (struct literal type args, annotation tokens)
+    let l: i32 = 0;
+    while (l < len[[]u8](n.names2)) {
+        push[[]u8](&copy.names2, fe_mono_subst_all(get[[]u8](n.names2, l), tparams, targs));
+        l = l + 1;
+    }
+    // Copy names3
+    let m: i32 = 0;
+    while (m < len[[]u8](n.names3)) {
+        push[[]u8](&copy.names3, get[[]u8](n.names3, m));
+        m = m + 1;
+    }
+    // Copy types with substitution
+    let p: i32 = 0;
+    while (p < len[[]u8](n.types)) {
+        push[[]u8](&copy.types, fe_mono_subst_all(get[[]u8](n.types, p), tparams, targs));
+        p = p + 1;
+    }
+    push[FNode](pool, copy);
+    return len[FNode](pool.*) - 1;
+}
+
+// Create a specialized copy of a generic function declaration.
+// Returns the pool index of the new specialized function.
+fn fe_mono_create_spec(pool: *ArrayList[FNode], gen_decl_idx: i32, targs: ArrayList[[]u8]) i32 {
+    let orig: FNode = fe_at(pool, gen_decl_idx);
+    // Extract tparam names from names2 (skipping leading annotations)
+    let base: i32 = fe_tparam_base(orig);
+    let count: i32 = fe_tparam_count(orig);
+    let tparams: ArrayList[[]u8] = make[[]u8](count);
+    let i: i32 = 0;
+    while (i < count) {
+        push[[]u8](&tparams, get[[]u8](orig.names2, base + i));
+        i = i + 1;
+    }
+    // Build the specialized function declaration
+    let copy: FNode = fn_blank(1, orig.line);
+    copy.flag = orig.flag;
+    copy.flag2 = orig.flag2;
+    copy.text = fs_mono_mangle(orig.text, targs);
+    // Preserve annotation counts (kids2) so leading/trailing annots work
+    let j: i32 = 0;
+    while (j < len[i32](orig.kids2)) {
+        push[i32](&copy.kids2, get[i32](orig.kids2, j));
+        j = j + 1;
+    }
+    // Preserve leading annotation tokens from names2
+    let la: i32 = 0;
+    while (la < base) {
+        push[[]u8](&copy.names2, get[[]u8](orig.names2, la));
+        la = la + 1;
+    }
+    // Preserve trailing annotation tokens from names2
+    let trail_base: i32 = base + count;
+    let ta: i32 = 0;
+    while (ta < fe_trailing_annots(orig)) {
+        push[[]u8](&copy.names2, get[[]u8](orig.names2, trail_base + ta));
+        ta = ta + 1;
+    }
+    // Parameter names (variable names — no substitution)
+    let k: i32 = 0;
+    while (k < len[[]u8](orig.names)) {
+        push[[]u8](&copy.names, get[[]u8](orig.names, k));
+        k = k + 1;
+    }
+    // Parameter types with substitution
+    let l: i32 = 0;
+    while (l < len[[]u8](orig.types)) {
+        push[[]u8](&copy.types, fe_mono_subst_all(get[[]u8](orig.types, l), tparams, targs));
+        l = l + 1;
+    }
+    // Return type with substitution
+    copy.ty = fe_mono_subst_all(orig.ty, tparams, targs);
+    // Deep-copy body statements with substitution
+    let m: i32 = 0;
+    while (m < len[i32](orig.kids)) {
+        push[i32](&copy.kids, fe_mono_copy_node(pool, get[i32](orig.kids, m), tparams, targs));
+        m = m + 1;
+    }
+    push[FNode](pool, copy);
+    return len[FNode](pool.*) - 1;
+}
+
+// Recursively walk a node's AST, finding calls to user-defined generics.
+// For each call site: create specialization if needed, rewrite the call site.
+fn fe_mono_process_node(pool: *ArrayList[FNode], idx: i32, gen_names: ArrayList[[]u8], gen_indices: ArrayList[i32], mono_names: *ArrayList[[]u8], decls: *ArrayList[i32]) void {
+    let n: FNode = fe_at(pool, idx);
+    // Check if this is a call to a user-defined generic
+    if (n.code == 18 && len[[]u8](n.names) > 0) {
+        let callee: FNode = fe_at(pool, n.a);
+        let gi: i32 = 0;
+        let gen_idx: i32 = -1;
+        while (gi < len[[]u8](gen_names)) {
+            if (@strEq(get[[]u8](gen_names, gi), callee.text) == 1) { gen_idx = gi; }
+            gi = gi + 1;
+        }
+        if (gen_idx >= 0) {
+            // Compute mangled name
+            let mangled: []u8 = fs_mono_mangle(callee.text, n.names);
+            // Check if specialization already exists
+            let exists: i32 = 0;
+            let mi: i32 = 0;
+            while (mi < len[[]u8](mono_names.*)) {
+                if (@strEq(get[[]u8](mono_names.*, mi), mangled) == 1) { exists = 1; }
+                mi = mi + 1;
+            }
+            if (exists == 0) {
+                push[[]u8](mono_names, mangled);
+                let spec_idx: i32 = fe_mono_create_spec(pool, get[i32](gen_indices, gen_idx), n.names);
+                push[i32](decls, spec_idx);
+            }
+            // Rewrite call site: change callee text to mangled name
+            let callee_mut: FNode = get[FNode](pool.*, n.a);
+            callee_mut.text = mangled;
+            set[FNode](pool, n.a, callee_mut);
+            // Clear type args on the call node
+            let call_mut: FNode = get[FNode](pool.*, idx);
+            call_mut.names = make[[]u8](0);
+            set[FNode](pool, idx, call_mut);
+        }
+    }
+    // Recurse into children
+    if (n.a > 0) { fe_mono_process_node(pool, n.a, gen_names, gen_indices, mono_names, decls); }
+    if (n.b > 0) { fe_mono_process_node(pool, n.b, gen_names, gen_indices, mono_names, decls); }
+    let i: i32 = 0;
+    while (i < len[i32](n.kids)) {
+        fe_mono_process_node(pool, get[i32](n.kids, i), gen_names, gen_indices, mono_names, decls);
+        i = i + 1;
+    }
+}
+
+// Main monomorphization pass: scan all declarations, specialize generics.
+fn fe_mono_pass(pool: *ArrayList[FNode], decls: *ArrayList[i32]) void {
+    // Find all user-defined generic function names and their pool indices
+    let gen_names: ArrayList[[]u8] = make[[]u8](8);
+    let gen_indices: ArrayList[i32] = make[i32](8);
+    let i: i32 = 0;
+    while (i < len[i32](decls.*)) {
+        let n: FNode = fe_at(pool, get[i32](decls.*, i));
+        if (n.code == 1 && fe_tparam_count(n) > 0) {
+            push[[]u8](&gen_names, n.text);
+            push[i32](&gen_indices, get[i32](decls.*, i));
+        }
+        i = i + 1;
+    }
+    if (len[[]u8](gen_names) == 0) { return; }
+    // Track created specializations by mangled name
+    let mono_names: ArrayList[[]u8] = make[[]u8](8);
+    // Process each declaration (including specializations added during the pass)
+    let processed: i32 = 0;
+    while (processed < len[i32](decls.*)) {
+        let n: FNode = fe_at(pool, get[i32](decls.*, processed));
+        if (n.code == 1) {
+            let j: i32 = 0;
+            while (j < len[i32](n.kids)) {
+                fe_mono_process_node(pool, get[i32](n.kids, j), gen_names, gen_indices, &mono_names, decls);
+                j = j + 1;
+            }
+        }
+        processed = processed + 1;
+    }
+}
+
 fn fe_expr(pool: *ArrayList[FNode], idx: i32) []u8 {
     let n: FNode = fe_at(pool, idx);
     if (n.code == 11) { return fe_trit_lit(n.text); }
     if (n.code == 12) { return fe_int_lit(n.text); }
     if (n.code == 13) { return n.text; }
     if (n.code == 14) { return n.text; }
-    if (n.code == 15) { return n.text; }
+    if (n.code == 15) {
+        if (@strEq(n.text, "_zag_str_free") == 1) { return "flash_str_free"; }
+        return n.text;
+    }
     if (n.code == 16) {
         if (@strEq(n.text, "orelse") == 1) {
             let s: []u8 = _zag_str_concat("(", fe_expr(pool, n.a));
             s = _zag_str_concat(s, " orelse ");
+            s = _zag_str_concat(s, fe_expr(pool, n.b));
+            return _zag_str_concat(s, ")");
+        }
+        if (@strEq(n.text, "<<") == 1 || @strEq(n.text, ">>") == 1) {
+            let helper: []u8 = "flash_shl_i64";
+            if (@strEq(n.text, ">>") == 1) { helper = "flash_shr_i64"; }
+            let s: []u8 = _zag_str_concat(helper, "(");
+            s = _zag_str_concat(s, fe_expr(pool, n.a));
+            s = _zag_str_concat(s, ", ");
             s = _zag_str_concat(s, fe_expr(pool, n.b));
             return _zag_str_concat(s, ")");
         }
@@ -299,6 +614,15 @@ fn fe_expr(pool: *ArrayList[FNode], idx: i32) []u8 {
             s = _zag_str_concat(s, fe_expr(pool, get[i32](n.kids, i)));
             i = i + 1;
         }
+        if (@strEq(n.text, "ArrayList") == 1) {
+            let has_alloc: i32 = 0;
+            let fi: i32 = 0;
+            while (fi < len[[]u8](n.names)) {
+                if (@strEq(get[[]u8](n.names, fi), "alloc") == 1) { has_alloc = 1; }
+                fi = fi + 1;
+            }
+            if (has_alloc == 0) { s = _zag_str_concat(s, ", .alloc = null as *Allocator"); }
+        }
         return _zag_str_concat(s, " }");
     }
     return "0";
@@ -350,12 +674,12 @@ fn fe_switch_expr(pool: *ArrayList[FNode], sw: FNode) []u8 {
 fn fe_emit_defers(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, defers: *ArrayList[i32]) void {
     let i: i32 = len[i32](defers.*) - 1;
     while (i >= 0) {
-        fe_stmt(pool, out, depth, get[i32](defers.*, i), defers);
+        fe_stmt(pool, out, depth, get[i32](defers.*, i), defers, "");
         i = i - 1;
     }
 }
 
-fn fe_switch_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, sw: FNode, defers: *ArrayList[i32]) i32 {
+fn fe_switch_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, sw: FNode, defers: *ArrayList[i32], loop_control: []u8) i32 {
     let err: i32 = 0;
     fe_indent(out, depth);
     fe_app(out, "switch (");
@@ -379,7 +703,7 @@ fn fe_switch_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, sw: 
             fe_app(out, "| ");
         }
         fe_app(out, "{\n");
-        err = err + fe_stmts(pool, out, depth + 2, arm.kids, defers);
+        err = err + fe_stmts(pool, out, depth + 2, arm.kids, defers, loop_control);
         fe_indent(out, depth + 1);
         fe_app(out, "}\n");
         ai = ai + 1;
@@ -387,7 +711,7 @@ fn fe_switch_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, sw: 
     if (sw.flag == 1) {
         fe_indent(out, depth + 1);
         fe_app(out, "else => {\n");
-        err = err + fe_stmts(pool, out, depth + 2, sw.kids2, defers);
+        err = err + fe_stmts(pool, out, depth + 2, sw.kids2, defers, loop_control);
         fe_indent(out, depth + 1);
         fe_app(out, "}\n");
     }
@@ -402,20 +726,75 @@ fn fe_let_fallback_ty(pool: *ArrayList[FNode], n: FNode) []u8 {
     if (e.code == 11) { return "Trit"; }
     if (e.code == 13) { return "f32"; }
     if (e.code == 14) { return "[]u8"; }
+    if (e.code == 22) {
+        if (len[[]u8](e.names2) > 0) {
+            return _zag_str_concat(e.text, fe_targs_str(e.names2));
+        }
+        return e.text;
+    }
     return "i32";
 }
 
-fn fe_stmts(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, body: ArrayList[i32], defers: *ArrayList[i32]) i32 {
-    let err: i32 = 0;
+fn fe_body_has_loop_control(pool: *ArrayList[FNode], body: ArrayList[i32]) i32 {
     let i: i32 = 0;
     while (i < len[i32](body)) {
-        err = err + fe_stmt(pool, out, depth, get[i32](body, i), defers);
+        if (fe_stmt_has_loop_control(pool, get[i32](body, i)) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn fe_stmt_has_loop_control(pool: *ArrayList[FNode], idx: i32) i32 {
+    let n: FNode = fe_at(pool, idx);
+    if (n.code == 8) {
+        let expr: FNode = fe_at(pool, n.a);
+        if (expr.code == 15 && (@strEq(expr.text, "break") == 1 || @strEq(expr.text, "continue") == 1)) {
+            return 1;
+        }
+    }
+    if (n.code == 4 || n.code == 34) {
+        if (fe_body_has_loop_control(pool, n.kids) == 1) { return 1; }
+        if (fe_body_has_loop_control(pool, n.kids2) == 1) { return 1; }
+    }
+    if (n.code == 9) {
+        let i: i32 = 0;
+        while (i < len[i32](n.kids)) {
+            let arm: FNode = fe_at(pool, get[i32](n.kids, i));
+            if (fe_body_has_loop_control(pool, arm.kids) == 1) { return 1; }
+            i = i + 1;
+        }
+        if (fe_body_has_loop_control(pool, n.kids2) == 1) { return 1; }
+    }
+    // Loop control inside a nested loop belongs to that loop, not its parent.
+    return 0;
+}
+
+fn fe_stmts_from(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, body: ArrayList[i32], start: i32, defers: *ArrayList[i32], loop_control: []u8) i32 {
+    let err: i32 = 0;
+    let i: i32 = start;
+    while (i < len[i32](body)) {
+        let stmt_idx: i32 = get[i32](body, i);
+        err = err + fe_stmt(pool, out, depth, stmt_idx, defers, loop_control);
+        if (loop_control.len > 0 && fe_stmt_has_loop_control(pool, stmt_idx) == 1 && i + 1 < len[i32](body)) {
+            fe_indent(out, depth);
+            fe_app(out, "if (");
+            fe_app(out, loop_control);
+            fe_app(out, " == 0) {\n");
+            err = err + fe_stmts_from(pool, out, depth + 1, body, i + 1, defers, loop_control);
+            fe_indent(out, depth);
+            fe_app(out, "}\n");
+            return err;
+        }
         i = i + 1;
     }
     return err;
 }
 
-fn fe_if_chain(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, n: FNode, defers: *ArrayList[i32]) i32 {
+fn fe_stmts(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, body: ArrayList[i32], defers: *ArrayList[i32], loop_control: []u8) i32 {
+    return fe_stmts_from(pool, out, depth, body, 0, defers, loop_control);
+}
+
+fn fe_if_chain(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, n: FNode, defers: *ArrayList[i32], loop_control: []u8) i32 {
     let err: i32 = 0;
     fe_app(out, "if (");
     fe_app(out, fe_expr(pool, n.a));
@@ -426,7 +805,7 @@ fn fe_if_chain(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, n: FNod
         fe_app(out, "| ");
     }
     fe_app(out, "{\n");
-    err = err + fe_stmts(pool, out, depth + 1, n.kids, defers);
+    err = err + fe_stmts(pool, out, depth + 1, n.kids, defers, loop_control);
     fe_indent(out, depth);
     fe_app(out, "}");
     if (n.flag == 1) {
@@ -434,12 +813,12 @@ fn fe_if_chain(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, n: FNod
         if (len[i32](n.kids2) == 1) {
             let first: FNode = fe_at(pool, get[i32](n.kids2, 0));
             if (first.code == 4) {
-                err = err + fe_if_chain(pool, out, depth, first, defers);
+                err = err + fe_if_chain(pool, out, depth, first, defers, loop_control);
                 return err;
             }
         }
         fe_app(out, "{\n");
-        err = err + fe_stmts(pool, out, depth + 1, n.kids2, defers);
+        err = err + fe_stmts(pool, out, depth + 1, n.kids2, defers, loop_control);
         fe_indent(out, depth);
         fe_app(out, "}\n");
         return err;
@@ -448,7 +827,7 @@ fn fe_if_chain(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, n: FNod
     return err;
 }
 
-fn fe_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, idx: i32, defers: *ArrayList[i32]) i32 {
+fn fe_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, idx: i32, defers: *ArrayList[i32], loop_control: []u8) i32 {
     let n: FNode = fe_at(pool, idx);
     if (n.code == 2) {
         fe_indent(out, depth);
@@ -481,14 +860,24 @@ fn fe_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, idx: i32, d
     }
     if (n.code == 4) {
         fe_indent(out, depth);
-        return fe_if_chain(pool, out, depth, n, defers);
+        return fe_if_chain(pool, out, depth, n, defers, loop_control);
     }
     if (n.code == 5) {
         fe_indent(out, depth);
+        let nested_control: []u8 = _zag_str_concat("__flash_loop_control_", _zag_i64_to_str(idx as i64));
+        fe_app(out, "let ");
+        fe_app(out, nested_control);
+        fe_app(out, ": i32 = 0;\n");
+        fe_indent(out, depth);
         fe_app(out, "while (");
         fe_app(out, fe_expr(pool, n.a));
-        fe_app(out, ") {\n");
-        let err: i32 = fe_stmts(pool, out, depth + 1, n.kids, defers);
+        fe_app(out, " && ");
+        fe_app(out, nested_control);
+        fe_app(out, " != 1) {\n");
+        fe_indent(out, depth + 1);
+        fe_app(out, nested_control);
+        fe_app(out, " = 0;\n");
+        let err: i32 = fe_stmts(pool, out, depth + 1, n.kids, defers, nested_control);
         fe_indent(out, depth);
         fe_app(out, "}\n");
         return err;
@@ -503,18 +892,29 @@ fn fe_stmt(pool: *ArrayList[FNode], out: *ArrayList[u8], depth: i32, idx: i32, d
     }
     if (n.code == 8) {
         fe_indent(out, depth);
+        let expr: FNode = fe_at(pool, n.a);
+        if (expr.code == 15 && @strEq(expr.text, "break") == 1 && loop_control.len > 0) {
+            fe_app(out, loop_control);
+            fe_app(out, " = 1;\n");
+            return 0;
+        }
+        if (expr.code == 15 && @strEq(expr.text, "continue") == 1 && loop_control.len > 0) {
+            fe_app(out, loop_control);
+            fe_app(out, " = 2;\n");
+            return 0;
+        }
         fe_app(out, fe_expr(pool, n.a));
         fe_app(out, ";\n");
         return 0;
     }
     if (n.code == 9) {
-        return fe_switch_stmt(pool, out, depth, n, defers);
+        return fe_switch_stmt(pool, out, depth, n, defers, loop_control);
     }
     if (n.code == 34) {
         // Zag has no bare blocks — lower group to always-true if for scope.
         fe_indent(out, depth);
         fe_app(out, "if (1) {\n");
-        let err: i32 = fe_stmts(pool, out, depth + 1, n.kids, defers);
+        let err: i32 = fe_stmts(pool, out, depth + 1, n.kids, defers, loop_control);
         fe_indent(out, depth);
         fe_app(out, "}\n");
         return err;
@@ -558,7 +958,7 @@ fn fe_fn_decl(pool: *ArrayList[FNode], out: *ArrayList[u8], n: FNode) i32 {
     }
     fe_app(out, " {\n");
     let defers: ArrayList[i32] = make[i32](4);
-    let err: i32 = fe_stmts(pool, out, 1, n.kids, &defers);
+    let err: i32 = fe_stmts(pool, out, 1, n.kids, &defers, "");
     // Fall-through exit when the body does not end in return.
     if (len[i32](n.kids) < 1 || fe_at(pool, get[i32](n.kids, len[i32](n.kids) - 1)).code != 3) {
         fe_emit_defers(pool, out, 1, &defers);
@@ -654,7 +1054,9 @@ fn fe_emit_decls(pool: *ArrayList[FNode], out: *ArrayList[u8], decls: ArrayList[
     let i: i32 = 0;
     while (i < len[i32](decls)) {
         let n: FNode = fe_at(pool, get[i32](decls, i));
-        if (n.code == 1) {
+        if (n.code == 1 && fe_tparam_count(n) > 0) {
+            // Skip generic function declarations — replaced by monomorphized specializations.
+        } else if (n.code == 1) {
             err = err + fe_fn_decl(pool, out, n);
         } else if (n.code == 30) {
             err = err + fe_struct_decl(out, n);
@@ -666,6 +1068,8 @@ fn fe_emit_decls(pool: *ArrayList[FNode], out: *ArrayList[u8], decls: ArrayList[
             err = err + fe_error_decl(out, n);
         } else if (n.code == 10) {
             err = err + fe_import_decl(out, n);
+        } else if (n.code == 36) {
+            // Concept declarations are compile-time only — no runtime emission.
         } else {
             _zag_println("flashc1: unsupported declaration in stage-1 full emitter");
             err = err + 1;

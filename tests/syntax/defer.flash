@@ -1,0 +1,17 @@
+// tests/syntax/defer.flash — W3.3: defer runs at block exit, LIFO order.
+
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    let order: i32 = 0;
+    {
+        defer flash_print("d1 ");
+        defer flash_print("d2 ");
+        order = 1;
+    }
+    // d2 should print before d1 (LIFO)
+    flash_newline();
+    flash_println_str_int("order=", order as i64);
+    flash_println("defer: ok");
+    return 0;
+}

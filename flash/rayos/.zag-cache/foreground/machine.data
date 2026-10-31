@@ -1,0 +1,37 @@
+# flash coordinate manifest
+name = ""
+version = ""
+peak_power_mw = 
+dominant_pol = 
+[paths]
+segment  { op = "", from = (, , ), to = (, , ), power_mw = , pol = , pcm_row = , pcm_col = , phase_a_rad = , phase_b_rad = , phase_result_rad = , lattice_op =  }
+panic: slice index out of bounds
+mupanic: slice index out of bounds
+panic: slice index out of bounds
+ = panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+[engine]panic: slice index out of bounds
+panic: slice index out of bounds
+[][engine] = gpucompute_routeFLASH_PLATFORM=engine[engine]panic: slice index out of bounds
+panic: slice index out of bounds
+lattice_op = lattice_op# flash image v1# flash engine image v1[manifest][fimg]manifest_loader: fimg ok, pcm_ops=
+manifest_loader: engine platform, gpu= compute_route=
+examples/ternary_logic.fimgternary_logic.fimgmanifest_loader: skip (no .fimg yet)
+manifest_loader: ok
+zag runtime: invalid negative allocation size
+zag runtime: allocation failed
+zag runtime: invalid negative allocation size
+zag runtime: large allocation provenance registry exhausted
+zag runtime: overlapping large allocation
+zag runtime: invalid or double free
+zag runtime: invalid unregistered large allocation
+zag runtime: large allocation unmap failed
+zag runtime: invalid or double free
+zag runtime: invalid negative realloc size
+zag runtime: realloc of invalid or freed allocation

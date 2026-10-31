@@ -1,0 +1,1754 @@
+format=zag-semantic-manifest-v1
+advisory=true
+executable_authority=false
+complete=true
+detail_level=full
+module=manifest_loader.zag
+profile=strict
+source=171576347,802720802,5731
+public=216613626,131542391,0
+effects=216613626,131542391,0
+layouts=216613626,131542391,0
+graph=51633842,527909294,28950
+graph_complete=1
+decl_fn=_zag_malloc	602239870,679158606,173	line=16	effect=3
+fact_fn=_zag_malloc	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_realloc	434696450,638818083,204	line=17	effect=3
+fact_fn=_zag_realloc	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_free	255116002,482010143,162	line=18	effect=1
+fact_fn=_zag_free	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_memcpy	808819735,117690231,220	line=19	effect=0
+fact_fn=_zag_memcpy	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_memcmp	767740451,363745733,215	line=20	effect=0
+fact_fn=_zag_memcmp	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strlen	460684129,915341804,156	line=23	effect=0
+fact_fn=_zag_strlen	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strcmp	694989196,564761593,187	line=24	effect=0
+fact_fn=_zag_strcmp	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strcmp_ord	965745539,79877324,191	line=25	effect=0
+fact_fn=_zag_strcmp_ord	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_strdup	399685385,325081363,165	line=26	effect=1
+fact_fn=_zag_strdup	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_concat	54518050,147982360,200	line=27	effect=1
+fact_fn=_zag_str_concat	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_index_of_byte	450277703,616871466,197	line=28	effect=0
+fact_fn=_zag_str_index_of_byte	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_i64_to_str	774889173,762720612,168	line=29	effect=1
+fact_fn=_zag_i64_to_str	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_u64_to_str	459904823,800247324,168	line=30	effect=1
+fact_fn=_zag_u64_to_str	effect_free=0	leaf=1	constant_return=0	alloc=1	io=0
+decl_fn=_zag_str_to_i64	604981581,785716214,160	line=31	effect=0
+fact_fn=_zag_str_to_i64	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_print	410386809,842218209,161	line=34	effect=4
+fact_fn=_zag_print	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_println	953727822,993815596,163	line=35	effect=4
+fact_fn=_zag_println	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_eprintln	783295709,969170529,164	line=36	effect=4
+fact_fn=_zag_eprintln	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_flush	217076049,844902298,132	line=37	effect=4
+fact_fn=_zag_flush	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_read_file	341286734,397383280,178	line=41	effect=5
+fact_fn=_zag_read_file	effect_free=0	leaf=1	constant_return=0	alloc=1	io=1
+decl_fn=_zag_write_file	479036127,452317086,205	line=42	effect=4
+fact_fn=_zag_write_file	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_write_exec	732880525,912565347,205	line=44	effect=4
+fact_fn=_zag_write_exec	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_file_exists	738793763,819522761,169	line=45	effect=4
+fact_fn=_zag_file_exists	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_exec_cmd	602643484,16573448,165	line=48	effect=4
+fact_fn=_zag_exec_cmd	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_exec_capture	542443913,342308047,180	line=49	effect=5
+fact_fn=_zag_exec_capture	effect_free=0	leaf=1	constant_return=0	alloc=1	io=1
+decl_fn=_zag_exit	405275641,368471588,162	line=52	effect=4
+fact_fn=_zag_exit	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_argc	998942557,695012765,130	line=55	effect=4
+fact_fn=_zag_argc	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_arg	882280767,899487250,160	line=56	effect=4
+fact_fn=_zag_arg	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_getenv	977116258,601522591,165	line=57	effect=4
+fact_fn=_zag_getenv	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_slice_ptr	445180039,853621880,159	line=59	effect=0
+fact_fn=_zag_slice_ptr	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+decl_fn=_zag_read_fd	969270656,322067489,224	line=60	effect=4
+fact_fn=_zag_read_fd	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_clock_monotonic_ms	592918630,470527004,144	line=61	effect=4
+fact_fn=_zag_clock_monotonic_ms	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=_zag_raw_syscall	693351262,901525871,353	line=62	effect=4
+fact_fn=_zag_raw_syscall	effect_free=0	leaf=1	constant_return=0	alloc=0	io=1
+decl_fn=make	467907901,136082893,1131	line=22	effect=3
+fact_fn=make	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=make	_zag_malloc
+call_edge=make	@sizeOf
+expr_fact=make	let.c	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=make	c	i32	basis=explicit
+expr_fact=make	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=make	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=make	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=make	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=make	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=make	let.raw	type=*i8	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=make	let.raw.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=make	let.raw.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=make	let.raw.arg0.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=make	let.raw.arg0.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=make	let.raw.arg0.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+value_type=make	raw	*i8	basis=explicit
+expr_fact=make	return	type=ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=push	853314685,450147372,2502	line=30	effect=3
+fact_fn=push	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=push	_zag_realloc
+call_edge=push	@sizeOf
+expr_fact=push	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	if.condition.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	if.condition.left.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	if.condition.left.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	if.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	if.condition.right.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	if.condition.right.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	let.nc	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	let.nc.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	let.nc.left.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	let.nc.left.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	let.nc.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=push	nc	i32	basis=explicit
+expr_fact=push	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value	type=*T	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=push	assign.value.operand	type=*i8	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=push	assign.value.operand.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg0	type=*i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg0.operand	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg0.operand.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg0.operand.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg1.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg1.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.value.operand.arg1.right.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.target.index	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.index.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.index.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.target.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.value.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.value.left.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=push	assign.value.left.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=push	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=get	227172370,12088045,361	line=42	effect=0
+fact_fn=get	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=get	return	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=get	return.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=get	return.base.base	type=ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=get	return.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=set	91538103,795310457,480	line=47	effect=0
+fact_fn=set	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=set	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=set	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=set	assign.target.base.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=set	assign.target.base.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=set	assign.target.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=set	assign.value	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+decl_fn=pop	672230796,332360916,916	line=52	effect=0
+fact_fn=pop	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=pop	let.last	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	let.last.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	let.last.left.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	let.last.left.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=pop	let.last.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=pop	last	i32	basis=explicit
+expr_fact=pop	let.v	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	let.v.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	let.v.base.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	let.v.base.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=pop	let.v.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=pop	v	T	basis=explicit
+expr_fact=pop	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=pop	assign.target.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=pop	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=pop	return	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+decl_fn=len	417382475,718691276,264	line=59	effect=0
+fact_fn=len	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=len	return	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=len	return.base	type=ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=cap	192977718,62239647,264	line=63	effect=0
+fact_fn=cap	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=cap	return	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=cap	return.base	type=ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=is_empty	283976942,940297025,344	line=67	effect=0
+fact_fn=is_empty	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=is_empty	return	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=is_empty	return.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=is_empty	return.left.base	type=ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=is_empty	return.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=free	317219604,8241298,1053	line=72	effect=1
+fact_fn=free	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=free	_zag_free
+expr_fact=free	statement	type=void	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=free	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	statement.arg0	type=*i8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=free	statement.arg0.operand	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	statement.arg0.operand.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	statement.arg0.operand.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=free	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	assign.target.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=free	assign.value	type=*T	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=free	assign.value.operand	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	assign.target.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=free	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=free	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=free	assign.target.base.base	type=*ArrayList[T]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=free	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=coord	994538478,414384866,462	line=40	effect=0
+fact_fn=coord	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=coord	return	type=Coord	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=path_segment_new	813701111,839512268,1153	line=44	effect=0
+fact_fn=path_segment_new	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=path_segment_new	return	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=manifest_new	906762232,251639267,734	line=66	effect=3
+fact_fn=manifest_new	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=manifest_new	make
+expr_fact=manifest_new	return	type=CoordinateManifest	type_basis=typed	effect=3	effect_basis=sema
+decl_fn=manifest_push_seg	756089429,796332483,1083	line=76	effect=3
+fact_fn=manifest_push_seg	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=manifest_push_seg	push
+expr_fact=manifest_push_seg	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_push_seg	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	statement.arg0	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	statement.arg0.operand	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	statement.arg0.operand.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	statement.arg0.operand.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	statement.arg1	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	if.condition.left	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	if.condition.left.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	if.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	if.condition.right.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	if.condition.right.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	assign.target.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	assign.value	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_push_seg	assign.value.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=manifest_set_pol	762662860,829618163,406	line=83	effect=0
+fact_fn=manifest_set_pol	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=manifest_set_pol	assign.target	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_set_pol	assign.target.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_set_pol	assign.target.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_set_pol	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=manifest_write	382635390,845925658,14030	line=88	effect=3
+fact_fn=manifest_write	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=manifest_write	make
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_i32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	len
+call_edge=manifest_write	get
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_i32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_f32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_i32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_i32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_i32
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_phase_rad
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_phase_rad
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_phase_rad
+call_edge=manifest_write	manifest_app
+call_edge=manifest_write	manifest_app_i32
+call_edge=manifest_write	manifest_app
+expr_fact=manifest_write	let.out	type=ArrayList[u8]	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	let.out.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.out.arg0	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_write	out	ArrayList[u8]	basis=explicit
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.i	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_write	i	i32	basis=explicit
+expr_fact=manifest_write	let.n	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.n.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.n.arg0	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.n.arg0.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.n.arg0.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_write	n	i32	basis=explicit
+expr_fact=manifest_write	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	while.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.s	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.s.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.s.arg0	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.s.arg0.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.s.arg0.base.base	type=*CoordinateManifest	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	let.s.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_write	s	PathSegment	basis=explicit
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=Coord	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=Coord	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=Coord	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=Coord	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=Coord	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=Coord	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1.base	type=PathSegment	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_write	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg0.operand	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	return	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	return.base	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	return.base.base	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	return.lo	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_write	return.hi	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_write	return.hi.base	type=ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=manifest_app	659612717,232744100,911	line=146	effect=3
+fact_fn=manifest_app	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=manifest_app	push
+expr_fact=manifest_app	let.i	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_app	i	i32	basis=explicit
+expr_fact=manifest_app	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	while.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app	while.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_app	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	statement.arg1	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	statement.arg1.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	statement.arg1.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=manifest_app_i32	688427239,231799535,630	line=151	effect=3
+fact_fn=manifest_app_i32	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=manifest_app_i32	_zag_i64_to_str
+call_edge=manifest_app_i32	manifest_app
+expr_fact=manifest_app_i32	let.s	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=manifest_app_i32	let.s.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app_i32	let.s.arg0	type=i64	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_i32	let.s.arg0.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_app_i32	s	[]u8	basis=explicit
+expr_fact=manifest_app_i32	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_app_i32	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app_i32	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_i32	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=manifest_app_f32	188365770,698844153,818	line=156	effect=3
+fact_fn=manifest_app_f32	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=manifest_app_f32	manifest_app_i32
+call_edge=manifest_app_f32	manifest_app
+expr_fact=manifest_app_f32	let.scaled	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	let.scaled.operand	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	let.scaled.operand.left	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	let.scaled.operand.right	type=f32	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_app_f32	scaled	i32	basis=explicit
+expr_fact=manifest_app_f32	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_app_f32	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_app_f32	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_f32	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=manifest_app_phase_rad	517036120,139999364,827	line=163	effect=3
+fact_fn=manifest_app_phase_rad	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=manifest_app_phase_rad	manifest_app_i32
+call_edge=manifest_app_phase_rad	manifest_app
+expr_fact=manifest_app_phase_rad	let.scaled	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	let.scaled.operand	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	let.scaled.operand.left	type=f32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	let.scaled.operand.right	type=f32	type_basis=typed	effect=0	effect_basis=sema
+value_type=manifest_app_phase_rad	scaled	i32	basis=explicit
+expr_fact=manifest_app_phase_rad	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_app_phase_rad	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	statement.arg1	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	statement	type=void	type_basis=typed	effect=3	effect_basis=sema
+expr_fact=manifest_app_phase_rad	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	statement.arg0	type=*ArrayList[u8]	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=manifest_app_phase_rad	statement.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_contains	972027922,739640608,2541	line=9	effect=0
+fact_fn=ml_contains	effect_free=1	leaf=1	constant_return=0	alloc=0	io=0
+expr_fact=ml_contains	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	let.i	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_contains	i	i32	basis=explicit
+expr_fact=ml_contains	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.right.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.right.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.right.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	let.j	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_contains	j	i32	basis=explicit
+expr_fact=ml_contains	let.ok	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_contains	ok	i32	basis=explicit
+expr_fact=ml_contains	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_contains	while.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left.index.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left.index.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_contains	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_parse_i32_field	849890781,282621849,3759	line=25	effect=1
+fact_fn=ml_parse_i32_field	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=ml_parse_i32_field	_zag_str_concat
+call_edge=ml_parse_i32_field	_zag_str_to_i64
+expr_fact=ml_parse_i32_field	let.needle	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.needle.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.needle.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.needle.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_i32_field	needle	[]u8	basis=explicit
+expr_fact=ml_parse_i32_field	let.at	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_i32_field	at	i32	basis=explicit
+expr_fact=ml_parse_i32_field	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.j	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_i32_field	j	i32	basis=explicit
+expr_fact=ml_parse_i32_field	let.ok	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_i32_field	ok	i32	basis=explicit
+expr_fact=ml_parse_i32_field	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.left.index.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.left.index.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.right	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.right.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.start	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.start.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.start.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	let.start.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_i32_field	start	i32	basis=explicit
+expr_fact=ml_parse_i32_field	let.end	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_i32_field	end	i32	basis=explicit
+expr_fact=ml_parse_i32_field	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.left.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.left.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.right.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.right.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.left.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	while.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return.operand	type=i64	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return.operand.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return.operand.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return.operand.arg0.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return.operand.arg0.lo	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return.operand.arg0.hi	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_i32_field	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_section_start	686710728,506793330,4145	line=50	effect=0
+fact_fn=ml_section_start	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=ml_section_start	ml_contains
+call_edge=ml_section_start	ml_contains
+expr_fact=ml_section_start	let.i	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_section_start	i	i32	basis=explicit
+expr_fact=ml_section_start	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line_start	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line_start.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line_start.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_section_start	line_start	i32	basis=explicit
+expr_fact=ml_section_start	let.line_end	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_section_start	line_end	i32	basis=explicit
+expr_fact=ml_section_start	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line.lo	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line.hi	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_section_start	line	[]u8	basis=explicit
+expr_fact=ml_section_start	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line_end	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_section_start	line_end	i32	basis=explicit
+expr_fact=ml_section_start	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.left.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	while.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line.lo	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	let.line.hi	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_section_start	line	[]u8	basis=explicit
+expr_fact=ml_section_start	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	return.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_section_start	return.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_parse_engine_field	275930164,346493372,4625	line=77	effect=1
+fact_fn=ml_parse_engine_field	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=ml_parse_engine_field	ml_section_start
+call_edge=ml_parse_engine_field	ml_contains
+call_edge=ml_parse_engine_field	ml_contains
+call_edge=ml_parse_engine_field	ml_contains
+call_edge=ml_parse_engine_field	_zag_str_concat
+call_edge=ml_parse_engine_field	ml_contains
+call_edge=ml_parse_engine_field	ml_parse_i32_field
+expr_fact=ml_parse_engine_field	let.start	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.start.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.start.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.start.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_engine_field	start	i32	basis=explicit
+expr_fact=ml_parse_engine_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.i	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_engine_field	i	i32	basis=explicit
+expr_fact=ml_parse_engine_field	let.done	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_engine_field	done	i32	basis=explicit
+expr_fact=ml_parse_engine_field	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.line_start	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.line_start.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.line_start.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_engine_field	line_start	i32	basis=explicit
+expr_fact=ml_parse_engine_field	let.line_end	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_engine_field	line_end	i32	basis=explicit
+expr_fact=ml_parse_engine_field	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.left.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	while.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.line	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.line.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.line.lo	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.line.hi	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_engine_field	line	[]u8	basis=explicit
+expr_fact=ml_parse_engine_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.needle	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.needle.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.needle.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	let.needle.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_parse_engine_field	needle	[]u8	basis=explicit
+expr_fact=ml_parse_engine_field	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	return	type=i32	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_parse_engine_field	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	return.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	return.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_field	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_parse_engine_gpu	931879613,707339484,370	line=108	effect=1
+fact_fn=ml_parse_engine_gpu	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=ml_parse_engine_gpu	ml_parse_engine_field
+expr_fact=ml_parse_engine_gpu	return	type=i32	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_parse_engine_gpu	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_gpu	return.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_gpu	return.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_parse_engine_route	221694901,206902412,382	line=112	effect=1
+fact_fn=ml_parse_engine_route	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=ml_parse_engine_route	ml_parse_engine_field
+expr_fact=ml_parse_engine_route	return	type=i32	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_parse_engine_route	return.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_route	return.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_parse_engine_route	return.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_has_engine_section	534267948,66971593,917	line=116	effect=0
+fact_fn=ml_has_engine_section	effect_free=1	leaf=0	constant_return=0	alloc=0	io=0
+call_edge=ml_has_engine_section	ml_contains
+call_edge=ml_has_engine_section	ml_contains
+expr_fact=ml_has_engine_section	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_has_engine_section	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_count_pcm_segments	202317255,935111844,3079	line=122	effect=1
+fact_fn=ml_count_pcm_segments	effect_free=0	leaf=0	constant_return=0	alloc=1	io=0
+call_edge=ml_count_pcm_segments	ml_contains
+call_edge=ml_count_pcm_segments	ml_parse_i32_field
+expr_fact=ml_count_pcm_segments	let.count	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_count_pcm_segments	count	i32	basis=explicit
+expr_fact=ml_count_pcm_segments	let.i	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_count_pcm_segments	i	i32	basis=explicit
+expr_fact=ml_count_pcm_segments	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.line_start	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.line_start.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.line_start.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_count_pcm_segments	line_start	i32	basis=explicit
+expr_fact=ml_count_pcm_segments	let.line_end	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_count_pcm_segments	line_end	i32	basis=explicit
+expr_fact=ml_count_pcm_segments	while.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.left.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.left.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.right.left	type=u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.right.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.right.left.index	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	while.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.right	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.right.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.line	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.line.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.line.lo	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.line.hi	type=i32	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_count_pcm_segments	line	[]u8	basis=explicit
+expr_fact=ml_count_pcm_segments	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.op	type=i32	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.op.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.op.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	let.op.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_count_pcm_segments	op	i32	basis=explicit
+expr_fact=ml_count_pcm_segments	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.target	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	assign.value.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_count_pcm_segments	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=ml_load_fimg	997153597,880046098,4479	line=145	effect=5
+fact_fn=ml_load_fimg	effect_free=0	leaf=0	constant_return=0	alloc=1	io=1
+call_edge=ml_load_fimg	_zag_read_file
+call_edge=ml_load_fimg	ml_contains
+call_edge=ml_load_fimg	ml_contains
+call_edge=ml_load_fimg	ml_contains
+call_edge=ml_load_fimg	ml_contains
+call_edge=ml_load_fimg	ml_count_pcm_segments
+call_edge=ml_load_fimg	_zag_print
+call_edge=ml_load_fimg	_zag_println
+call_edge=ml_load_fimg	_zag_i64_to_str
+call_edge=ml_load_fimg	ml_has_engine_section
+call_edge=ml_load_fimg	ml_parse_engine_gpu
+call_edge=ml_load_fimg	ml_parse_engine_route
+call_edge=ml_load_fimg	_zag_print
+call_edge=ml_load_fimg	_zag_print
+call_edge=ml_load_fimg	_zag_i64_to_str
+call_edge=ml_load_fimg	_zag_print
+call_edge=ml_load_fimg	_zag_println
+call_edge=ml_load_fimg	_zag_i64_to_str
+expr_fact=ml_load_fimg	let.text	type=[]u8	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=ml_load_fimg	let.text.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	let.text.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_load_fimg	text	[]u8	basis=explicit
+expr_fact=ml_load_fimg	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.base	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.left.arg1	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	let.pcm_ops	type=i32	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_load_fimg	let.pcm_ops.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	let.pcm_ops.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_load_fimg	pcm_ops	i32	basis=explicit
+expr_fact=ml_load_fimg	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=ml_load_fimg	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=ml_load_fimg	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.arg0	type=i64	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.arg0.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition	type=bool	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	let.gpu	type=i32	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_load_fimg	let.gpu.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	let.gpu.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_load_fimg	gpu	i32	basis=explicit
+expr_fact=ml_load_fimg	let.route	type=i32	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_load_fimg	let.route.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	let.route.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=ml_load_fimg	route	i32	basis=explicit
+expr_fact=ml_load_fimg	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=ml_load_fimg	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=ml_load_fimg	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.arg0	type=i64	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.arg0.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=ml_load_fimg	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement	type=void	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=ml_load_fimg	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0	type=[]u8	type_basis=typed	effect=1	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.arg0	type=i64	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	statement.arg0.arg0.operand	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=ml_load_fimg	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_fn=main	748510741,791063869,1343	line=169	effect=5
+fact_fn=main	effect_free=0	leaf=0	constant_return=0	alloc=1	io=1
+call_edge=main	_zag_file_exists
+call_edge=main	ml_load_fimg
+call_edge=main	_zag_println
+call_edge=main	_zag_println
+expr_fact=main	let.path	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+value_type=main	path	[]u8	basis=explicit
+expr_fact=main	if.condition	type=bool	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	if.condition.left	type=i32	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.target	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	assign.value	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition	type=bool	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	if.condition.left	type=i32	type_basis=typed	effect=5	effect_basis=sema
+expr_fact=main	if.condition.left.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	if.condition.left.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	if.condition.right	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	statement	type=void	type_basis=typed	effect=4	effect_basis=sema
+expr_fact=main	statement.callee	type=unknown	type_basis=unknown	effect=0	effect_basis=sema
+expr_fact=main	statement.arg0	type=[]u8	type_basis=typed	effect=0	effect_basis=sema
+expr_fact=main	return	type=i32	type_basis=typed	effect=0	effect_basis=sema
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_malloc
+decl_node=_zag_malloc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	602239870,679158606,173
+decl_codegen_region=_zag_malloc	602239870,679158606,173
+decl_type_edge=_zag_malloc	i32
+decl_type_edge=_zag_malloc	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_realloc
+decl_node=_zag_realloc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	434696450,638818083,204
+decl_codegen_region=_zag_realloc	434696450,638818083,204
+decl_type_edge=_zag_realloc	*i8
+decl_type_edge=_zag_realloc	i32
+decl_type_edge=_zag_realloc	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_free
+decl_node=_zag_free	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	255116002,482010143,162
+decl_codegen_region=_zag_free	255116002,482010143,162
+decl_type_edge=_zag_free	*i8
+decl_type_edge=_zag_free	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_memcpy
+decl_node=_zag_memcpy	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	808819735,117690231,220
+decl_codegen_region=_zag_memcpy	808819735,117690231,220
+decl_type_edge=_zag_memcpy	*i8
+decl_type_edge=_zag_memcpy	*i8
+decl_type_edge=_zag_memcpy	i32
+decl_type_edge=_zag_memcpy	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_memcmp
+decl_node=_zag_memcmp	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	767740451,363745733,215
+decl_codegen_region=_zag_memcmp	767740451,363745733,215
+decl_type_edge=_zag_memcmp	*i8
+decl_type_edge=_zag_memcmp	*i8
+decl_type_edge=_zag_memcmp	i32
+decl_type_edge=_zag_memcmp	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strlen
+decl_node=_zag_strlen	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	460684129,915341804,156
+decl_codegen_region=_zag_strlen	460684129,915341804,156
+decl_type_edge=_zag_strlen	[]u8
+decl_type_edge=_zag_strlen	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strcmp
+decl_node=_zag_strcmp	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	694989196,564761593,187
+decl_codegen_region=_zag_strcmp	694989196,564761593,187
+decl_type_edge=_zag_strcmp	[]u8
+decl_type_edge=_zag_strcmp	[]u8
+decl_type_edge=_zag_strcmp	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strcmp_ord
+decl_node=_zag_strcmp_ord	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	965745539,79877324,191
+decl_codegen_region=_zag_strcmp_ord	965745539,79877324,191
+decl_type_edge=_zag_strcmp_ord	[]u8
+decl_type_edge=_zag_strcmp_ord	[]u8
+decl_type_edge=_zag_strcmp_ord	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_strdup
+decl_node=_zag_strdup	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	399685385,325081363,165
+decl_codegen_region=_zag_strdup	399685385,325081363,165
+decl_type_edge=_zag_strdup	[]u8
+decl_type_edge=_zag_strdup	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_concat
+decl_node=_zag_str_concat	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	54518050,147982360,200
+decl_codegen_region=_zag_str_concat	54518050,147982360,200
+decl_type_edge=_zag_str_concat	[]u8
+decl_type_edge=_zag_str_concat	[]u8
+decl_type_edge=_zag_str_concat	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_index_of_byte
+decl_node=_zag_str_index_of_byte	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	450277703,616871466,197
+decl_codegen_region=_zag_str_index_of_byte	450277703,616871466,197
+decl_type_edge=_zag_str_index_of_byte	[]u8
+decl_type_edge=_zag_str_index_of_byte	i32
+decl_type_edge=_zag_str_index_of_byte	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_i64_to_str
+decl_node=_zag_i64_to_str	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	774889173,762720612,168
+decl_codegen_region=_zag_i64_to_str	774889173,762720612,168
+decl_type_edge=_zag_i64_to_str	i64
+decl_type_edge=_zag_i64_to_str	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_u64_to_str
+decl_node=_zag_u64_to_str	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	459904823,800247324,168
+decl_codegen_region=_zag_u64_to_str	459904823,800247324,168
+decl_type_edge=_zag_u64_to_str	u64
+decl_type_edge=_zag_u64_to_str	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_str_to_i64
+decl_node=_zag_str_to_i64	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	604981581,785716214,160
+decl_codegen_region=_zag_str_to_i64	604981581,785716214,160
+decl_type_edge=_zag_str_to_i64	[]u8
+decl_type_edge=_zag_str_to_i64	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_print
+decl_node=_zag_print	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	410386809,842218209,161
+decl_codegen_region=_zag_print	410386809,842218209,161
+decl_type_edge=_zag_print	[]u8
+decl_type_edge=_zag_print	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_println
+decl_node=_zag_println	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	953727822,993815596,163
+decl_codegen_region=_zag_println	953727822,993815596,163
+decl_type_edge=_zag_println	[]u8
+decl_type_edge=_zag_println	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_eprintln
+decl_node=_zag_eprintln	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	783295709,969170529,164
+decl_codegen_region=_zag_eprintln	783295709,969170529,164
+decl_type_edge=_zag_eprintln	[]u8
+decl_type_edge=_zag_eprintln	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_flush
+decl_node=_zag_flush	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	217076049,844902298,132
+decl_codegen_region=_zag_flush	217076049,844902298,132
+decl_type_edge=_zag_flush	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_read_file
+decl_node=_zag_read_file	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	341286734,397383280,178
+decl_codegen_region=_zag_read_file	341286734,397383280,178
+decl_type_edge=_zag_read_file	[]u8
+decl_type_edge=_zag_read_file	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_write_file
+decl_node=_zag_write_file	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	479036127,452317086,205
+decl_codegen_region=_zag_write_file	479036127,452317086,205
+decl_type_edge=_zag_write_file	[]u8
+decl_type_edge=_zag_write_file	[]u8
+decl_type_edge=_zag_write_file	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_write_exec
+decl_node=_zag_write_exec	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	732880525,912565347,205
+decl_codegen_region=_zag_write_exec	732880525,912565347,205
+decl_type_edge=_zag_write_exec	[]u8
+decl_type_edge=_zag_write_exec	[]u8
+decl_type_edge=_zag_write_exec	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_file_exists
+decl_node=_zag_file_exists	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	738793763,819522761,169
+decl_codegen_region=_zag_file_exists	738793763,819522761,169
+decl_type_edge=_zag_file_exists	[]u8
+decl_type_edge=_zag_file_exists	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exec_cmd
+decl_node=_zag_exec_cmd	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	602643484,16573448,165
+decl_codegen_region=_zag_exec_cmd	602643484,16573448,165
+decl_type_edge=_zag_exec_cmd	[]u8
+decl_type_edge=_zag_exec_cmd	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exec_capture
+decl_node=_zag_exec_capture	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	542443913,342308047,180
+decl_codegen_region=_zag_exec_capture	542443913,342308047,180
+decl_type_edge=_zag_exec_capture	[]u8
+decl_type_edge=_zag_exec_capture	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_exit
+decl_node=_zag_exit	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	405275641,368471588,162
+decl_codegen_region=_zag_exit	405275641,368471588,162
+decl_type_edge=_zag_exit	i32
+decl_type_edge=_zag_exit	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_argc
+decl_node=_zag_argc	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	998942557,695012765,130
+decl_codegen_region=_zag_argc	998942557,695012765,130
+decl_type_edge=_zag_argc	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_arg
+decl_node=_zag_arg	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	882280767,899487250,160
+decl_codegen_region=_zag_arg	882280767,899487250,160
+decl_type_edge=_zag_arg	i32
+decl_type_edge=_zag_arg	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_getenv
+decl_node=_zag_getenv	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	977116258,601522591,165
+decl_codegen_region=_zag_getenv	977116258,601522591,165
+decl_type_edge=_zag_getenv	[]u8
+decl_type_edge=_zag_getenv	[]u8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_slice_ptr
+decl_node=_zag_slice_ptr	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	445180039,853621880,159
+decl_codegen_region=_zag_slice_ptr	445180039,853621880,159
+decl_type_edge=_zag_slice_ptr	[]u8
+decl_type_edge=_zag_slice_ptr	*i8
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_read_fd
+decl_node=_zag_read_fd	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	969270656,322067489,224
+decl_codegen_region=_zag_read_fd	969270656,322067489,224
+decl_type_edge=_zag_read_fd	i64
+decl_type_edge=_zag_read_fd	*i8
+decl_type_edge=_zag_read_fd	i64
+decl_type_edge=_zag_read_fd	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_clock_monotonic_ms
+decl_node=_zag_clock_monotonic_ms	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	592918630,470527004,144
+decl_codegen_region=_zag_clock_monotonic_ms	592918630,470527004,144
+decl_type_edge=_zag_clock_monotonic_ms	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	_zag_raw_syscall
+decl_node=_zag_raw_syscall	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	693351262,901525871,353
+decl_codegen_region=_zag_raw_syscall	693351262,901525871,353
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_type_edge=_zag_raw_syscall	i64
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	ArrayList
+decl_node=ArrayList	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	912101519,316724680,49
+decl_codegen_region=ArrayList	912101519,316724680,49
+layout_node=ArrayList	912101519,316724680,49
+decl_type_edge=ArrayList	*T
+decl_type_edge=ArrayList	i32
+decl_type_edge=ArrayList	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	make
+decl_node=make	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	467907901,136082893,1131
+decl_codegen_region=make	467907901,136082893,1131
+decl_type_edge=make	i32
+decl_type_edge=make	ArrayList[T]
+fn_call_edge=make	_zag_malloc
+runtime_call_edge=make	@sizeOf
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	push
+decl_node=push	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	853314685,450147372,2502
+decl_codegen_region=push	853314685,450147372,2502
+decl_type_edge=push	*ArrayList[T]
+decl_type_edge=push	T
+decl_type_edge=push	void
+fn_call_edge=push	_zag_realloc
+runtime_call_edge=push	@sizeOf
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	get
+decl_node=get	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	227172370,12088045,361
+decl_codegen_region=get	227172370,12088045,361
+decl_type_edge=get	ArrayList[T]
+decl_type_edge=get	i32
+decl_type_edge=get	T
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	set
+decl_node=set	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	91538103,795310457,480
+decl_codegen_region=set	91538103,795310457,480
+decl_type_edge=set	*ArrayList[T]
+decl_type_edge=set	i32
+decl_type_edge=set	T
+decl_type_edge=set	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	pop
+decl_node=pop	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	672230796,332360916,916
+decl_codegen_region=pop	672230796,332360916,916
+decl_type_edge=pop	*ArrayList[T]
+decl_type_edge=pop	T
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	len
+decl_node=len	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	417382475,718691276,264
+decl_codegen_region=len	417382475,718691276,264
+decl_type_edge=len	ArrayList[T]
+decl_type_edge=len	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	cap
+decl_node=cap	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	192977718,62239647,264
+decl_codegen_region=cap	192977718,62239647,264
+decl_type_edge=cap	ArrayList[T]
+decl_type_edge=cap	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	is_empty
+decl_node=is_empty	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	283976942,940297025,344
+decl_codegen_region=is_empty	283976942,940297025,344
+decl_type_edge=is_empty	ArrayList[T]
+decl_type_edge=is_empty	bool
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	free
+decl_node=free	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	317219604,8241298,1053
+decl_codegen_region=free	317219604,8241298,1053
+decl_type_edge=free	*ArrayList[T]
+decl_type_edge=free	void
+fn_call_edge=free	_zag_free
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	Coord
+decl_node=Coord	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	17781815,439022839,39
+decl_codegen_region=Coord	17781815,439022839,39
+layout_node=Coord	17781815,439022839,39
+decl_type_edge=Coord	f32
+decl_type_edge=Coord	f32
+decl_type_edge=Coord	f32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	PathSegment
+decl_node=PathSegment	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	160539507,299714366,211
+decl_codegen_region=PathSegment	160539507,299714366,211
+layout_node=PathSegment	160539507,299714366,211
+decl_type_edge=PathSegment	Coord
+decl_layout_edge=PathSegment	Coord
+decl_type_edge=PathSegment	Coord
+decl_layout_edge=PathSegment	Coord
+decl_type_edge=PathSegment	f32
+decl_type_edge=PathSegment	i32
+decl_type_edge=PathSegment	[]u8
+decl_type_edge=PathSegment	i32
+decl_type_edge=PathSegment	i32
+decl_type_edge=PathSegment	f32
+decl_type_edge=PathSegment	f32
+decl_type_edge=PathSegment	f32
+decl_type_edge=PathSegment	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	CoordinateManifest
+decl_node=CoordinateManifest	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	941467782,484267413,130
+decl_codegen_region=CoordinateManifest	941467782,484267413,130
+layout_node=CoordinateManifest	941467782,484267413,130
+decl_type_edge=CoordinateManifest	[]u8
+decl_type_edge=CoordinateManifest	[]u8
+decl_type_edge=CoordinateManifest	ArrayList[PathSegment]
+decl_type_edge=CoordinateManifest	f32
+decl_type_edge=CoordinateManifest	i32
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	coord
+decl_node=coord	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	994538478,414384866,462
+decl_codegen_region=coord	994538478,414384866,462
+decl_type_edge=coord	f32
+decl_type_edge=coord	f32
+decl_type_edge=coord	f32
+decl_type_edge=coord	Coord
+decl_layout_edge=coord	Coord
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	path_segment_new
+decl_node=path_segment_new	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	813701111,839512268,1153
+decl_codegen_region=path_segment_new	813701111,839512268,1153
+decl_type_edge=path_segment_new	Coord
+decl_layout_edge=path_segment_new	Coord
+decl_type_edge=path_segment_new	Coord
+decl_layout_edge=path_segment_new	Coord
+decl_type_edge=path_segment_new	f32
+decl_type_edge=path_segment_new	i32
+decl_type_edge=path_segment_new	[]u8
+decl_type_edge=path_segment_new	PathSegment
+decl_layout_edge=path_segment_new	PathSegment
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_new
+decl_node=manifest_new	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	906762232,251639267,734
+decl_codegen_region=manifest_new	906762232,251639267,734
+decl_type_edge=manifest_new	[]u8
+decl_type_edge=manifest_new	[]u8
+decl_type_edge=manifest_new	CoordinateManifest
+decl_layout_edge=manifest_new	CoordinateManifest
+fn_call_edge=manifest_new	make
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_push_seg
+decl_node=manifest_push_seg	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	756089429,796332483,1083
+decl_codegen_region=manifest_push_seg	756089429,796332483,1083
+decl_type_edge=manifest_push_seg	*CoordinateManifest
+decl_type_edge=manifest_push_seg	PathSegment
+decl_layout_edge=manifest_push_seg	PathSegment
+decl_type_edge=manifest_push_seg	void
+fn_call_edge=manifest_push_seg	push
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_set_pol
+decl_node=manifest_set_pol	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	762662860,829618163,406
+decl_codegen_region=manifest_set_pol	762662860,829618163,406
+decl_type_edge=manifest_set_pol	*CoordinateManifest
+decl_type_edge=manifest_set_pol	i32
+decl_type_edge=manifest_set_pol	void
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_write
+decl_node=manifest_write	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	382635390,845925658,14030
+decl_codegen_region=manifest_write	382635390,845925658,14030
+decl_type_edge=manifest_write	*CoordinateManifest
+decl_type_edge=manifest_write	[]u8
+fn_call_edge=manifest_write	make
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_i32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	len
+fn_call_edge=manifest_write	get
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_i32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_f32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_i32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_i32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_i32
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_phase_rad
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_phase_rad
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_phase_rad
+fn_call_edge=manifest_write	manifest_app
+fn_call_edge=manifest_write	manifest_app_i32
+fn_call_edge=manifest_write	manifest_app
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_app
+decl_node=manifest_app	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	659612717,232744100,911
+decl_codegen_region=manifest_app	659612717,232744100,911
+decl_type_edge=manifest_app	*ArrayList[u8]
+decl_type_edge=manifest_app	[]u8
+decl_type_edge=manifest_app	void
+fn_call_edge=manifest_app	push
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_app_i32
+decl_node=manifest_app_i32	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	688427239,231799535,630
+decl_codegen_region=manifest_app_i32	688427239,231799535,630
+decl_type_edge=manifest_app_i32	*ArrayList[u8]
+decl_type_edge=manifest_app_i32	i32
+decl_type_edge=manifest_app_i32	void
+fn_call_edge=manifest_app_i32	_zag_i64_to_str
+fn_call_edge=manifest_app_i32	manifest_app
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_app_f32
+decl_node=manifest_app_f32	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	188365770,698844153,818
+decl_codegen_region=manifest_app_f32	188365770,698844153,818
+decl_type_edge=manifest_app_f32	*ArrayList[u8]
+decl_type_edge=manifest_app_f32	f32
+decl_type_edge=manifest_app_f32	void
+fn_call_edge=manifest_app_f32	manifest_app_i32
+fn_call_edge=manifest_app_f32	manifest_app
+decl_module_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	manifest_app_phase_rad
+decl_node=manifest_app_phase_rad	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	517036120,139999364,827
+decl_codegen_region=manifest_app_phase_rad	517036120,139999364,827
+decl_type_edge=manifest_app_phase_rad	*ArrayList[u8]
+decl_type_edge=manifest_app_phase_rad	f32
+decl_type_edge=manifest_app_phase_rad	void
+fn_call_edge=manifest_app_phase_rad	manifest_app_i32
+fn_call_edge=manifest_app_phase_rad	manifest_app
+decl_module_edge=manifest_loader.zag	ml_contains
+decl_node=ml_contains	manifest_loader.zag	972027922,739640608,2541
+decl_codegen_region=ml_contains	972027922,739640608,2541
+decl_type_edge=ml_contains	[]u8
+decl_type_edge=ml_contains	[]u8
+decl_type_edge=ml_contains	i32
+decl_module_edge=manifest_loader.zag	ml_parse_i32_field
+decl_node=ml_parse_i32_field	manifest_loader.zag	849890781,282621849,3759
+decl_codegen_region=ml_parse_i32_field	849890781,282621849,3759
+decl_type_edge=ml_parse_i32_field	[]u8
+decl_type_edge=ml_parse_i32_field	[]u8
+decl_type_edge=ml_parse_i32_field	i32
+fn_call_edge=ml_parse_i32_field	_zag_str_concat
+fn_call_edge=ml_parse_i32_field	_zag_str_to_i64
+decl_module_edge=manifest_loader.zag	ml_section_start
+decl_node=ml_section_start	manifest_loader.zag	686710728,506793330,4145
+decl_codegen_region=ml_section_start	686710728,506793330,4145
+decl_type_edge=ml_section_start	[]u8
+decl_type_edge=ml_section_start	[]u8
+decl_type_edge=ml_section_start	i32
+fn_call_edge=ml_section_start	ml_contains
+fn_call_edge=ml_section_start	ml_contains
+decl_module_edge=manifest_loader.zag	ml_parse_engine_field
+decl_node=ml_parse_engine_field	manifest_loader.zag	275930164,346493372,4625
+decl_codegen_region=ml_parse_engine_field	275930164,346493372,4625
+decl_type_edge=ml_parse_engine_field	[]u8
+decl_type_edge=ml_parse_engine_field	[]u8
+decl_type_edge=ml_parse_engine_field	i32
+fn_call_edge=ml_parse_engine_field	ml_section_start
+fn_call_edge=ml_parse_engine_field	ml_contains
+fn_call_edge=ml_parse_engine_field	ml_contains
+fn_call_edge=ml_parse_engine_field	ml_contains
+fn_call_edge=ml_parse_engine_field	_zag_str_concat
+fn_call_edge=ml_parse_engine_field	ml_contains
+fn_call_edge=ml_parse_engine_field	ml_parse_i32_field
+decl_module_edge=manifest_loader.zag	ml_parse_engine_gpu
+decl_node=ml_parse_engine_gpu	manifest_loader.zag	931879613,707339484,370
+decl_codegen_region=ml_parse_engine_gpu	931879613,707339484,370
+decl_type_edge=ml_parse_engine_gpu	[]u8
+decl_type_edge=ml_parse_engine_gpu	i32
+fn_call_edge=ml_parse_engine_gpu	ml_parse_engine_field
+decl_module_edge=manifest_loader.zag	ml_parse_engine_route
+decl_node=ml_parse_engine_route	manifest_loader.zag	221694901,206902412,382
+decl_codegen_region=ml_parse_engine_route	221694901,206902412,382
+decl_type_edge=ml_parse_engine_route	[]u8
+decl_type_edge=ml_parse_engine_route	i32
+fn_call_edge=ml_parse_engine_route	ml_parse_engine_field
+decl_module_edge=manifest_loader.zag	ml_has_engine_section
+decl_node=ml_has_engine_section	manifest_loader.zag	534267948,66971593,917
+decl_codegen_region=ml_has_engine_section	534267948,66971593,917
+decl_type_edge=ml_has_engine_section	[]u8
+decl_type_edge=ml_has_engine_section	i32
+fn_call_edge=ml_has_engine_section	ml_contains
+fn_call_edge=ml_has_engine_section	ml_contains
+decl_module_edge=manifest_loader.zag	ml_count_pcm_segments
+decl_node=ml_count_pcm_segments	manifest_loader.zag	202317255,935111844,3079
+decl_codegen_region=ml_count_pcm_segments	202317255,935111844,3079
+decl_type_edge=ml_count_pcm_segments	[]u8
+decl_type_edge=ml_count_pcm_segments	i32
+fn_call_edge=ml_count_pcm_segments	ml_contains
+fn_call_edge=ml_count_pcm_segments	ml_parse_i32_field
+decl_module_edge=manifest_loader.zag	ml_load_fimg
+decl_node=ml_load_fimg	manifest_loader.zag	997153597,880046098,4479
+decl_codegen_region=ml_load_fimg	997153597,880046098,4479
+decl_type_edge=ml_load_fimg	[]u8
+decl_type_edge=ml_load_fimg	i32
+fn_call_edge=ml_load_fimg	_zag_read_file
+fn_call_edge=ml_load_fimg	ml_contains
+fn_call_edge=ml_load_fimg	ml_contains
+fn_call_edge=ml_load_fimg	ml_contains
+fn_call_edge=ml_load_fimg	ml_contains
+fn_call_edge=ml_load_fimg	ml_count_pcm_segments
+fn_call_edge=ml_load_fimg	_zag_print
+fn_call_edge=ml_load_fimg	_zag_println
+fn_call_edge=ml_load_fimg	_zag_i64_to_str
+fn_call_edge=ml_load_fimg	ml_has_engine_section
+fn_call_edge=ml_load_fimg	ml_parse_engine_gpu
+fn_call_edge=ml_load_fimg	ml_parse_engine_route
+fn_call_edge=ml_load_fimg	_zag_print
+fn_call_edge=ml_load_fimg	_zag_print
+fn_call_edge=ml_load_fimg	_zag_i64_to_str
+fn_call_edge=ml_load_fimg	_zag_print
+fn_call_edge=ml_load_fimg	_zag_println
+fn_call_edge=ml_load_fimg	_zag_i64_to_str
+decl_module_edge=manifest_loader.zag	main
+decl_node=main	manifest_loader.zag	748510741,791063869,1343
+decl_codegen_region=main	748510741,791063869,1343
+decl_type_edge=main	i32
+fn_call_edge=main	_zag_file_exists
+fn_call_edge=main	ml_load_fimg
+fn_call_edge=main	_zag_println
+fn_call_edge=main	_zag_println
+module_node=manifest_loader.zag	171576347,802720802,5731
+module_node=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag	428695430,447087553,3895
+module_node=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	849632838,980372127,1976
+module_node=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	696386821,497207513,5255
+import_edge=manifest_loader.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag
+import_edge=manifest_loader.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag
+import_edge=/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag
+import_edge=manifest_loader.zag	/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag
+import_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/list.zag
+import_edge=/home/micah/Desktop/Sylorlabs/flash/flash/compiler/manifest.zag	/home/micah/Desktop/Sylorlabs/flash/flash/toolchain/zag-poc/std/rt.zag
+checksum=819425378,171812105,140206

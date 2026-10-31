@@ -1,0 +1,38 @@
+// concept_multi.flash — multi-type-parameter bounded polymorphism.
+//
+// Tests that the monomorphization pass handles multiple type parameters
+// and substitutes all of them correctly in the function body.
+
+concept Addable {
+    fn add(self: i32, other: i32) i32;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn Point_add(self: Point, other: Point) i32 {
+    return self.x + other.x + self.y + other.y;
+}
+
+// Generic function with two type parameters, both constrained.
+fn combine[A: Addable, B: Addable](a: A, b: B) i32 {
+    let ra: i32 = A_add(a, a);
+    let rb: i32 = B_add(b, b);
+    return ra + rb;
+}
+
+fn main() i32 {
+    let p1: Point = Point{ .x = 1, .y = 2 };
+    let p2: Point = Point{ .x = 3, .y = 4 };
+    // combine[Point, Point] should monomorphize to combine__Point__Point
+    // with A_add → Point_add and B_add → Point_add
+    let result: i32 = combine[Point, Point](p1, p2);
+    // A_add(p1, p1) = 1+1+2+2 = 6
+    // B_add(p2, p2) = 3+3+4+4 = 14
+    // total = 20
+    if (result != 20) { return 1; }
+    _zag_println("concept_multi: ok");
+    return 0;
+}

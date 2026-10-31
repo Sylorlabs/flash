@@ -1,0 +1,31 @@
+// concept_ret_mismatch.flash — must FAIL stage-1 --check.
+// WrongType implements `value` but with the wrong return type (i32 vs bool).
+// The concept requires `fn value(self: i32) i32` but WrongType provides
+// `fn value(self: WrongType) bool`.
+
+concept Numeric {
+    fn value(self: i32) i32;
+    fn doubled(self: i32) i32;
+}
+
+struct WrongType {
+    x: i32,
+}
+
+fn WrongType_value(self: WrongType) bool {
+    return self.x > 0;
+}
+
+fn WrongType_doubled(self: WrongType) i32 {
+    return self.x * 2;
+}
+
+fn double_it[T: Numeric](x: T) i32 {
+    return T_doubled(x);
+}
+
+fn main() i32 {
+    let w: WrongType = WrongType{ .x = 1 };
+    let result: i32 = double_it[WrongType](w);
+    return result;
+}

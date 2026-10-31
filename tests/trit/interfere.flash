@@ -1,0 +1,79 @@
+// tests/trit/interfere.flash — W5: trit interference operator (@).
+//
+// The @ operator models balanced-ternary interference (photonic wave
+// superposition): for each trit position, the result is the consensus:
+//   + @ + = +    (constructive)
+//   - @ - = -    (destructive)
+//   + @ - = 0    (cancellation)
+//   0 @ x = x    (identity)
+//   x @ 0 = x
+
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    // Single-trit interference
+    let a: t9 = 0t+;  // +1
+    let b: t9 = 0t+;  // +1
+    let r1: t9 = a @ b;
+    if (r1 != 1) { return 1; }
+
+    let c: t9 = 0t-;  // -1
+    let d: t9 = 0t-;  // -1
+    let r2: t9 = c @ d;
+    if (r2 != -1) { return 2; }
+
+    let r3: t9 = a @ c;  // + @ - = 0
+    if (r3 != 0) { return 3; }
+
+    let z: t9 = 0t0;
+    let r4: t9 = z @ b;  // 0 @ + = +
+    if (r4 != 1) { return 4; }
+
+    let r5: t9 = b @ z;  // + @ 0 = +
+    if (r5 != 1) { return 5; }
+
+    // Multi-trit interference
+    // 0t++ @ 0t+- = 0t+0 (4 @ 2 = 3)
+    let e: t9 = 0t++;
+    let f: t9 = 0t+-;
+    let r6: t9 = e @ f;
+    if (r6 != 3) { return 6; }
+
+    // 0t+- @ 0t-+ = 0t00 (2 @ -2 = 0, full cancellation)
+    let g: t9 = 0t-+;
+    let r7: t9 = f @ g;
+    if (r7 != 0) { return 7; }
+
+    // 0t+0 @ 0t0+ = 0t++ (3 @ 1 = 4, no cancellation)
+    let h: t9 = 0t+0;
+    let i_val: t9 = 0t0+;
+    let r8: t9 = h @ i_val;
+    if (r8 != 4) { return 8; }
+
+    // Precedence: @ binds like * (higher than +)
+    // a @ b + c should be (a @ b) + c
+    let r9: t9 = a @ b + c;  // (1 @ 1) + (-1) = 1 + (-1) = 0
+    if (r9 != 0) { return 9; }
+
+    // Chaining: @ is left-associative
+    // a @ b @ c = (a @ b) @ c = (1 @ 1) @ (-1) = 1 @ (-1) = 0
+    let r10: t9 = a @ b @ c;
+    if (r10 != 0) { return 10; }
+
+    // Parenthesized: a @ (b @ c) = 1 @ (1 @ -1) = 1 @ 0 = 1
+    let r11: t9 = a @ (b @ c);
+    if (r11 != 1) { return 11; }
+
+    // @ with *: a * b @ c should be (a * b) @ c = (1*1) @ (-1) = 1 @ -1 = 0
+    let r12: t9 = a * b @ c;
+    if (r12 != 0) { return 12; }
+
+    // 27-trit interference (wide operands)
+    let big_a: t27 = 0t+++++++++++++++++++++++++++;
+    let big_b: t27 = 0t+++++++++++++++++++++++++++;
+    let big_r: t27 = big_a @ big_b;  // + @ + = +, so result = big_a
+    if (big_r != 3812798742493) { return 13; }
+
+    flash_println("interfere: ok");
+    return 0;
+}

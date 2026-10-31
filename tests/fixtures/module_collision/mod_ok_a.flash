@@ -1,0 +1,4 @@
+// mod_ok_a.flash — defines `fn ok_fn_a`
+fn ok_fn_a() i32 {
+    return 10;
+}

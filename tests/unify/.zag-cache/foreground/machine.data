@@ -1,0 +1,27 @@
+panic: slice index out of bounds
+panic: slice index out of bounds
+panic: slice index out of bounds
+f16f32f64f80f128f16f32f64f80f128p8p16p32p64quirep8p16p32p64quirei8u8i16u16i32u32i64u64panic: slice index out of bounds
+sat_i8i8sat_i16i16sat_i32i32sat_i64i64sat_i8sat_i16sat_i32sat_i64fixed_8_8fixed_16_16fixed_32_32fixed_8_8fixed_16_16fixed_32_32u11u11u_anyi_anyrns_3l32l16bf16mx_fp8mx_fp4vsa_b<256>vsa_b<4096>u11u_anyi_anyrns_3l32l16bf16mx_fp8mx_fp4vsa_b<256>vsa_b<4096>panic: slice index out of bounds
+p8p16p32p64sat_fixed_u_anyi_anyu11rns_f16f32f64f80f128bf16mx_fp8mx_fp4panic: slice index out of bounds
+tritTrittrit.TritwaveWavewave.WavebeamBeambeam.BeamphasePhasephase.PhaseTritWaveBeamPhasepanic: slice index out of bounds
+f16f32f64f80f128p8p16p32p64quiresat_i8sat_i16sat_i32sat_i64fixed_8_8fixed_16_16fixed_32_32u11u_anyi_anyrns_3l32l16bf16mx_fp8mx_fp4vsa_b<256>vsa_b<4096>0123456789-trit()
+Wave{ amp= wl_nm= phase_milli= }
+Type{ kind= width= signed= storage= }
+Type{ name= kind= width= signed= storage= }
+ MISSING }
+
+
+
+
+
+round_trip: s=round_trip: okzag runtime: invalid negative allocation size
+zag runtime: allocation failed
+zag runtime: invalid negative allocation size
+zag runtime: large allocation provenance registry exhausted
+zag runtime: overlapping large allocation
+zag runtime: invalid or double free
+zag runtime: invalid unregistered large allocation
+zag runtime: large allocation unmap failed
+zag runtime: invalid or double free
+panic: division by zero

@@ -1,0 +1,13 @@
+// module_demo.flash — verifies that importing two modules with distinct
+// function names works correctly (no false collision detection).
+
+@import("../tests/fixtures/module_collision/mod_ok_a.flash")
+@import("../tests/fixtures/module_collision/mod_ok_b.flash")
+
+fn main() i32 {
+    let a: i32 = ok_fn_a();
+    let b: i32 = ok_fn_b();
+    if (a + b != 30) { return 1; }
+    _zag_println("module_demo: ok");
+    return 0;
+}

@@ -177,7 +177,7 @@ fn fss_surface_extra_validate(prog: *SpProgram, file: []u8) i32 {
 // ── surface → FNode pool lowering ───────────────────────────────────────────
 
 fn fss_push(pool: *ArrayList[FNode], n: FNode) i32 {
-    push[FNode](pool.*, n);
+    push[FNode](pool, n);
     return len[FNode](pool.*) - 1;
 }
 
@@ -187,6 +187,7 @@ fn fss_blank(code: i32, line: i32) FNode {
         .a = 0, .b = 0, .c = 0, .flag = 0, .flag2 = 0,
         .kids = make[i32](2), .kids2 = make[i32](2),
         .names = make[[]u8](2), .names2 = make[[]u8](2), .types = make[[]u8](2),
+        .names3 = make[[]u8](2),
     };
 }
 

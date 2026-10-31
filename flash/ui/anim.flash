@@ -1,0 +1,103 @@
+// flash/ui/anim.flash — easing curves + frame-scheduled tween engine.
+//
+// A Tween interpolates a value from `from` to `to` over `dur` seconds with an
+// easing curve; tick it each frame with the elapsed dt and read the current
+// value. Replaces ad-hoc per-app animation (like the launcher slide).
+//
+//   let t: Tween = tween_new(0.0, 320.0, 0.25, EASE_OUT_CUBIC());
+//   tween_tick(&t, dt);  let x: f32 = tween_value(&t);
+
+fn EASE_LINEAR() i32     { return 0; }
+fn EASE_IN_QUAD() i32    { return 1; }
+fn EASE_OUT_QUAD() i32   { return 2; }
+fn EASE_IN_OUT() i32     { return 3; }
+fn EASE_OUT_CUBIC() i32  { return 4; }
+fn EASE_OUT_BACK() i32   { return 5; }   // slight overshoot
+fn EASE_OUT_BOUNCE() i32 { return 6; }
+
+fn ease_out_bounce(t: f32) f32 {
+    let n1: f32 = 7.5625;
+    let d1: f32 = 2.75;
+    if (t < 1.0 / d1) { return n1 * t * t; }
+    if (t < 2.0 / d1) { let u: f32 = t - 1.5 / d1; return n1 * u * u + 0.75; }
+    if (t < 2.5 / d1) { let u: f32 = t - 2.25 / d1; return n1 * u * u + 0.9375; }
+    let u: f32 = t - 2.625 / d1;
+    return n1 * u * u + 0.984375;
+}
+
+// Apply easing `kind` to a normalized time t in [0,1].
+fn ease(kind: i32, t: f32) f32 {
+    let x: f32 = t;
+    if (x < 0.0) { x = 0.0; }
+    if (x > 1.0) { x = 1.0; }
+    if (kind == EASE_LINEAR()) { return x; }
+    if (kind == EASE_IN_QUAD()) { return x * x; }
+    if (kind == EASE_OUT_QUAD()) { return x * (2.0 - x); }
+    if (kind == EASE_IN_OUT()) {
+        if (x < 0.5) { return 2.0 * x * x; }
+        let u: f32 = 1.0 - x;
+        return 1.0 - 2.0 * u * u;
+    }
+    if (kind == EASE_OUT_CUBIC()) {
+        let u: f32 = 1.0 - x;
+        return 1.0 - u * u * u;
+    }
+    if (kind == EASE_OUT_BACK()) {
+        let c1: f32 = 1.70158;
+        let c3: f32 = c1 + 1.0;
+        let u: f32 = x - 1.0;
+        return 1.0 + c3 * u * u * u + c1 * u * u;
+    }
+    if (kind == EASE_OUT_BOUNCE()) { return ease_out_bounce(x); }
+    return x;
+}
+
+struct Tween {
+    from: f32,
+    to: f32,
+    dur: f32,      // seconds
+    elapsed: f32,
+    kind: i32,
+    active: i32,
+}
+
+fn tween_new(from: f32, to: f32, dur: f32, kind: i32) Tween {
+    return Tween{ .from = from, .to = to, .dur = dur, .elapsed = 0.0, .kind = kind, .active = 1 };
+}
+
+// Retarget an in-flight tween to a new destination from its current value.
+fn tween_to(t: *Tween, to: f32) void {
+    t.*.from = tween_value(t);
+    t.*.to = to;
+    t.*.elapsed = 0.0;
+    t.*.active = 1;
+}
+
+fn tween_tick(t: *Tween, dt: f32) void {
+    if (t.*.active == 0) { return; }
+    t.*.elapsed = t.*.elapsed + dt;
+    if (t.*.elapsed >= t.*.dur) { t.*.elapsed = t.*.dur; t.*.active = 0; }
+}
+
+fn tween_progress(t: *Tween) f32 {
+    if (t.*.dur <= 0.0) { return 1.0; }
+    return t.*.elapsed / t.*.dur;
+}
+
+fn tween_value(t: *Tween) f32 {
+    let p: f32 = ease(t.*.kind, tween_progress(t));
+    return t.*.from + (t.*.to - t.*.from) * p;
+}
+
+fn tween_done(t: *Tween) i32 {
+    if (t.*.active == 0) { return 1; }
+    return 0;
+}
+
+// Critically-damped-ish spring step toward a target (for continuous follow,
+// e.g. drag inertia). Returns the new position; velocity is threaded via *vel.
+fn spring_step(pos: f32, target: f32, vel: *f32, stiffness: f32, damping: f32, dt: f32) f32 {
+    let force: f32 = (target - pos) * stiffness;
+    vel.* = (vel.* + force * dt) * damping;
+    return pos + vel.* * dt;
+}

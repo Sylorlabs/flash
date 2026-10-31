@@ -1,0 +1,58 @@
+// tests/photonic/mat3_typed.flash — W7: typed mat3, vec3, and wave carrier.
+//
+// This test verifies that the typed matrix and wave carrier API works:
+// - FlashMat3 constructors (identity, rotation, zero)
+// - mat3_mul, mat3_near
+// - FlashVec3 constructor
+// - FlashWave constructor and wave_default
+
+program mat3_typed
+
+@import("std/mat3.flash")
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    // mat3 identity
+    let id: FlashMat3 = mat3_identity();
+    if (id.m00 != 1.0) { return 1; }
+    if (id.m11 != 1.0) { return 2; }
+    if (id.m22 != 1.0) { return 3; }
+    if (id.m01 != 0.0) { return 4; }
+
+    // mat3 rotation
+    let rot: FlashMat3 = mat3_rotation_xy_90();
+    if (rot.m00 != 0.0) { return 5; }
+    if (rot.m01 != 0.0 - 1.0) { return 6; }
+    if (rot.m10 != 1.0) { return 7; }
+
+    // mat3 multiplication: rot * id = rot
+    let composed: FlashMat3 = mat3_mul(rot, id);
+    if (mat3_near(composed, rot, 0.0001) != 1) { return 8; }
+
+    // mat3 multiplication: id * id = id
+    let id2: FlashMat3 = mat3_mul(id, id);
+    if (mat3_near(id2, id, 0.0001) != 1) { return 9; }
+
+    // mat3 zero
+    let z: FlashMat3 = mat3_zero();
+    if (z.m00 != 0.0) { return 10; }
+    if (z.m22 != 0.0) { return 11; }
+
+    // vec3
+    let v: FlashVec3 = vec3(1, 0, -1);
+    if (v.x != 1) { return 12; }
+    if (v.y != 0) { return 13; }
+    if (v.z != -1) { return 14; }
+
+    // wave carrier
+    let w: FlashWave = flash_wave_default();
+    if (w.amplitude != 0.0) { return 15; }
+    if (w.polarization != 0) { return 16; }
+
+    let w2: FlashWave = wave_make(1.0, 193414489.0, 0.00000155, 0.785, 1);
+    if (w2.amplitude != 1.0) { return 17; }
+    if (w2.polarization != 1) { return 18; }
+
+    flash_println("mat3_typed: ok");
+    return 0;
+}

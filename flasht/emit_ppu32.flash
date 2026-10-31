@@ -107,7 +107,7 @@ fn ppu32_from_fimg_text(fimg_text: []u8, target: []u8, name: []u8) []u8 {
     ppu32_app(&out, "[insns]\n");
     // FIMG handoff: manifest [paths] segments are replayed by the qemu loader
     // via the companion .fimg; this stub keeps the text container valid.
-    if (flash_str_index_of(fimg_text, "[paths]") >= 0) {
+    if (flash_str_index_of(fimg_text, "[paths]")) |_| {
         ppu32_app(&out, "# lowered from fimg manifest [paths]\n");
     }
     return out.data[0..out.len];

@@ -55,7 +55,7 @@ fn engine_wrap_fimg(fimg_text: []u8, name: []u8, gpu: i32, route: i32) []u8 {
     engine_emit_section(&out, gpu, route);
     fimg_app(&out, "[fimg]\n");
     fimg_app(&out, fimg_text);
-    if (fimg_text.len > 0 && fimg_text[fimg_text.len - 1] != '\n') {
+    if (fimg_text.len > 0 && fimg_text[fimg_text.len - 1] != 10) {
         fimg_app(&out, "\n");
     }
     return out.data[0..out.len];

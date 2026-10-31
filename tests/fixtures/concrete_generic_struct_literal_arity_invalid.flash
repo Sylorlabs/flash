@@ -1,0 +1,8 @@
+struct Box[T] {
+    value: T,
+}
+
+fn main() i32 {
+    let bad = Box[i32, u8]{ .value = 1 };
+    return 0;
+}

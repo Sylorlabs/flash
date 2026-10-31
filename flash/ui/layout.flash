@@ -1,0 +1,309 @@
+// flash/ui/layout.flash — flexbox layout engine, pure Flash.
+//
+// A declarative box tree that computes absolute pixel rects. Each node picks
+// a main axis (row/col); children flex along it with grow weights and a fixed
+// basis, align on the cross axis, and honour padding + gap + justify. A
+// bottom-up measure pass sizes content-fit ("auto") nodes; a top-down layout
+// pass places everything. Nodes carry stable IDs for hit-testing / click-by-id.
+//
+//   let L: Layout = layout_new();
+//   let root: i32 = layout_root(&L, 1, LAYOUT_COL(), 1280, 800);
+//   let bar: i32 = layout_add(&L, root, 10, LAYOUT_ROW());
+//   layout_set_size(&L, bar, LAYOUT_GROW(), 0, LAYOUT_FIXED(), 48);
+//   layout_solve(&L, root, 0, 0);
+//   let r: LayoutRect = layout_rect(&L, 10);   // by id
+
+fn LAYOUT_ROW() i32 { return 0; }
+fn LAYOUT_COL() i32 { return 1; }
+
+// size modes
+fn LAYOUT_FIXED() i32 { return 0; }   // use the given size
+fn LAYOUT_AUTO() i32  { return 1; }   // fit to content (measured)
+fn LAYOUT_GROW() i32  { return 2; }   // fill available (flex)
+
+// justify (main axis) / align (cross axis)
+fn LAYOUT_START() i32   { return 0; }
+fn LAYOUT_CENTER() i32  { return 1; }
+fn LAYOUT_END() i32     { return 2; }
+fn LAYOUT_BETWEEN() i32 { return 3; }
+fn LAYOUT_STRETCH() i32 { return 4; }
+
+struct LayoutNode {
+    id: i32,
+    parent: i32,
+    first_child: i32,
+    next_sibling: i32,
+    dir: i32,
+    wmode: i32,
+    hmode: i32,
+    w: i32,
+    h: i32,
+    grow: i32,
+    pad_l: i32, pad_t: i32, pad_r: i32, pad_b: i32,
+    gap: i32,
+    justify: i32,
+    align: i32,
+    m_w: i32, m_h: i32,      // measured intrinsic
+    cx: i32, cy: i32, cw: i32, ch: i32,   // computed absolute rect
+}
+
+struct Layout {
+    nodes: ArrayList[LayoutNode],
+}
+
+struct LayoutRect {
+    ok: i32,
+    x: i32, y: i32, w: i32, h: i32,
+}
+
+fn layout_new() Layout {
+    return Layout{ .nodes = make[LayoutNode](16) };
+}
+
+fn layout_free(L: *Layout) void {
+    free[LayoutNode](&L.*.nodes);
+}
+
+fn layout_node_default(id: i32, parent: i32, dir: i32) LayoutNode {
+    return LayoutNode{
+        .id = id, .parent = parent, .first_child = 0 - 1, .next_sibling = 0 - 1,
+        .dir = dir, .wmode = LAYOUT_AUTO(), .hmode = LAYOUT_AUTO(),
+        .w = 0, .h = 0, .grow = 0,
+        .pad_l = 0, .pad_t = 0, .pad_r = 0, .pad_b = 0, .gap = 0,
+        .justify = LAYOUT_START(), .align = LAYOUT_START(),
+        .m_w = 0, .m_h = 0, .cx = 0, .cy = 0, .cw = 0, .ch = 0,
+    };
+}
+
+fn layout_root(L: *Layout, id: i32, dir: i32, w: i32, h: i32) i32 {
+    let n: LayoutNode = layout_node_default(id, 0 - 1, dir);
+    n.wmode = LAYOUT_FIXED(); n.w = w;
+    n.hmode = LAYOUT_FIXED(); n.h = h;
+    push[LayoutNode](&L.*.nodes, n);
+    return len[LayoutNode](L.*.nodes) - 1;
+}
+
+// Append a child under `parent`; returns the new node's array index.
+fn layout_add(L: *Layout, parent: i32, id: i32, dir: i32) i32 {
+    let n: LayoutNode = layout_node_default(id, parent, dir);
+    push[LayoutNode](&L.*.nodes, n);
+    let idx: i32 = len[LayoutNode](L.*.nodes) - 1;
+    // link as last child
+    let p: LayoutNode = get[LayoutNode](L.*.nodes, parent);
+    if (p.first_child < 0) {
+        p.first_child = idx;
+        set[LayoutNode](&L.*.nodes, parent, p);
+    } else {
+        let c: i32 = p.first_child;
+        let cn: LayoutNode = get[LayoutNode](L.*.nodes, c);
+        while (cn.next_sibling >= 0) { c = cn.next_sibling; cn = get[LayoutNode](L.*.nodes, c); }
+        cn.next_sibling = idx;
+        set[LayoutNode](&L.*.nodes, c, cn);
+    }
+    return idx;
+}
+
+fn layout_set_size(L: *Layout, i: i32, wmode: i32, w: i32, hmode: i32, h: i32) void {
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+    n.wmode = wmode; n.w = w; n.hmode = hmode; n.h = h;
+    set[LayoutNode](&L.*.nodes, i, n);
+}
+
+fn layout_set_grow(L: *Layout, i: i32, grow: i32) void {
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+    n.grow = grow;
+    set[LayoutNode](&L.*.nodes, i, n);
+}
+
+fn layout_set_pad(L: *Layout, i: i32, l: i32, t: i32, r: i32, b: i32) void {
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+    n.pad_l = l; n.pad_t = t; n.pad_r = r; n.pad_b = b;
+    set[LayoutNode](&L.*.nodes, i, n);
+}
+
+fn layout_set_gap(L: *Layout, i: i32, gap: i32) void {
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+    n.gap = gap;
+    set[LayoutNode](&L.*.nodes, i, n);
+}
+
+fn layout_set_flow(L: *Layout, i: i32, justify: i32, align: i32) void {
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+    n.justify = justify; n.align = align;
+    set[LayoutNode](&L.*.nodes, i, n);
+}
+
+fn layout_child_count(L: *Layout, i: i32) i32 {
+    let n: i32 = 0;
+    let c: i32 = get[LayoutNode](L.*.nodes, i).first_child;
+    while (c >= 0) { n = n + 1; c = get[LayoutNode](L.*.nodes, c).next_sibling; }
+    return n;
+}
+
+// ── measure pass (bottom-up intrinsic size) ─────────────────────────────────
+
+fn layout_measure(L: *Layout, i: i32) void {
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+    // measure children first
+    let c: i32 = n.first_child;
+    while (c >= 0) {
+        layout_measure(L, c);
+        c = get[LayoutNode](L.*.nodes, c).next_sibling;
+    }
+    n = get[LayoutNode](L.*.nodes, i);
+
+    // content size = sum along main, max along cross (+ padding + gaps)
+    let main_sum: i32 = 0;
+    let cross_max: i32 = 0;
+    let kids: i32 = 0;
+    c = n.first_child;
+    while (c >= 0) {
+        let cn: LayoutNode = get[LayoutNode](L.*.nodes, c);
+        let cmain: i32 = cn.m_w;
+        let ccross: i32 = cn.m_h;
+        if (n.dir == LAYOUT_COL()) { cmain = cn.m_h; ccross = cn.m_w; }
+        main_sum = main_sum + cmain;
+        if (ccross > cross_max) { cross_max = ccross; }
+        kids = kids + 1;
+        c = cn.next_sibling;
+    }
+    if (kids > 1) { main_sum = main_sum + (kids - 1) * n.gap; }
+
+    let content_w: i32 = main_sum;
+    let content_h: i32 = cross_max;
+    if (n.dir == LAYOUT_COL()) { content_w = cross_max; content_h = main_sum; }
+    content_w = content_w + n.pad_l + n.pad_r;
+    content_h = content_h + n.pad_t + n.pad_b;
+
+    if (n.wmode == LAYOUT_FIXED()) { n.m_w = n.w; } else { n.m_w = content_w; }
+    if (n.hmode == LAYOUT_FIXED()) { n.m_h = n.h; } else { n.m_h = content_h; }
+    set[LayoutNode](&L.*.nodes, i, n);
+}
+
+// ── layout pass (top-down placement) ────────────────────────────────────────
+
+fn layout_place(L: *Layout, i: i32, x: i32, y: i32, w: i32, h: i32) void {
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+    n.cx = x; n.cy = y; n.cw = w; n.ch = h;
+    set[LayoutNode](&L.*.nodes, i, n);
+
+    if (n.first_child < 0) { return; }
+
+    let inner_x: i32 = x + n.pad_l;
+    let inner_y: i32 = y + n.pad_t;
+    let inner_w: i32 = w - n.pad_l - n.pad_r;
+    let inner_h: i32 = h - n.pad_t - n.pad_b;
+
+    let main_avail: i32 = inner_w;
+    let cross_avail: i32 = inner_h;
+    if (n.dir == LAYOUT_COL()) { main_avail = inner_h; cross_avail = inner_w; }
+
+    // sum basis and grow weights along main
+    let basis_sum: i32 = 0;
+    let grow_sum: i32 = 0;
+    let kids: i32 = 0;
+    let c: i32 = n.first_child;
+    while (c >= 0) {
+        let cn: LayoutNode = get[LayoutNode](L.*.nodes, c);
+        let basis: i32 = cn.m_w;
+        if (n.dir == LAYOUT_COL()) { basis = cn.m_h; }
+        // grow children start at their fixed basis (0 if AUTO w/o size)
+        let gmode: i32 = cn.wmode;
+        if (n.dir == LAYOUT_COL()) { gmode = cn.hmode; }
+        if (gmode == LAYOUT_GROW() || cn.grow > 0) {
+            let gw: i32 = cn.grow;
+            if (gw < 1) { gw = 1; }
+            grow_sum = grow_sum + gw;
+        }
+        basis_sum = basis_sum + basis;
+        kids = kids + 1;
+        c = cn.next_sibling;
+    }
+    let gaps: i32 = 0;
+    if (kids > 1) { gaps = (kids - 1) * n.gap; }
+    let free: i32 = main_avail - basis_sum - gaps;
+    if (free < 0) { free = 0; }
+
+    // justify offset (when nothing grows)
+    let cursor: i32 = 0;
+    let between: i32 = n.gap;
+    if (grow_sum == 0) {
+        if (n.justify == LAYOUT_CENTER()) { cursor = free / 2; }
+        else if (n.justify == LAYOUT_END()) { cursor = free; }
+        else if (n.justify == LAYOUT_BETWEEN() && kids > 1) { between = n.gap + free / (kids - 1); }
+    }
+
+    let grown: i32 = 0;
+    c = n.first_child;
+    while (c >= 0) {
+        let cn: LayoutNode = get[LayoutNode](L.*.nodes, c);
+        let basis: i32 = cn.m_w;
+        let cross_size: i32 = cn.m_h;
+        if (n.dir == LAYOUT_COL()) { basis = cn.m_h; cross_size = cn.m_w; }
+        let gmode: i32 = cn.wmode;
+        let cross_mode: i32 = cn.hmode;
+        if (n.dir == LAYOUT_COL()) { gmode = cn.hmode; cross_mode = cn.wmode; }
+
+        let main_size: i32 = basis;
+        if ((gmode == LAYOUT_GROW() || cn.grow > 0) && grow_sum > 0) {
+            let gw: i32 = cn.grow;
+            if (gw < 1) { gw = 1; }
+            main_size = basis + (free * gw) / grow_sum;
+        }
+
+        // cross sizing + alignment
+        if (cross_mode == LAYOUT_GROW() || n.align == LAYOUT_STRETCH()) {
+            cross_size = cross_avail;
+        }
+        let cross_off: i32 = 0;
+        if (n.align == LAYOUT_CENTER()) { cross_off = (cross_avail - cross_size) / 2; }
+        else if (n.align == LAYOUT_END()) { cross_off = cross_avail - cross_size; }
+        if (cross_off < 0) { cross_off = 0; }
+
+        let px: i32 = inner_x + cursor;
+        let py: i32 = inner_y + cross_off;
+        let pw: i32 = main_size;
+        let ph: i32 = cross_size;
+        if (n.dir == LAYOUT_COL()) {
+            px = inner_x + cross_off;
+            py = inner_y + cursor;
+            pw = cross_size;
+            ph = main_size;
+        }
+        layout_place(L, c, px, py, pw, ph);
+
+        cursor = cursor + main_size + between;
+        let _g: i32 = grown;
+        c = cn.next_sibling;
+    }
+}
+
+fn layout_solve(L: *Layout, root: i32, x: i32, y: i32) void {
+    layout_measure(L, root);
+    let n: LayoutNode = get[LayoutNode](L.*.nodes, root);
+    layout_place(L, root, x, y, n.m_w, n.m_h);
+}
+
+// ── queries ─────────────────────────────────────────────────────────────────
+
+fn layout_rect(L: *Layout, id: i32) LayoutRect {
+    let i: i32 = 0;
+    while (i < len[LayoutNode](L.*.nodes)) {
+        let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+        if (n.id == id) { return LayoutRect{ .ok = 1, .x = n.cx, .y = n.cy, .w = n.cw, .h = n.ch }; }
+        i = i + 1;
+    }
+    return LayoutRect{ .ok = 0, .x = 0, .y = 0, .w = 0, .h = 0 };
+}
+
+// Topmost element id containing point (px,py); -1 if none. (Last-added wins.)
+fn layout_hit(L: *Layout, px: i32, py: i32) i32 {
+    let hit: i32 = 0 - 1;
+    let i: i32 = 0;
+    while (i < len[LayoutNode](L.*.nodes)) {
+        let n: LayoutNode = get[LayoutNode](L.*.nodes, i);
+        if (px >= n.cx && px < n.cx + n.cw && py >= n.cy && py < n.cy + n.ch) { hit = n.id; }
+        i = i + 1;
+    }
+    return hit;
+}

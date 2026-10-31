@@ -1,0 +1,17 @@
+FAIL 
+PASS 
+FAIL 
+PASS 
+FAIL 
+PASS 
+FAIL 
+PASS 
+FAIL 
+PASS 
+harsh_ternary: running
+ternary_andternary_orternary_xorconsensusimplicationFAIL xor_mod3_equiv
+PASS xor_mod3_equiv
+FAIL ternary_not
+PASS ternary_not
+harsh_ternary: ok
+panic: division by zero

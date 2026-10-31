@@ -1,0 +1,24 @@
+// tests/effects/photonic_ok.flash — W8: @photonic effect checking (positive case).
+//
+// A @photonic fn that calls fire_shield should compile and check successfully.
+
+program photonic_ok
+
+@import("photonic_stubs.flash")
+@import("std/photonic.flash")
+@import("std/flash_std.flash")
+
+@photonic
+fn pulse(v: FlashVoxel, pw: FlashPower) i32 {
+    return fire_shield(v, pw);
+}
+
+@photonic
+fn main() i32 {
+    let v: FlashVoxel = voxel(2, 1, 0);
+    let pw: FlashPower = mw(1.5);
+    let r: i32 = pulse(v, pw);
+    flash_println_str_int("pulse=", r as i64);
+    flash_println("photonic_ok: ok");
+    return 0;
+}

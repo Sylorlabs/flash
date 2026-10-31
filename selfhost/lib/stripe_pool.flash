@@ -5,6 +5,11 @@
 @import("grid.flash")
 @import("rotation.flash")
 
+fn pool_null_panic(msg: []u8) void {
+    _zag_eprintln(msg);
+    _zag_exit(1);
+}
+
 struct StripeLane {
     chamber: ChamberCoord,
     lane_id: i32,   // 0..stripe_width-1 within one stripe cycle
@@ -43,6 +48,7 @@ fn pool_new(g: *LatticeGrid, stripe_width: i32) StripePool {
     let lanes: *StripeLane = null as *StripeLane;
     if (lane_count > 0) {
         let raw: *i8 = _zag_malloc(lane_count * @sizeOf[StripeLane]());
+        if (raw == null as *i8) { pool_null_panic("panic: pool_new allocation failed"); }
         lanes = raw as *StripeLane;
         let li: i32 = 0;
         let ci: i32 = 0;
@@ -92,11 +98,11 @@ fn pool_capacity_bytes(p: StripePool) i32 {
 
 // ── address mapping ─────────────────────────────────────────────────────────
 
-fn logical_offset_in_range(p: StripePool, byte_offset: i32) i32 {
-    if (p.lane_count == 0) { return 0; }
-    if (byte_offset < 0) { return 0; }
-    if (byte_offset >= pool_capacity_bytes(p)) { return 0; }
-    return 1;
+fn logical_offset_in_range(p: StripePool, byte_offset: i32) bool {
+    if (p.lane_count == 0) { return false; }
+    if (byte_offset < 0) { return false; }
+    if (byte_offset >= pool_capacity_bytes(p)) { return false; }
+    return true;
 }
 
 fn lane_at(p: StripePool, lane_index: i32) ?StripeLane {
@@ -136,8 +142,8 @@ fn logical_to_physical(p: StripePool, g: LatticeGrid, byte_offset: i32) ?Physica
     return null;
 }
 
-fn physical_to_logical(p: StripePool, addr: PhysicalAddress) i32 {
-    if (p.lane_count == 0) { return -1; }
+fn physical_to_logical(p: StripePool, addr: PhysicalAddress) ?i32 {
+    if (p.lane_count == 0) { return null; }
     let edge: i32 = NANO_VOXELS_EDGE();
     let unmapped: VoxelLocal = inverse_remap_voxel_local(addr.voxel, addr.rot);
     let cycle: i32 = unmapped.z * edge * edge + unmapped.y * edge + unmapped.x;
@@ -152,7 +158,7 @@ fn physical_to_logical(p: StripePool, addr: PhysicalAddress) i32 {
         }
         i = i + 1;
     }
-    return -1;
+    return null;
 }
 
 // ── parallel striping write path ──────────────────────────────────────────────

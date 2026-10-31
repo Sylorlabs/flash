@@ -1,0 +1,39 @@
+// tests/const/basic.flash — W11: const bindings for compile-time constants.
+//
+// Tests that const declarations work at the top level and can be used
+// as values in expressions.
+
+@import("std/flash_std.flash")
+
+const WIDTH: i32 = 9;
+const HEIGHT: i32 = 16;
+const AREA: i32 = 144;
+
+fn main() i32 {
+    // Use const values in expressions
+    let w: i32 = WIDTH;
+    if (w != 9) { return 1; }
+
+    let h: i32 = HEIGHT;
+    if (h != 16) { return 2; }
+
+    let a: i32 = AREA;
+    if (a != 144) { return 3; }
+
+    // Const in arithmetic
+    let total: i32 = WIDTH + HEIGHT;
+    if (total != 25) { return 4; }
+
+    // Const in comparison
+    if (WIDTH < HEIGHT) {
+        // ok
+    } else {
+        return 5;
+    }
+
+    flash_println_str_int("WIDTH=", WIDTH as i64);
+    flash_println_str_int("HEIGHT=", HEIGHT as i64);
+    flash_println_str_int("AREA=", AREA as i64);
+    flash_println("const_basic: ok");
+    return 0;
+}

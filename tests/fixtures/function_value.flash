@@ -1,0 +1,19 @@
+struct Context {
+    total: i32,
+}
+
+fn add(context: *Context, value: i32) void {
+    context.*.total = context.*.total + value;
+}
+
+fn invoke(handler: fn(*Context, i32) void, context: *Context, value: i32) void {
+    handler(context, value);
+}
+
+fn main() i32 {
+    let context: Context = Context{ .total = 0 };
+    let handler: fn(*Context, i32) void = add;
+    invoke(handler, &context, 27);
+    if (context.total != 27) { return 1; }
+    return 0;
+}

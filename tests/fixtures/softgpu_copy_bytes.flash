@@ -1,0 +1,37 @@
+@import("../../flash/driver/softgpu.flash")
+@import("../../flash/driver/vgpu.flash")
+
+fn main() i32 {
+    if (vg_font_glyph('a').len == 0 || vg_font_glyph('z').len == 0
+        || vg_font_glyph('a').len != vg_font_glyph('A').len) {
+        return 1;
+    }
+    let src: ArrayList[u8] = make[u8](3);
+    let dst: ArrayList[u8] = make[u8](3);
+    push[u8](&src, 27); push[u8](&src, 81); push[u8](&src, 243);
+    push[u8](&dst, 0); push[u8](&dst, 0); push[u8](&dst, 0);
+    if (softgpu_copy_bytes(dst.data as *i8, src.data as *i8, 3) != 1
+        || get[u8](dst, 0) != 27 || get[u8](dst, 1) != 81
+        || get[u8](dst, 2) != 243
+        || softgpu_copy_bytes(null as *i8, src.data as *i8, 3) != 0) {
+        free[u8](&src); free[u8](&dst); return 1;
+    }
+    let under: SoftFb = softgpu_new(3, 3);
+    let over: SoftFb = softgpu_new(3, 3);
+    softgpu_clear(&under, 10, 20, 30);
+    softgpu_clear(&over, 80, 90, 100);
+    softgpu_blend_rect(&under, 0, 0, 1, 1, 110, 120, 130, 255);
+    softgpu_blend_round_rect_vgrad(&under, 0, 0, 3, 3, 1,
+        20, 30, 40, 50, 60, 70, 255);
+    softgpu_compose_round_rect(&under, &over, 0, 0, 1);
+    if (get[u8](under.pix, 12) != 80 || under.glyph_cache != 0) {
+        free[u8](&src); free[u8](&dst);
+        free[u8](&under.pix); free[u8](&under.mask); free[u8](&under.acc);
+        free[u8](&over.pix); free[u8](&over.mask); free[u8](&over.acc);
+        return 1;
+    }
+    free[u8](&src); free[u8](&dst);
+    free[u8](&under.pix); free[u8](&under.mask); free[u8](&under.acc);
+    free[u8](&over.pix); free[u8](&over.mask); free[u8](&over.acc);
+    return 0;
+}

@@ -1,0 +1,2123 @@
+// Pure-Flash Linux x86-64 transport substrate.
+//
+// Syscall numbers and i64 pointer carriers are confined to this OS ABI module.
+// Application/runtime state remains in Flash native balanced-ternary types.
+
+struct LinuxFdPair {
+    first: i64,
+    second: i64,
+    ok: i32,
+}
+
+struct LinuxByteBuffer {
+    words: ArrayList[i64],
+    len: i32,
+    capacity_bytes: i32,
+}
+
+struct LinuxConnectResult {
+    fd: i64,
+    error_code: i64,
+    connected: i32,
+}
+
+// Pathname AF_UNIX server results make descriptor and filesystem ownership
+// explicit. A successful listener transfers fd ownership to the caller. When
+// path_bound is one, the caller owns exact-path cleanup even if listen failed.
+struct LinuxUnixListenResult {
+    fd: i64,
+    last_closed_fd: i64,
+    error_code: i64,
+    path_bound: i32,
+    listening: i32,
+    cloexec_applied: i32,
+    nonblocking_applied: i32,
+    permissions_applied: i32,
+    close_error: i32,
+}
+
+// A successful accept transfers fd ownership to the caller. Failed accepted
+// descriptors are closed internally and exposed only through last_closed_fd so
+// tests and callers can audit ownership without reusing them.
+struct LinuxUnixAcceptResult {
+    fd: i64,
+    last_closed_fd: i64,
+    error_code: i64,
+    accepted: i32,
+    timed_out: i32,
+    cloexec_applied: i32,
+    close_error: i32,
+}
+
+struct LinuxUnixUnlinkResult {
+    error_code: i64,
+    removed: i32,
+    missing: i32,
+    path_valid: i32,
+}
+
+// Internal descriptor setup result. ABI flags stay inside this module; callers
+// observe explicit ownership and balanced-ternary status values.
+struct LinuxDescriptorResult {
+    fd: i64,
+    last_closed_fd: i64,
+    error_code: i64,
+    valid: i32,
+    cloexec_applied: i32,
+    nonblocking_applied: i32,
+    close_error: i32,
+}
+
+// Exact stream writes report progress separately from the terminal syscall
+// result. A protocol owner can therefore retire a connection if an error
+// follows a partial frame instead of accidentally continuing at a new frame.
+struct LinuxWriteAllResult {
+    written: i64,
+    error_code: i64,
+    complete: i32,
+}
+
+struct LinuxPipeWriteResult {
+    written: i64,
+    error_code: i64,
+    cleanup_error_code: i64,
+    complete: i32,
+}
+
+// Bounded directional-pipe reads preserve partial progress separately from
+// EOF, timeout/error, and an authoritative size rejection. The descriptor
+// remains caller-owned and its original status flags are restored before return.
+struct LinuxReadAllResult {
+    data: LinuxByteBuffer,
+    read: i64,
+    error_code: i64,
+    cleanup_error_code: i64,
+    complete: i32,
+    eof: i32,
+    too_large: i32,
+}
+
+// Thread-local SIGPIPE containment owns old_mask while active. This prevents a
+// closed pipe reader from terminating the process before write(2) can report
+// EPIPE, without changing process-wide signal disposition.
+struct LinuxSigpipeGuard {
+    old_mask: LinuxByteBuffer,
+    was_pending: i32,
+    active: i32,
+    error_code: i64,
+    cleanup_error_code: i64,
+}
+
+struct LinuxSharedMemory {
+    fd: i64,
+    address: i64,
+    len: i64,
+    valid: i32,
+}
+
+// Read-only mapping that takes ownership of an existing descriptor. This is
+// distinct from LinuxSharedMemory so callers cannot accidentally use the
+// writable shared-memory helpers on a PROT_READ mapping.
+struct LinuxReadOnlyMapping {
+    fd: i64,
+    address: i64,
+    len: i64,
+    error_code: i64,
+    close_error: i32,
+    valid: i32,
+}
+
+struct LinuxFileStatus {
+    size: i64,
+    mode: t27,
+    regular: i32,
+    error_code: i64,
+    valid: i32,
+}
+
+// The caller always owns data and, when has_fd is one, received_fd. ok means a
+// non-empty payload arrived without payload/control truncation or malformed
+// ancillary state; a valid data-only recvmsg therefore has ok=1, has_fd=0.
+struct LinuxReceiveFdResult {
+    data: LinuxByteBuffer,
+    received_fd: i64,
+    got: i64,
+    payload_received: i32,
+    has_fd: i32,
+    fd_count: t27,
+    excess_fd_count: t27,
+    closed_fd_count: t27,
+    last_closed_fd: i64,
+    message_truncated: i32,
+    control_truncated: i32,
+    control_invalid: i32,
+    close_error: i32,
+    cloexec_applied: i32,
+    error_code: i64,
+    ok: i32,
+}
+
+// Internal ownership result for SCM_RIGHTS parsing. At most one descriptor is
+// retained for the caller. Every additional descriptor, and every descriptor
+// discovered before a malformed/truncated control record, is closed here.
+struct LinuxControlFdResult {
+    received_fd: i64,
+    fd_count: t27,
+    excess_fd_count: t27,
+    closed_fd_count: t27,
+    last_closed_fd: i64,
+    invalid: i32,
+    close_error: i32,
+}
+
+// One recvmsg result for stream demarshallers. Descriptor order is the kernel
+// SCM_RIGHTS order and is independent of payload chunk boundaries. The caller
+// owns data and every non-negative entry in fds until it takes an entry or
+// calls linux_receive_fds_result_free. Peer metadata never controls capacity:
+// accepted_fd_cap is validated against linux_receive_fds_max_count first.
+struct LinuxReceiveFdsResult {
+    data: LinuxByteBuffer,
+    fds: ArrayList[i64],
+    accepted_fd_cap: t27,
+    got: i64,
+    payload_received: i32,
+    eof: i32,
+    fd_count: t27,
+    retained_fd_count: t27,
+    close_attempt_count: t27,
+    closed_fd_count: t27,
+    last_closed_fd: i64,
+    message_truncated: i32,
+    control_truncated: i32,
+    control_invalid: i32,
+    fd_overflow: i32,
+    close_error_code: i64,
+    cloexec_applied_count: t27,
+    used_cmsg_cloexec: i32,
+    error_code: i64,
+    ok: i32,
+    released: i32,
+}
+
+// Internal ordered ownership result. On invalid/overflow/discard paths fds is
+// empty and every descriptor parsed from the kernel control buffer has already
+// had a close attempt recorded.
+struct LinuxControlFdsResult {
+    fds: ArrayList[i64],
+    fd_count: t27,
+    retained_fd_count: t27,
+    close_attempt_count: t27,
+    closed_fd_count: t27,
+    last_closed_fd: i64,
+    invalid: i32,
+    overflow: i32,
+    close_error_code: i64,
+}
+
+fn linux_sys_read() i64 { return 0; }
+fn linux_sys_write() i64 { return 1; }
+fn linux_sys_close() i64 { return 3; }
+fn linux_sys_stat() i64 { return 4; }
+fn linux_sys_fstat() i64 { return 5; }
+fn linux_sys_mmap() i64 { return 9; }
+fn linux_sys_munmap() i64 { return 11; }
+fn linux_sys_rt_sigaction() i64 { return 13; }
+fn linux_sys_rt_sigprocmask() i64 { return 14; }
+fn linux_sys_pipe() i64 { return 22; }
+fn linux_sys_poll() i64 { return 7; }
+fn linux_sys_getpid() i64 { return 39; }
+fn linux_sys_socket() i64 { return 41; }
+fn linux_sys_connect() i64 { return 42; }
+fn linux_sys_accept() i64 { return 43; }
+fn linux_sys_sendto() i64 { return 44; }
+fn linux_sys_bind() i64 { return 49; }
+fn linux_sys_listen() i64 { return 50; }
+fn linux_sys_socketpair() i64 { return 53; }
+fn linux_sys_kill() i64 { return 62; }
+fn linux_sys_sendmsg() i64 { return 46; }
+fn linux_sys_recvmsg() i64 { return 47; }
+fn linux_sys_fcntl() i64 { return 72; }
+fn linux_sys_ftruncate() i64 { return 77; }
+fn linux_sys_unlink() i64 { return 87; }
+fn linux_sys_chmod() i64 { return 90; }
+fn linux_sys_memfd_create() i64 { return 319; }
+fn linux_sys_futex() i64 { return 202; }
+fn linux_sys_gettid() i64 { return 186; }
+fn linux_sys_tgkill() i64 { return 234; }
+fn linux_sys_inotify_init1() i64 { return 294; }
+fn linux_sys_inotify_add_watch() i64 { return 254; }
+fn linux_sys_accept4() i64 { return 288; }
+fn linux_sys_pipe2() i64 { return 293; }
+fn linux_sys_rt_sigpending() i64 { return 127; }
+fn linux_sys_rt_sigtimedwait() i64 { return 128; }
+
+fn linux_af_unix() i64 { return 1; }
+fn linux_sock_stream() i64 { return 1; }
+fn linux_sock_nonblock() i64 { return 2048; }
+fn linux_sock_cloexec() i64 { return 524288; }
+fn linux_msg_ctrunc() t27 { return 8; }
+fn linux_msg_trunc() t27 { return 32; }
+fn linux_msg_cmsg_cloexec() i64 { return 1073741824; }
+fn linux_msg_dontwait() i64 { return 64; }
+fn linux_msg_nosignal() i64 { return 16384; }
+fn linux_f_getfd() i64 { return 1; }
+fn linux_f_setfd() i64 { return 2; }
+fn linux_f_getfl() i64 { return 3; }
+fn linux_f_setfl() i64 { return 4; }
+fn linux_fd_cloexec() i64 { return 1; }
+fn linux_o_nonblock() i64 { return 2048; }
+fn linux_o_cloexec() i64 { return 524288; }
+fn linux_o_access_mode() i64 { return 3; }
+fn linux_o_read_only() i64 { return 0; }
+fn linux_o_write_only() i64 { return 1; }
+fn linux_o_read_write() i64 { return 2; }
+fn linux_sig_block() i64 { return 0; }
+fn linux_sig_setmask() i64 { return 2; }
+fn linux_sigpipe() i64 { return 13; }
+fn linux_sigpipe_mask() i64 { return 4096; }
+fn linux_kernel_sigset_bytes() i64 { return 8; }
+fn linux_pipe_transfer_max_bytes() i64 { return 1048576; }
+fn linux_receive_fd_max_payload() i32 { return 1048576; }
+fn linux_receive_fd_control_capacity() i32 { return 24; }
+fn linux_receive_fds_max_count() t27 { return 27; }
+
+fn linux_monotonic_ms() i64 {
+    return _zag_clock_monotonic_ms();
+}
+
+fn linux_fd_value_valid(fd: i64) i32 {
+    if (fd < 0 || fd > 2147483647) { return 0; }
+    return 1;
+}
+
+fn linux_getpid() t27 {
+    return _zag_raw_syscall(linux_sys_getpid(), 0, 0, 0, 0, 0, 0) as t27;
+}
+
+fn linux_close(fd: i64) i64 {
+    if (linux_fd_value_valid(fd) == 0) { return 0 - 9; }
+    return _zag_raw_syscall(linux_sys_close(), fd, 0, 0, 0, 0, 0);
+}
+
+fn linux_buffer_new(capacity_bytes: i32) LinuxByteBuffer {
+    let logical_capacity: i32 = capacity_bytes;
+    if (logical_capacity < 0) { logical_capacity = 0; }
+    let word_count: i32 = (logical_capacity + 7) / 8;
+    // words are padded storage only. Syscall and indexing bounds must retain
+    // the caller's exact byte capacity rather than exposing the rounded word.
+    return LinuxByteBuffer{ .words = make[i64](word_count), .len = 0,
+        .capacity_bytes = logical_capacity };
+}
+
+// The native allocator deliberately reuses small blocks without clearing their
+// payload. Syscall ABI records must therefore be zeroed explicitly before any
+// subset of their fields is populated; otherwise stale pointer/length fields
+// can escape into the kernel when a differently shaped buffer is recycled.
+fn linux_buffer_zero_storage(out: *LinuxByteBuffer) void {
+    let word_i: i32 = 0;
+    while (word_i < out.*.words.cap) {
+        out.*.words.data[word_i] = 0;
+        word_i = word_i + 1;
+    }
+    out.*.len = 0;
+}
+
+fn linux_byte_divisor(byte_index: i32) i64 {
+    let divisor: i64 = 1;
+    let i: i32 = 0;
+    while (i < byte_index) { divisor = divisor * 256; i = i + 1; }
+    return divisor;
+}
+
+fn linux_buffer_set_byte(out: *LinuxByteBuffer, index: i32, value: t9) void {
+    if (index < 0 || index >= out.*.capacity_bytes || value < 0 || value > 255) { return; }
+    let word_index: i32 = index / 8;
+    let byte_index: i32 = index % 8;
+    let divisor: i64 = linux_byte_divisor(byte_index);
+    let word: i64 = out.*.words.data[word_index];
+    let old: i64 = (word / divisor) - ((word / divisor) / 256) * 256;
+    out.*.words.data[word_index] = word + ((value as i64) - old) * divisor;
+    if (index + 1 > out.*.len) { out.*.len = index + 1; }
+}
+
+fn linux_buffer_set_u32(out: *LinuxByteBuffer, offset: i32, value: i64) void {
+    linux_buffer_set_byte(out, offset, (value - (value / 256) * 256) as t9);
+    linux_buffer_set_byte(out, offset + 1, ((value / 256) - (value / 65536) * 256) as t9);
+    linux_buffer_set_byte(out, offset + 2, ((value / 65536) - (value / 16777216) * 256) as t9);
+    linux_buffer_set_byte(out, offset + 3, ((value / 16777216) - (value / 4294967296) * 256) as t9);
+}
+
+fn linux_buffer_set_u64(out: *LinuxByteBuffer, offset: i32, value: i64) void {
+    let divisor: i64 = 1;
+    let i: i32 = 0;
+    while (i < 8) {
+        linux_buffer_set_byte(out, offset + i, ((value / divisor) - ((value / divisor) / 256) * 256) as t9);
+        divisor = divisor * 256; i = i + 1;
+    }
+}
+
+fn linux_buffer_u32(input: *LinuxByteBuffer, offset: i32) i64 {
+    return linux_buffer_byte(input, offset) as i64 + (linux_buffer_byte(input, offset + 1) as i64) * 256
+        + (linux_buffer_byte(input, offset + 2) as i64) * 65536
+        + (linux_buffer_byte(input, offset + 3) as i64) * 16777216;
+}
+
+fn linux_buffer_u64(input: *LinuxByteBuffer, offset: i32) i64 {
+    let value: i64 = 0;
+    let divisor: i64 = 1;
+    let i: i32 = 0;
+    while (i < 8) {
+        value = value + (linux_buffer_byte(input, offset + i) as i64) * divisor;
+        divisor = divisor * 256;
+        i = i + 1;
+    }
+    return value;
+}
+
+fn linux_flag_set(value: t27, flag: t27) i32 {
+    if (flag < 1) { return 0; }
+    return ((value / flag) % 2) as i32;
+}
+
+fn linux_fd_flags(fd: i64) i64 {
+    if (linux_fd_value_valid(fd) == 0) { return 0 - 9; }
+    return _zag_raw_syscall(linux_sys_fcntl(), fd, linux_f_getfd(), 0, 0, 0, 0);
+}
+
+fn linux_fd_status_flags(fd: i64) i64 {
+    if (linux_fd_value_valid(fd) == 0) { return 0 - 9; }
+    return _zag_raw_syscall(linux_sys_fcntl(), fd, linux_f_getfl(), 0, 0, 0, 0);
+}
+
+fn linux_ensure_fd_cloexec(fd: i64) i64 {
+    let flags: i64 = linux_fd_flags(fd);
+    if (flags < 0) { return flags; }
+    if ((flags % 2) == linux_fd_cloexec()) { return 0; }
+    return _zag_raw_syscall(linux_sys_fcntl(), fd, linux_f_setfd(),
+        flags + linux_fd_cloexec(), 0, 0, 0);
+}
+
+fn linux_set_fd_cloexec(fd: i64) i32 {
+    if (linux_ensure_fd_cloexec(fd) < 0) { return 0; }
+    return 1;
+}
+
+fn linux_ensure_fd_nonblocking(fd: i64) i64 {
+    let flags: i64 = linux_fd_status_flags(fd);
+    if (flags < 0) { return flags; }
+    if (((flags / linux_o_nonblock()) % 2) == 1) { return 0; }
+    return _zag_raw_syscall(linux_sys_fcntl(), fd, linux_f_setfl(),
+        flags + linux_o_nonblock(), 0, 0, 0);
+}
+
+fn linux_set_fd_status_flags(fd: i64, flags: i64) i64 {
+    if (linux_fd_value_valid(fd) == 0 || flags < 0) { return 0 - 22; }
+    return _zag_raw_syscall(linux_sys_fcntl(), fd, linux_f_setfl(),
+        flags, 0, 0, 0);
+}
+
+fn linux_fd_access_mode_from_status(flags: i64) i64 {
+    if (flags < 0) { return 0 - 1; }
+    return flags - (flags / (linux_o_access_mode() + 1))
+        * (linux_o_access_mode() + 1);
+}
+
+fn linux_sigpipe_guard_begin() LinuxSigpipeGuard {
+    let guard: LinuxSigpipeGuard = LinuxSigpipeGuard{
+        .old_mask = linux_buffer_new(8), .was_pending = 0,
+        .active = 0, .error_code = 0, .cleanup_error_code = 0 };
+    let pipe_mask: LinuxByteBuffer = linux_buffer_new(8);
+    linux_buffer_set_u64(&pipe_mask, 0, linux_sigpipe_mask());
+    let blocked: i64 = _zag_raw_syscall(linux_sys_rt_sigprocmask(),
+        linux_sig_block(), pipe_mask.words.data as i64,
+        guard.old_mask.words.data as i64, linux_kernel_sigset_bytes(), 0, 0);
+    linux_buffer_free(&pipe_mask);
+    if (blocked != 0) {
+        guard.error_code = blocked; linux_buffer_free(&guard.old_mask); return guard;
+    }
+    guard.old_mask.len = 8; guard.active = 1;
+    let pending_rc: i64 = linux_sigpipe_pending_status();
+    if (pending_rc >= 0) {
+        guard.was_pending = pending_rc as i32;
+    } else {
+        guard.error_code = pending_rc;
+        let restored_pending_failure: i64 = _zag_raw_syscall(
+            linux_sys_rt_sigprocmask(), linux_sig_setmask(),
+            guard.old_mask.words.data as i64, 0,
+            linux_kernel_sigset_bytes(), 0, 0);
+        if (restored_pending_failure != 0) {
+            guard.cleanup_error_code = restored_pending_failure;
+        }
+        guard.active = 0; linux_buffer_free(&guard.old_mask);
+    }
+    return guard;
+}
+
+fn linux_sigpipe_mask_set(mask: *LinuxByteBuffer) i32 {
+    // SIGPIPE is signal 13: byte 1, bit 4 in Linux's little-endian sigset_t.
+    // Inspect the byte directly so a high signal bit can never make a signed
+    // i64 mask negative and corrupt the test.
+    if (mask.*.len < 2) { return 0; }
+    if (((linux_buffer_byte(mask, 1) as t27 / 16) % 2) == 1) { return 1; }
+    return 0;
+}
+
+fn linux_sigpipe_pending_status() i64 {
+    let pending: LinuxByteBuffer = linux_buffer_new(8);
+    let rc: i64 = _zag_raw_syscall(linux_sys_rt_sigpending(),
+        pending.words.data as i64, linux_kernel_sigset_bytes(), 0, 0, 0, 0);
+    if (rc == 0) { pending.len = 8; }
+    let status: i64 = rc;
+    if (rc == 0) { status = linux_sigpipe_mask_set(&pending) as i64; }
+    linux_buffer_free(&pending); return status;
+}
+
+// Consume only the SIGPIPE generated by this guarded write. If SIGPIPE was
+// already pending for the thread, preserve it for its original owner.
+fn linux_sigpipe_guard_end(guard: *LinuxSigpipeGuard,
+    saw_epipe: i32) i64 {
+    if (guard.*.active == 0) {
+        let error_code: i64 = guard.*.error_code;
+        linux_buffer_free(&guard.*.old_mask);
+        if (error_code == 0) { return guard.*.cleanup_error_code; }
+        return error_code;
+    }
+    let consume_error: i64 = 0;
+    if (saw_epipe != 0 && guard.*.was_pending == 0) {
+        let pipe_mask: LinuxByteBuffer = linux_buffer_new(8);
+        linux_buffer_set_u64(&pipe_mask, 0, linux_sigpipe_mask());
+        let zero_timeout: LinuxByteBuffer = linux_buffer_new(16);
+        let consumed: i64 = 0 - 4;
+        let attempts: t27 = 0;
+        while (consumed == (0 - 4) && attempts < 27) {
+            consumed = _zag_raw_syscall(linux_sys_rt_sigtimedwait(),
+                pipe_mask.words.data as i64, 0,
+                zero_timeout.words.data as i64,
+                linux_kernel_sigset_bytes(), 0, 0);
+            attempts = attempts + 1;
+        }
+        if (consumed != linux_sigpipe()) { consume_error = consumed; }
+        linux_buffer_free(&zero_timeout); linux_buffer_free(&pipe_mask);
+    }
+    if (saw_epipe != 0 && guard.*.was_pending == 0) {
+        let still_pending: i64 = linux_sigpipe_pending_status();
+        // SIG_IGN suppresses generation of a pending SIGPIPE. In that valid
+        // disposition sigtimedwait reports EAGAIN; a zero pending recheck proves
+        // there is nothing to consume or accidentally unblock.
+        if (consume_error == (0 - 11) && still_pending == 0) {
+            consume_error = 0;
+        }
+        if (still_pending < 0 && consume_error == 0) { consume_error = still_pending; }
+        // If the old mask would unblock SIGPIPE, never restore it while the
+        // signal generated by this write is still pending. Leaving SIGPIPE
+        // blocked is a surfaced cleanup failure, but cannot kill the process.
+        if (still_pending != 0 && linux_sigpipe_mask_set(&guard.*.old_mask) == 0) {
+            linux_buffer_free(&guard.*.old_mask); guard.*.active = 0;
+            if (consume_error != 0) { return consume_error; }
+            return 0 - 16;
+        }
+    }
+    let restored: i64 = _zag_raw_syscall(linux_sys_rt_sigprocmask(),
+        linux_sig_setmask(), guard.*.old_mask.words.data as i64, 0,
+        linux_kernel_sigset_bytes(), 0, 0);
+    linux_buffer_free(&guard.*.old_mask); guard.*.active = 0;
+    if (consume_error != 0) { return consume_error; }
+    return restored;
+}
+
+fn linux_close_descriptor_failure(result: *LinuxDescriptorResult, fd: i64,
+    error_code: i64) void {
+    result.*.error_code = error_code;
+    result.*.last_closed_fd = fd;
+    let close_rc: i64 = linux_close(fd);
+    if (close_rc < 0) { result.*.close_error = 1; }
+}
+
+// Prefer atomic descriptor flags. Old kernels that reject the combined socket
+// type with EINVAL are retried without flags and immediately repaired through
+// fcntl before ownership can escape this module.
+fn linux_stream_socket_descriptor(nonblocking: i32) LinuxDescriptorResult {
+    let result: LinuxDescriptorResult = LinuxDescriptorResult{
+        .fd = 0 - 1, .last_closed_fd = 0 - 1, .error_code = 0,
+        .valid = 0, .cloexec_applied = 0, .nonblocking_applied = 0,
+        .close_error = 0 };
+    let socket_type: i64 = linux_sock_stream() + linux_sock_cloexec();
+    if (nonblocking != 0) { socket_type = socket_type + linux_sock_nonblock(); }
+    let fd: i64 = _zag_raw_syscall(linux_sys_socket(), linux_af_unix(),
+        socket_type, 0, 0, 0, 0);
+    if (fd == (0 - 22)) {
+        fd = _zag_raw_syscall(linux_sys_socket(), linux_af_unix(),
+            linux_sock_stream(), 0, 0, 0, 0);
+    }
+    if (fd < 0) { result.error_code = fd; return result; }
+    let flag_rc: i64 = linux_ensure_fd_cloexec(fd);
+    if (flag_rc < 0) {
+        linux_close_descriptor_failure(&result, fd, flag_rc);
+        return result;
+    }
+    result.cloexec_applied = 1;
+    if (nonblocking != 0) {
+        let nonblock_rc: i64 = linux_ensure_fd_nonblocking(fd);
+        if (nonblock_rc < 0) {
+            linux_close_descriptor_failure(&result, fd, nonblock_rc);
+            return result;
+        }
+        result.nonblocking_applied = 1;
+    }
+    result.fd = fd; result.valid = 1;
+    return result;
+}
+
+fn linux_write_buffer(fd: i64, bytes: *LinuxByteBuffer) i64 {
+    if (linux_fd_value_valid(fd) == 0) { return 0 - 9; }
+    if (bytes.*.len == 0) { return 0; }
+    return _zag_raw_syscall(linux_sys_write(), fd, bytes.*.words.data as i64, bytes.*.len as i64, 0, 0, 0);
+}
+
+// maximum_chunk is an internal deterministic-test seam. Zero means every
+// remaining byte may be offered to write(2); positive values deliberately
+// exercise the same offset/progress loop in bounded chunks.
+fn linux_write_address_all_chunked(fd: i64, address: i64, byte_count: i64,
+    maximum_chunk: i64) LinuxWriteAllResult {
+    let result: LinuxWriteAllResult = LinuxWriteAllResult{
+        .written = 0, .error_code = 0, .complete = 0 };
+    if (linux_fd_value_valid(fd) == 0 || byte_count < 0 || maximum_chunk < 0
+        || (byte_count > 0 && address == 0)) {
+        result.error_code = 0 - 22;
+        return result;
+    }
+    if (byte_count == 0) { result.complete = 1; return result; }
+    while (result.written < byte_count) {
+        let remaining: i64 = byte_count - result.written;
+        let offered: i64 = remaining;
+        if (maximum_chunk > 0 && offered > maximum_chunk) { offered = maximum_chunk; }
+        let wrote: i64 = _zag_raw_syscall(linux_sys_write(), fd,
+            address + result.written, offered, 0, 0, 0);
+        if (wrote > 0) {
+            result.written = result.written + wrote;
+        } else if (wrote == (0 - 4)) {
+            // EINTR carries no progress and is safe to retry.
+        } else {
+            if (wrote == 0) { result.error_code = 0 - 5; }
+            else { result.error_code = wrote; }
+            return result;
+        }
+    }
+    result.complete = 1;
+    return result;
+}
+
+fn linux_write_buffer_all_chunked(fd: i64, bytes: *LinuxByteBuffer,
+    maximum_chunk: i64) LinuxWriteAllResult {
+    if (bytes.*.len < 0 || bytes.*.len > bytes.*.capacity_bytes) {
+        return LinuxWriteAllResult{ .written = 0, .error_code = 0 - 22, .complete = 0 };
+    }
+    return linux_write_address_all_chunked(fd, bytes.*.words.data as i64,
+        bytes.*.len as i64, maximum_chunk);
+}
+
+fn linux_write_buffer_all(fd: i64, bytes: *LinuxByteBuffer) LinuxWriteAllResult {
+    return linux_write_buffer_all_chunked(fd, bytes, 0);
+}
+
+// Exact directional-pipe write against one absolute deadline. This function
+// never changes process-wide SIGPIPE disposition, never leaves O_NONBLOCK set
+// when it was not originally set, and reports partial progress explicitly.
+fn linux_pipe_write_address_all_until(fd: i64, address: i64,
+    byte_count: i64, deadline: i64) LinuxPipeWriteResult {
+    let result: LinuxPipeWriteResult = LinuxPipeWriteResult{
+        .written = 0, .error_code = 0, .cleanup_error_code = 0,
+        .complete = 0 };
+    if (linux_fd_value_valid(fd) == 0 || byte_count < 0
+        || byte_count > linux_pipe_transfer_max_bytes()
+        || (byte_count > 0 && address == 0)) {
+        result.error_code = 0 - 22; return result;
+    }
+    let original_status: i64 = linux_fd_status_flags(fd);
+    let access_mode: i64 = linux_fd_access_mode_from_status(original_status);
+    if (original_status < 0 || (access_mode != linux_o_write_only()
+        && access_mode != linux_o_read_write())) {
+        result.error_code = 0 - 22; return result;
+    }
+    let changed_nonblocking: i32 = 0;
+    if (((original_status / linux_o_nonblock()) % 2) == 0) {
+        let nonblock_rc: i64 = linux_set_fd_status_flags(fd,
+            original_status + linux_o_nonblock());
+        if (nonblock_rc != 0) { result.error_code = nonblock_rc; return result; }
+        changed_nonblocking = 1;
+    }
+    let guard: LinuxSigpipeGuard = linux_sigpipe_guard_begin();
+    if (guard.active == 0) {
+        if (changed_nonblocking != 0) {
+            let restored_guard_failure: i64 = linux_set_fd_status_flags(
+                fd, original_status);
+            if (restored_guard_failure != 0
+                && guard.cleanup_error_code == 0) {
+                guard.cleanup_error_code = restored_guard_failure;
+            }
+        }
+        result.error_code = guard.error_code;
+        result.cleanup_error_code = guard.cleanup_error_code;
+        return result;
+    }
+    let saw_epipe: i32 = 0;
+    let attempted: i32 = 0;
+    while (result.written < byte_count && result.error_code == 0) {
+        let now: i64 = linux_monotonic_ms();
+        if (attempted != 0 && now >= deadline) {
+            result.error_code = 0 - 110;
+        } else {
+            attempted = 1;
+            let wrote: i64 = _zag_raw_syscall(linux_sys_write(), fd,
+                address + result.written, byte_count - result.written,
+                0, 0, 0);
+            if (wrote > 0) { result.written = result.written + wrote; }
+            else if (wrote == (0 - 4)) {
+                // EINTR carries no progress; retry inside the same deadline.
+            } else if (wrote == (0 - 11)) {
+                let poll_status: i64 = linux_poll_event_until(fd, 4, deadline);
+                if (poll_status == 0) { result.error_code = 0 - 110; }
+                else if (poll_status < 0) { result.error_code = poll_status; }
+            } else {
+                if (wrote == (0 - 32)) { saw_epipe = 1; }
+                if (wrote == 0) { result.error_code = 0 - 5; }
+                else { result.error_code = wrote; }
+            }
+        }
+    }
+    if (byte_count == 0 || result.written == byte_count) { result.complete = 1; }
+    let signal_rc: i64 = linux_sigpipe_guard_end(&guard, saw_epipe);
+    let restore_rc: i64 = 0;
+    if (changed_nonblocking != 0) {
+        restore_rc = linux_set_fd_status_flags(fd, original_status);
+    }
+    if (signal_rc != 0 || restore_rc != 0) {
+        result.complete = 0;
+        if (signal_rc != 0) { result.cleanup_error_code = signal_rc; }
+        else { result.cleanup_error_code = restore_rc; }
+    }
+    return result;
+}
+
+fn linux_pipe_write_buffer_all_until(fd: i64, bytes: *LinuxByteBuffer,
+    deadline: i64) LinuxPipeWriteResult {
+    if (bytes.*.len < 0 || bytes.*.len > bytes.*.capacity_bytes) {
+        return LinuxPipeWriteResult{ .written = 0, .error_code = 0 - 22,
+            .cleanup_error_code = 0, .complete = 0 };
+    }
+    return linux_pipe_write_address_all_until(fd,
+        bytes.*.words.data as i64, bytes.*.len as i64, deadline);
+}
+
+// Socket streams must not use write(2): a closed peer can deliver SIGPIPE
+// before a protocol owner gets the EPIPE result needed to retire its state.
+// sendto(MSG_NOSIGNAL) keeps that failure explicit and process-local.
+fn linux_send_address_all_until_chunked(fd: i64, address: i64,
+    byte_count: i64, maximum_chunk: i64, deadline: i64,
+    allow_initial_attempt: i32) LinuxWriteAllResult {
+    let result: LinuxWriteAllResult = LinuxWriteAllResult{
+        .written = 0, .error_code = 0, .complete = 0 };
+    if (fd < 0 || fd > 2147483647 || byte_count < 0 || maximum_chunk < 0
+        || (allow_initial_attempt != 0 && allow_initial_attempt != 1)
+        || (byte_count > 0 && address == 0)) {
+        result.error_code = 0 - 22; return result;
+    }
+    if (byte_count == 0) { result.complete = 1; return result; }
+    let attempted: i32 = 0;
+    while (result.written < byte_count) {
+        // timeout zero still permits one nonblocking syscall. Every retry or
+        // further chunk must remain inside the same absolute deadline.
+        if ((attempted != 0 || allow_initial_attempt == 0)
+            && linux_monotonic_ms() >= deadline) {
+            result.error_code = 0 - 110; return result;
+        }
+        let remaining: i64 = byte_count - result.written;
+        let offered: i64 = remaining;
+        if (maximum_chunk > 0 && offered > maximum_chunk) { offered = maximum_chunk; }
+        attempted = 1;
+        let sent: i64 = _zag_raw_syscall(linux_sys_sendto(), fd,
+            address + result.written, offered,
+            linux_msg_nosignal() + linux_msg_dontwait(), 0, 0);
+        if (sent > 0) {
+            result.written = result.written + sent;
+        } else if (sent == (0 - 4)) {
+            // EINTR carries no progress and is safe to retry.
+            if (linux_monotonic_ms() >= deadline) {
+                result.error_code = 0 - 110; return result;
+            }
+        } else if (sent == (0 - 11)) {
+            let now: i64 = linux_monotonic_ms();
+            if (now >= deadline) { result.error_code = 0 - 110; return result; }
+            let poll_status: i64 = linux_poll_writable_status(fd, deadline);
+            if (poll_status == 0) { result.error_code = 0 - 110; return result; }
+            if (poll_status < 0) { result.error_code = poll_status; return result; }
+        } else {
+            if (sent == 0) { result.error_code = 0 - 5; }
+            else { result.error_code = sent; }
+            return result;
+        }
+    }
+    result.complete = 1;
+    return result;
+}
+
+fn linux_send_address_all_timeout_chunked(fd: i64, address: i64,
+    byte_count: i64, maximum_chunk: i64, timeout_ms: t27) LinuxWriteAllResult {
+    if (timeout_ms < 0) {
+        return LinuxWriteAllResult{ .written = 0, .error_code = 0 - 22, .complete = 0 };
+    }
+    return linux_send_address_all_until_chunked(fd, address, byte_count,
+        maximum_chunk, linux_monotonic_ms() + timeout_ms as i64, 1);
+}
+
+fn linux_send_buffer_all_timeout_chunked(fd: i64, bytes: *LinuxByteBuffer,
+    maximum_chunk: i64, timeout_ms: t27) LinuxWriteAllResult {
+    if (bytes.*.len < 0 || bytes.*.len > bytes.*.capacity_bytes) {
+        return LinuxWriteAllResult{ .written = 0, .error_code = 0 - 22, .complete = 0 };
+    }
+    return linux_send_address_all_timeout_chunked(fd, bytes.*.words.data as i64,
+        bytes.*.len as i64, maximum_chunk, timeout_ms);
+}
+
+fn linux_send_buffer_all_timeout(fd: i64, bytes: *LinuxByteBuffer,
+    timeout_ms: t27) LinuxWriteAllResult {
+    return linux_send_buffer_all_timeout_chunked(fd, bytes, 0, timeout_ms);
+}
+
+fn linux_send_buffer_all_chunked(fd: i64, bytes: *LinuxByteBuffer,
+    maximum_chunk: i64) LinuxWriteAllResult {
+    return linux_send_buffer_all_timeout_chunked(fd, bytes, maximum_chunk, 1000);
+}
+
+fn linux_send_buffer_all(fd: i64, bytes: *LinuxByteBuffer) LinuxWriteAllResult {
+    return linux_send_buffer_all_chunked(fd, bytes, 0);
+}
+
+fn linux_buffer_free(out: *LinuxByteBuffer) void {
+    free[i64](&out.*.words);
+    out.*.len = 0;
+    out.*.capacity_bytes = 0;
+}
+
+fn linux_read_into(fd: i64, out: *LinuxByteBuffer) i64 {
+    if (linux_fd_value_valid(fd) == 0) { return 0 - 9; }
+    if (out.*.capacity_bytes < 1) { return 0; }
+    let got: i64 = _zag_raw_syscall(linux_sys_read(), fd, out.*.words.data as i64, out.*.capacity_bytes as i64, 0, 0, 0);
+    if (got >= 0) { out.*.len = got as i32; }
+    return got;
+}
+
+fn linux_read_all_result_free(result: *LinuxReadAllResult) void {
+    linux_buffer_free(&result.*.data);
+    result.*.read = 0; result.*.complete = 0; result.*.eof = 0;
+    result.*.too_large = 0;
+}
+
+fn linux_buffer_append_prefix_bounded(out: *LinuxByteBuffer,
+    input: *LinuxByteBuffer, count: i64, maximum_bytes: i64) i32 {
+    if (count < 0 || count > input.*.len as i64
+        || out.*.len as i64 > maximum_bytes - count) { return 0; }
+    let i: i32 = 0;
+    while (i < count as i32) {
+        let next_index: i32 = out.*.len;
+        if (next_index >= out.*.capacity_bytes) {
+            let next_capacity: i32 = out.*.capacity_bytes * 2;
+            if (next_capacity < next_index + 1) { next_capacity = next_index + 1; }
+            if (next_capacity as i64 > maximum_bytes) {
+                next_capacity = maximum_bytes as i32;
+            }
+            if (next_capacity <= next_index) { return 0; }
+            let grown: LinuxByteBuffer = linux_buffer_new(next_capacity);
+            let copy_i: i32 = 0;
+            while (copy_i < out.*.len) {
+                linux_buffer_set_byte(&grown, copy_i,
+                    linux_buffer_byte(out, copy_i));
+                copy_i = copy_i + 1;
+            }
+            linux_buffer_free(out); out.* = grown;
+        }
+        linux_buffer_set_byte(out, next_index, linux_buffer_byte(input, i));
+        i = i + 1;
+    }
+    return 1;
+}
+
+// Read a directional pipe through EOF without exceeding maximum_bytes. One
+// extra byte is consumed only to distinguish exact-bound EOF from TooLarge.
+// The descriptor remains caller-owned and its exact original status flags are
+// restored before return.
+fn linux_pipe_read_all_until(fd: i64, maximum_bytes: i64,
+    deadline: i64) LinuxReadAllResult {
+    let initial_capacity: i32 = 0;
+    if (maximum_bytes > 0 && maximum_bytes <= linux_pipe_transfer_max_bytes()) {
+        initial_capacity = maximum_bytes as i32;
+        if (initial_capacity > 729) { initial_capacity = 729; }
+    }
+    let result: LinuxReadAllResult = LinuxReadAllResult{
+        .data = linux_buffer_new(initial_capacity), .read = 0, .error_code = 0,
+        .cleanup_error_code = 0, .complete = 0, .eof = 0, .too_large = 0 };
+    if (linux_fd_value_valid(fd) == 0 || maximum_bytes < 0
+        || maximum_bytes > linux_pipe_transfer_max_bytes()) {
+        result.error_code = 0 - 22; return result;
+    }
+    let original_status: i64 = linux_fd_status_flags(fd);
+    let access_mode: i64 = linux_fd_access_mode_from_status(original_status);
+    if (original_status < 0 || (access_mode != linux_o_read_only()
+        && access_mode != linux_o_read_write())) {
+        result.error_code = 0 - 22; return result;
+    }
+    let changed_nonblocking: i32 = 0;
+    if (((original_status / linux_o_nonblock()) % 2) == 0) {
+        let nonblock_rc: i64 = linux_set_fd_status_flags(fd,
+            original_status + linux_o_nonblock());
+        if (nonblock_rc != 0) { result.error_code = nonblock_rc; return result; }
+        changed_nonblocking = 1;
+    }
+    let attempted: i32 = 0;
+    while (result.complete == 0 && result.error_code == 0
+        && result.too_large == 0) {
+        let now: i64 = linux_monotonic_ms();
+        if (attempted != 0 && now >= deadline) {
+            result.error_code = 0 - 110;
+        } else {
+            attempted = 1;
+            let remaining: i64 = maximum_bytes - result.read;
+            let offered: i32 = 729;
+            if (remaining + 1 < offered as i64) { offered = (remaining + 1) as i32; }
+            if (offered < 1) { offered = 1; }
+            let chunk: LinuxByteBuffer = linux_buffer_new(offered);
+            let got: i64 = linux_read_into(fd, &chunk);
+            if (got > 0) {
+                if (got > remaining) {
+                    if (remaining > 0
+                        && linux_buffer_append_prefix_bounded(&result.data,
+                            &chunk, remaining, maximum_bytes) == 0) {
+                        result.error_code = 0 - 12;
+                    } else {
+                        result.read = result.read + remaining;
+                        result.too_large = 1; result.error_code = 0 - 27;
+                    }
+                } else {
+                    if (linux_buffer_append_prefix_bounded(&result.data,
+                        &chunk, got, maximum_bytes) == 0) {
+                        result.error_code = 0 - 12;
+                    } else { result.read = result.read + got; }
+                }
+                linux_buffer_free(&chunk);
+            } else if (got == 0) {
+                linux_buffer_free(&chunk); result.eof = 1; result.complete = 1;
+            } else if (got == (0 - 4)) {
+                linux_buffer_free(&chunk);
+            } else if (got == (0 - 11)) {
+                linux_buffer_free(&chunk);
+                let poll_status: i64 = linux_poll_event_until(fd, 1, deadline);
+                if (poll_status == 0) { result.error_code = 0 - 110; }
+                else if (poll_status < 0) { result.error_code = poll_status; }
+            } else {
+                linux_buffer_free(&chunk); result.error_code = got;
+            }
+        }
+    }
+    let restore_rc: i64 = 0;
+    if (changed_nonblocking != 0) {
+        restore_rc = linux_set_fd_status_flags(fd, original_status);
+    }
+    if (restore_rc != 0) {
+        result.complete = 0; result.cleanup_error_code = restore_rc;
+    }
+    return result;
+}
+
+// Return one when the requested event (or a terminal revent) is present, zero
+// on the absolute deadline, and the negative errno for a real poll failure.
+// EINTR retries against the same deadline; each Linux poll slice is capped at
+// the signed 32-bit ABI limit even though Flash time values are t27.
+fn linux_poll_event_until(fd: i64, event: t9, deadline: i64) i64 {
+    if (fd < 0 || fd > 2147483647
+        || (event != 1 && event != 4)) { return 0 - 22; }
+    let pollfd: LinuxByteBuffer = linux_buffer_new(8);
+    linux_buffer_set_byte(&pollfd, 0, (fd % 256) as t9);
+    linux_buffer_set_byte(&pollfd, 1, ((fd / 256) % 256) as t9);
+    linux_buffer_set_byte(&pollfd, 2, ((fd / 65536) % 256) as t9);
+    linux_buffer_set_byte(&pollfd, 3, ((fd / 16777216) % 256) as t9);
+    linux_buffer_set_byte(&pollfd, 4, event);
+    linux_buffer_set_byte(&pollfd, 5, 0);
+    let attempted: i32 = 0;
+    while (1 == 1) {
+        let now: i64 = linux_monotonic_ms();
+        if (attempted != 0 && now >= deadline) { linux_buffer_free(&pollfd); return 0; }
+        let remaining: i64 = deadline - now;
+        if (remaining < 0) { remaining = 0; }
+        let slice: i64 = remaining;
+        if (slice > 2147483647) { slice = 2147483647; }
+        linux_buffer_set_byte(&pollfd, 6, 0); linux_buffer_set_byte(&pollfd, 7, 0);
+        let rc: i64 = _zag_raw_syscall(linux_sys_poll(), pollfd.words.data as i64,
+            1, slice, 0, 0, 0);
+        attempted = 1;
+        if (rc > 0) {
+            let revents: t27 = linux_buffer_byte(&pollfd, 6) as t27
+                + (linux_buffer_byte(&pollfd, 7) as t27) * 256;
+            linux_buffer_free(&pollfd);
+            if (revents != 0) { return 1; }
+            return 0 - 5;
+        }
+        if (rc < 0 && rc != (0 - 4)) { linux_buffer_free(&pollfd); return rc; }
+        if (linux_monotonic_ms() >= deadline) { linux_buffer_free(&pollfd); return 0; }
+    }
+    linux_buffer_free(&pollfd);
+    return 0;
+}
+
+fn linux_poll_event_status(fd: i64, event: t9, timeout_ms: t27) i64 {
+    if (timeout_ms < 0) { return 0 - 22; }
+    return linux_poll_event_until(fd, event,
+        linux_monotonic_ms() + timeout_ms as i64);
+}
+
+fn linux_poll_readable(fd: i64, timeout_ms: t27) i32 {
+    if (linux_poll_event_status(fd, 1, timeout_ms) == 1) { return 1; }
+    return 0;
+}
+
+fn linux_poll_writable(fd: i64, timeout_ms: t27) i32 {
+    if (linux_poll_event_status(fd, 4, timeout_ms) == 1) { return 1; }
+    return 0;
+}
+
+fn linux_poll_writable_status(fd: i64, deadline: i64) i64 {
+    let now: i64 = linux_monotonic_ms();
+    if (now >= deadline) { return 0; }
+    return linux_poll_event_until(fd, 4, deadline);
+}
+
+fn linux_buffer_byte(out: *LinuxByteBuffer, index: i32) t9 {
+    if (index < 0 || index >= out.*.len) { return 0; }
+    let word_index: i32 = index / 8;
+    let byte_index: i32 = index % 8;
+    let divisor: i64 = linux_byte_divisor(byte_index);
+    let word: i64 = out.*.words.data[word_index];
+    return ((word / divisor) - ((word / divisor) / 256) * 256) as t9;
+}
+
+fn linux_socketpair_stream() LinuxFdPair {
+    // Linux writes two packed 32-bit descriptors. Flash bootstrap scalar slots
+    // are machine words, so read the ABI pair as one word and unpack explicitly.
+    let fds: ArrayList[i64] = make[i64](1);
+    let rc: i64 = _zag_raw_syscall(linux_sys_socketpair(), linux_af_unix(),
+        linux_sock_stream() + linux_sock_cloexec(), 0, fds.data as i64, 0, 0);
+    if (rc == (0 - 22)) {
+        rc = _zag_raw_syscall(linux_sys_socketpair(), linux_af_unix(),
+            linux_sock_stream(), 0, fds.data as i64, 0, 0);
+    }
+    let pair: LinuxFdPair = LinuxFdPair{ .first = 0 - 1, .second = 0 - 1, .ok = 0 };
+    if (rc == 0) {
+        let packed: i64 = fds.data[0];
+        pair.first = packed - (packed / 4294967296) * 4294967296;
+        pair.second = packed / 4294967296;
+        let first_flags: i64 = linux_ensure_fd_cloexec(pair.first);
+        let second_flags: i64 = linux_ensure_fd_cloexec(pair.second);
+        if (first_flags == 0 && second_flags == 0) {
+            pair.ok = 1;
+        } else {
+            let _closed_first: i64 = linux_close(pair.first);
+            let _closed_second: i64 = linux_close(pair.second);
+            pair.first = 0 - 1; pair.second = 0 - 1;
+        }
+    }
+    free[i64](&fds);
+    return pair;
+}
+
+// Create the directional pipe used by descriptor-transfer protocols. The first
+// descriptor is exactly O_RDONLY and the second is exactly O_WRONLY. Both are
+// close-on-exec before ownership escapes this OS ABI module. Linux pipe2 makes
+// that transition atomic; old kernels fall back to pipe plus immediate fcntl
+// repair, closing both ends if any validation or repair fails.
+fn linux_pipe_cloexec() LinuxFdPair {
+    // Linux writes two packed 32-bit descriptors. Flash bootstrap scalar slots
+    // are machine words, so unpack the successful ABI result explicitly.
+    let fds: ArrayList[i64] = make[i64](1);
+    let rc: i64 = _zag_raw_syscall(linux_sys_pipe2(), fds.data as i64,
+        linux_o_cloexec(), 0, 0, 0, 0);
+    if (rc == (0 - 38) || rc == (0 - 22)) {
+        rc = _zag_raw_syscall(linux_sys_pipe(), fds.data as i64, 0, 0, 0, 0, 0);
+    }
+    let pair: LinuxFdPair = LinuxFdPair{
+        .first = 0 - 1, .second = 0 - 1, .ok = 0 };
+    if (rc == 0) {
+        let packed: i64 = fds.data[0];
+        pair.first = packed - (packed / 4294967296) * 4294967296;
+        pair.second = packed / 4294967296;
+        let read_descriptor_flags: i64 = linux_ensure_fd_cloexec(pair.first);
+        let write_descriptor_flags: i64 = linux_ensure_fd_cloexec(pair.second);
+        let read_status: i64 = linux_fd_status_flags(pair.first);
+        let write_status: i64 = linux_fd_status_flags(pair.second);
+        let read_access: i64 = 0 - 1;
+        let write_access: i64 = 0 - 1;
+        if (read_status >= 0) {
+            read_access = read_status - (read_status / (linux_o_access_mode() + 1))
+                * (linux_o_access_mode() + 1);
+        }
+        if (write_status >= 0) {
+            write_access = write_status - (write_status / (linux_o_access_mode() + 1))
+                * (linux_o_access_mode() + 1);
+        }
+        if (linux_fd_value_valid(pair.first) != 0
+            && linux_fd_value_valid(pair.second) != 0
+            && pair.first != pair.second
+            && read_descriptor_flags == 0 && write_descriptor_flags == 0
+            && read_access == linux_o_read_only()
+            && write_access == linux_o_write_only()) {
+            pair.ok = 1;
+        } else {
+            if (linux_fd_value_valid(pair.first) != 0) {
+                let _closed_bad_read_end: i64 = linux_close(pair.first);
+            }
+            if (linux_fd_value_valid(pair.second) != 0
+                && pair.second != pair.first) {
+                let _closed_bad_write_end: i64 = linux_close(pair.second);
+            }
+            pair.first = 0 - 1; pair.second = 0 - 1;
+        }
+    }
+    free[i64](&fds);
+    return pair;
+}
+
+fn linux_unix_address(path: []u8) LinuxByteBuffer {
+    let out: LinuxByteBuffer = linux_buffer_new(112);
+    if (path.len < 1 || path.len > 107) { return out; }
+    let valid_i: i32 = 0;
+    while (valid_i < path.len) {
+        if (path[valid_i] == 0) { return out; }
+        valid_i = valid_i + 1;
+    }
+    linux_buffer_set_byte(&out, 0, 1);
+    linux_buffer_set_byte(&out, 1, 0);
+    let i: i32 = 0;
+    while (i < path.len) { linux_buffer_set_byte(&out, i + 2, path[i] as t9); i = i + 1; }
+    linux_buffer_set_byte(&out, path.len + 2, 0);
+    return out;
+}
+
+fn linux_unix_connect(path: []u8) LinuxConnectResult {
+    let result: LinuxConnectResult = LinuxConnectResult{ .fd = 0 - 1, .error_code = 0, .connected = 0 };
+    let address: LinuxByteBuffer = linux_unix_address(path);
+    if (address.len < 3) {
+        linux_buffer_free(&address); result.error_code = 0 - 22; return result;
+    }
+    let descriptor: LinuxDescriptorResult = linux_stream_socket_descriptor(0);
+    if (descriptor.valid == 0) {
+        linux_buffer_free(&address); result.error_code = descriptor.error_code;
+        return result;
+    }
+    let fd: i64 = descriptor.fd;
+    let rc: i64 = _zag_raw_syscall(linux_sys_connect(), fd, address.words.data as i64, address.len as i64, 0, 0, 0);
+    linux_buffer_free(&address);
+    if (rc < 0) { let _closed: i64 = linux_close(fd); result.error_code = rc; return result; }
+    result.fd = fd;
+    result.connected = 1;
+    return result;
+}
+
+fn linux_unix_listen(path: []u8, backlog: t27) LinuxUnixListenResult {
+    let result: LinuxUnixListenResult = LinuxUnixListenResult{
+        .fd = 0 - 1, .last_closed_fd = 0 - 1, .error_code = 0,
+        .path_bound = 0, .listening = 0, .cloexec_applied = 0,
+        .nonblocking_applied = 0, .permissions_applied = 0,
+        .close_error = 0 };
+    let address: LinuxByteBuffer = linux_unix_address(path);
+    if (address.len < 3 || backlog < 1 || backlog > 4096) {
+        linux_buffer_free(&address); result.error_code = 0 - 22; return result;
+    }
+    let descriptor: LinuxDescriptorResult = linux_stream_socket_descriptor(1);
+    if (descriptor.valid == 0) {
+        linux_buffer_free(&address);
+        result.last_closed_fd = descriptor.last_closed_fd;
+        result.error_code = descriptor.error_code;
+        result.close_error = descriptor.close_error;
+        return result;
+    }
+    result.cloexec_applied = descriptor.cloexec_applied;
+    result.nonblocking_applied = descriptor.nonblocking_applied;
+    let fd: i64 = descriptor.fd;
+    let bind_rc: i64 = _zag_raw_syscall(linux_sys_bind(), fd,
+        address.words.data as i64, address.len as i64, 0, 0, 0);
+    if (bind_rc < 0) {
+        linux_buffer_free(&address);
+        result.error_code = bind_rc; result.last_closed_fd = fd;
+        if (linux_close(fd) < 0) { result.close_error = 1; }
+        return result;
+    }
+    result.path_bound = 1;
+    // bind(2) applies the process umask. Normalize the exact socket node before
+    // listening so UI-control endpoints are always owner-only, independent of
+    // ambient process configuration.
+    let chmod_rc: i64 = _zag_raw_syscall(linux_sys_chmod(),
+        address.words.data as i64 + 2, 384, 0, 0, 0, 0); // 0600
+    linux_buffer_free(&address);
+    if (chmod_rc < 0) {
+        result.error_code = chmod_rc; result.last_closed_fd = fd;
+        if (linux_close(fd) < 0) { result.close_error = 1; }
+        return result;
+    }
+    result.permissions_applied = 1;
+    let listen_rc: i64 = _zag_raw_syscall(linux_sys_listen(), fd,
+        backlog as i64, 0, 0, 0, 0);
+    if (listen_rc < 0) {
+        result.error_code = listen_rc; result.last_closed_fd = fd;
+        if (linux_close(fd) < 0) { result.close_error = 1; }
+        return result;
+    }
+    result.fd = fd; result.listening = 1;
+    return result;
+}
+
+fn linux_unix_accept_until(listener_fd: i64, deadline: i64) LinuxUnixAcceptResult {
+    let result: LinuxUnixAcceptResult = LinuxUnixAcceptResult{
+        .fd = 0 - 1, .last_closed_fd = 0 - 1, .error_code = 0,
+        .accepted = 0, .timed_out = 0, .cloexec_applied = 0,
+        .close_error = 0 };
+    if (linux_fd_value_valid(listener_fd) == 0) {
+        result.error_code = 0 - 22; return result;
+    }
+    // Poll followed by a blocking accept has a readiness-consumption race when
+    // another thread accepts first. Only factory listeners carrying O_NONBLOCK
+    // can truthfully honor an absolute deadline.
+    let listener_flags: i64 = linux_fd_status_flags(listener_fd);
+    if (listener_flags < 0) { result.error_code = listener_flags; return result; }
+    if (((listener_flags / linux_o_nonblock()) % 2) != 1) {
+        result.error_code = 0 - 22; return result;
+    }
+    while (1 == 1) {
+        let ready: i64 = linux_poll_event_until(listener_fd, 1, deadline);
+        if (ready == 0) {
+            result.error_code = 0 - 110; result.timed_out = 1; return result;
+        }
+        if (ready < 0) { result.error_code = ready; return result; }
+        let fd: i64 = _zag_raw_syscall(linux_sys_accept4(), listener_fd,
+            0, 0, linux_sock_cloexec(), 0, 0);
+        if (fd == (0 - 22) || fd == (0 - 38)) {
+            fd = _zag_raw_syscall(linux_sys_accept(), listener_fd,
+                0, 0, 0, 0, 0);
+        }
+        if (fd >= 0) {
+            let flag_rc: i64 = linux_ensure_fd_cloexec(fd);
+            if (flag_rc < 0) {
+                result.error_code = flag_rc; result.last_closed_fd = fd;
+                if (linux_close(fd) < 0) { result.close_error = 1; }
+                return result;
+            }
+            result.fd = fd; result.accepted = 1; result.cloexec_applied = 1;
+            return result;
+        }
+        if (fd != (0 - 4) && fd != (0 - 11)) {
+            result.error_code = fd; return result;
+        }
+        if (linux_monotonic_ms() >= deadline) {
+            result.error_code = 0 - 110; result.timed_out = 1; return result;
+        }
+    }
+    return result;
+}
+
+fn linux_unix_accept_timeout(listener_fd: i64, timeout_ms: t27) LinuxUnixAcceptResult {
+    if (timeout_ms < 0) {
+        return LinuxUnixAcceptResult{ .fd = 0 - 1, .last_closed_fd = 0 - 1,
+            .error_code = 0 - 22, .accepted = 0, .timed_out = 0,
+            .cloexec_applied = 0, .close_error = 0 };
+    }
+    return linux_unix_accept_until(listener_fd,
+        linux_monotonic_ms() + timeout_ms as i64);
+}
+
+// Remove one validated pathname exactly. No prefix, glob, directory, or
+// recursive cleanup behavior exists here; lifecycle authority remains with the
+// consumer that created the pathname listener.
+fn linux_unix_unlink_exact(path: []u8) LinuxUnixUnlinkResult {
+    let result: LinuxUnixUnlinkResult = LinuxUnixUnlinkResult{
+        .error_code = 0, .removed = 0, .missing = 0, .path_valid = 0 };
+    if (path.len < 1 || path.len > 107) { result.error_code = 0 - 22; return result; }
+    let valid_i: i32 = 0;
+    while (valid_i < path.len) {
+        if (path[valid_i] == 0) { result.error_code = 0 - 22; return result; }
+        valid_i = valid_i + 1;
+    }
+    result.path_valid = 1;
+    let encoded: LinuxByteBuffer = linux_buffer_new(path.len + 1);
+    let i: i32 = 0;
+    while (i < path.len) {
+        linux_buffer_set_byte(&encoded, i, path[i] as t9); i = i + 1;
+    }
+    linux_buffer_set_byte(&encoded, path.len, 0);
+    let rc: i64 = _zag_raw_syscall(linux_sys_unlink(),
+        encoded.words.data as i64, 0, 0, 0, 0, 0);
+    linux_buffer_free(&encoded);
+    if (rc == 0) { result.removed = 1; return result; }
+    result.error_code = rc;
+    if (rc == (0 - 2)) { result.missing = 1; }
+    return result;
+}
+
+// Inspect the exact filesystem node backing a pathname AF_UNIX listener. This
+// is a bounded stat boundary, not a directory traversal or discovery API.
+fn linux_unix_path_status_exact(path: []u8) LinuxFileStatus {
+    let result: LinuxFileStatus = LinuxFileStatus{ .size = 0, .mode = 0,
+        .regular = 0, .error_code = 0, .valid = 0 };
+    let address: LinuxByteBuffer = linux_unix_address(path);
+    if (address.len < 3) {
+        linux_buffer_free(&address); result.error_code = 0 - 22; return result;
+    }
+    let encoded: LinuxByteBuffer = linux_buffer_new(144);
+    let rc: i64 = _zag_raw_syscall(linux_sys_stat(),
+        address.words.data as i64 + 2, encoded.words.data as i64, 0, 0, 0, 0);
+    linux_buffer_free(&address);
+    if (rc < 0) {
+        result.error_code = rc; linux_buffer_free(&encoded); return result;
+    }
+    encoded.len = 144;
+    result.mode = linux_buffer_u32(&encoded, 24) as t27;
+    result.size = linux_buffer_u64(&encoded, 48);
+    if ((result.mode / 4096) % 16 == 8) { result.regular = 1; }
+    result.valid = 1;
+    linux_buffer_free(&encoded);
+    return result;
+}
+
+fn linux_shared_memory_create(byte_count: i64) LinuxSharedMemory {
+    let result: LinuxSharedMemory = LinuxSharedMemory{ .fd = 0 - 1, .address = 0, .len = 0, .valid = 0 };
+    if (byte_count < 1) { return result; }
+    let name: LinuxByteBuffer = linux_buffer_new(16);
+    linux_buffer_set_byte(&name, 0, 'f'); linux_buffer_set_byte(&name, 1, 'l');
+    linux_buffer_set_byte(&name, 2, 'a'); linux_buffer_set_byte(&name, 3, 's');
+    linux_buffer_set_byte(&name, 4, 'h'); linux_buffer_set_byte(&name, 5, 'y'); linux_buffer_set_byte(&name, 6, 0);
+    let fd: i64 = _zag_raw_syscall(linux_sys_memfd_create(), name.words.data as i64, 1, 0, 0, 0, 0); // MFD_CLOEXEC
+    linux_buffer_free(&name);
+    if (fd < 0) { return result; }
+    if (_zag_raw_syscall(linux_sys_ftruncate(), fd, byte_count, 0, 0, 0, 0) < 0) {
+        let _closed: i64 = linux_close(fd); return result;
+    }
+    let address: i64 = _zag_raw_syscall(linux_sys_mmap(), 0, byte_count, 3, 1, fd, 0); // RW, MAP_SHARED
+    if (address < 0) { let _closed: i64 = linux_close(fd); return result; }
+    result.fd = fd; result.address = address; result.len = byte_count; result.valid = 1; return result;
+}
+
+fn linux_shared_memory_set_byte(memory: *LinuxSharedMemory, index: i64, value: t9) void {
+    if (memory.*.valid == 0 || index < 0 || index >= memory.*.len || value < 0 || value > 255) { return; }
+    let bytes: *u8 = memory.*.address as *u8;
+    bytes[index] = value as u8;
+}
+
+fn linux_shared_memory_byte(memory: *LinuxSharedMemory, index: i64) t9 {
+    if (memory.*.valid == 0 || index < 0 || index >= memory.*.len) { return 0; }
+    let bytes: *u8 = memory.*.address as *u8;
+    return bytes[index] as t9;
+}
+
+fn linux_shared_memory_free(memory: *LinuxSharedMemory) void {
+    if (memory.*.valid == 1) {
+        let _unmapped: i64 = _zag_raw_syscall(linux_sys_munmap(), memory.*.address, memory.*.len, 0, 0, 0, 0);
+        let _closed: i64 = linux_close(memory.*.fd);
+    }
+    memory.*.fd = 0 - 1; memory.*.address = 0; memory.*.len = 0; memory.*.valid = 0;
+}
+
+// Decode the Linux x86-64 `struct stat` fields needed by bounded FD mapping.
+// ABI bytes remain confined to this runtime boundary; consumers receive
+// balanced-ternary mode/size values.
+fn linux_fd_status(fd: i64) LinuxFileStatus {
+    let result: LinuxFileStatus = LinuxFileStatus{ .size = 0, .mode = 0,
+        .regular = 0, .error_code = 0, .valid = 0 };
+    if (linux_fd_value_valid(fd) == 0) { result.error_code = 0 - 9; return result; }
+    let encoded: LinuxByteBuffer = linux_buffer_new(144);
+    let rc: i64 = _zag_raw_syscall(linux_sys_fstat(), fd,
+        encoded.words.data as i64, 0, 0, 0, 0);
+    if (rc < 0) {
+        result.error_code = rc;
+        linux_buffer_free(&encoded);
+        return result;
+    }
+    encoded.len = 144;
+    result.mode = linux_buffer_u32(&encoded, 24) as t27;
+    result.size = linux_buffer_u64(&encoded, 48);
+    // S_IFMT occupies mode bits 12..15; S_IFREG is 8 in that four-bit field.
+    if ((result.mode / 4096) % 16 == 8) { result.regular = 1; }
+    result.valid = 1;
+    linux_buffer_free(&encoded);
+    return result;
+}
+
+// Takes ownership of fd on every path and maps byte_count from file offset
+// zero. maximum_bytes is supplied by the protocol/parser boundary so an
+// untrusted length can never create an unbounded mapping. mmap fails promptly
+// for non-mappable descriptors such as pipes and sockets, avoiding a blocking
+// read loop on attacker-controlled ancillary state.
+fn linux_readonly_map_fd_take(fd: i64, byte_count: i64,
+    maximum_bytes: i64) LinuxReadOnlyMapping {
+    let result: LinuxReadOnlyMapping = LinuxReadOnlyMapping{ .fd = fd,
+        .address = 0, .len = 0, .error_code = 0, .close_error = 0, .valid = 0 };
+    if (linux_fd_value_valid(fd) == 0 || byte_count < 1
+        || maximum_bytes < 1 || byte_count > maximum_bytes) {
+        result.error_code = 0 - 22;
+        if (linux_fd_value_valid(fd) != 0) {
+            if (linux_close(fd) != 0) { result.close_error = 1; }
+            result.fd = 0 - 1;
+        }
+        return result;
+    }
+    if (linux_set_fd_cloexec(fd) == 0) {
+        result.error_code = 0 - 9;
+        if (linux_close(fd) != 0) { result.close_error = 1; }
+        result.fd = 0 - 1;
+        return result;
+    }
+    let status: LinuxFileStatus = linux_fd_status(fd);
+    if (status.valid == 0 || status.regular == 0 || status.size < byte_count) {
+        if (status.error_code < 0) { result.error_code = status.error_code; }
+        else { result.error_code = 0 - 22; }
+        if (linux_close(fd) != 0) { result.close_error = 1; }
+        result.fd = 0 - 1;
+        return result;
+    }
+    // PROT_READ, MAP_PRIVATE. Offset zero is explicit and independent of the
+    // open-file-description cursor shared through SCM_RIGHTS.
+    let address: i64 = _zag_raw_syscall(linux_sys_mmap(), 0, byte_count,
+        1, 2, fd, 0);
+    if (address < 0) {
+        result.error_code = address;
+        if (linux_close(fd) != 0) { result.close_error = 1; }
+        result.fd = 0 - 1;
+        return result;
+    }
+    result.address = address;
+    result.len = byte_count;
+    result.valid = 1;
+    return result;
+}
+
+fn linux_readonly_mapping_byte(mapping: *LinuxReadOnlyMapping, index: i64) t9 {
+    if (mapping.*.valid == 0 || index < 0 || index >= mapping.*.len) { return 0; }
+    let bytes: *u8 = mapping.*.address as *u8;
+    return bytes[index] as t9;
+}
+
+// Releases both resources owned by a successful mapping. Returns one only
+// when munmap and close both succeed; the handle is cleared on every path.
+fn linux_readonly_mapping_free(mapping: *LinuxReadOnlyMapping) i32 {
+    let ok: i32 = 1;
+    if (mapping.*.valid == 1) {
+        if (_zag_raw_syscall(linux_sys_munmap(), mapping.*.address,
+            mapping.*.len, 0, 0, 0, 0) != 0) { ok = 0; }
+        if (linux_close(mapping.*.fd) != 0) {
+            ok = 0; mapping.*.close_error = 1;
+        }
+    }
+    mapping.*.fd = 0 - 1;
+    mapping.*.address = 0;
+    mapping.*.len = 0;
+    mapping.*.valid = 0;
+    return ok;
+}
+
+// Send the descriptor once with the first payload bytes, then finish a partial
+// stream payload with ordinary exact writes against the same absolute
+// deadline. Re-sending SCM_RIGHTS after a short sendmsg would duplicate
+// descriptor authority at the peer. passed_fd always remains caller-owned.
+fn linux_send_buffer_fd_all_until_chunked(socket_fd: i64,
+    data: *LinuxByteBuffer, passed_fd: i64, first_payload_limit: i64,
+    deadline: i64, allow_initial_attempt: i32) LinuxWriteAllResult {
+    let result: LinuxWriteAllResult = LinuxWriteAllResult{
+        .written = 0, .error_code = 0, .complete = 0 };
+    if (socket_fd < 0 || socket_fd > 2147483647
+        || passed_fd < 0 || passed_fd > 2147483647 || data.*.len < 1
+        || data.*.len > data.*.capacity_bytes || first_payload_limit < 0
+        || (allow_initial_attempt != 0 && allow_initial_attempt != 1)) {
+        result.error_code = 0 - 22; return result;
+    }
+    // The strict public absolute-deadline entry point uses zero here: an
+    // already-expired call cannot emit either a payload byte or descriptor.
+    // Relative compatibility wrappers use one to retain their historical
+    // zero-timeout single nonblocking attempt.
+    if (allow_initial_attempt == 0 && linux_monotonic_ms() >= deadline) {
+        result.error_code = 0 - 110; return result;
+    }
+    let first_payload: i64 = data.*.len as i64;
+    if (first_payload_limit > 0 && first_payload > first_payload_limit) {
+        first_payload = first_payload_limit;
+    }
+    let iovec: LinuxByteBuffer = linux_buffer_new(16);
+    linux_buffer_set_u64(&iovec, 0, data.*.words.data as i64);
+    linux_buffer_set_u64(&iovec, 8, first_payload);
+    let control: LinuxByteBuffer = linux_buffer_new(24);
+    linux_buffer_set_u64(&control, 0, 20); // CMSG_LEN(sizeof(i32))
+    linux_buffer_set_u32(&control, 8, 1);  // SOL_SOCKET
+    linux_buffer_set_u32(&control, 12, 1); // SCM_RIGHTS
+    linux_buffer_set_u32(&control, 16, passed_fd);
+    let message: LinuxByteBuffer = linux_buffer_new(56);
+    linux_buffer_zero_storage(&message);
+    linux_buffer_set_u64(&message, 16, iovec.words.data as i64);
+    linux_buffer_set_u64(&message, 24, 1);
+    linux_buffer_set_u64(&message, 32, control.words.data as i64);
+    linux_buffer_set_u64(&message, 40, 24);
+    let sent: i64 = (0 as i64) - 4;
+    let attempted: i32 = 0;
+    while (sent == (0 - 4) || sent == (0 - 11)) {
+        if ((attempted != 0 || allow_initial_attempt == 0)
+            && linux_monotonic_ms() >= deadline) {
+            linux_buffer_free(&message); linux_buffer_free(&control);
+            linux_buffer_free(&iovec); result.error_code = 0 - 110; return result;
+        }
+        if (sent == (0 - 11)) {
+            let now: i64 = linux_monotonic_ms();
+            if (now >= deadline) {
+                linux_buffer_free(&message); linux_buffer_free(&control);
+                linux_buffer_free(&iovec); result.error_code = 0 - 110; return result;
+            }
+            let poll_status: i64 = linux_poll_writable_status(socket_fd, deadline);
+            if (poll_status == 0) {
+                linux_buffer_free(&message); linux_buffer_free(&control);
+                linux_buffer_free(&iovec); result.error_code = 0 - 110; return result;
+            }
+            if (poll_status < 0) {
+                linux_buffer_free(&message); linux_buffer_free(&control);
+                linux_buffer_free(&iovec); result.error_code = poll_status; return result;
+            }
+        }
+        attempted = 1;
+        sent = _zag_raw_syscall(linux_sys_sendmsg(), socket_fd,
+            message.words.data as i64,
+            linux_msg_nosignal() + linux_msg_dontwait(), 0, 0, 0);
+    }
+    linux_buffer_free(&message); linux_buffer_free(&control); linux_buffer_free(&iovec);
+    if (sent <= 0) {
+        if (sent == 0) { result.error_code = 0 - 5; }
+        else { result.error_code = sent; }
+        return result;
+    }
+    result.written = sent;
+    if (result.written < data.*.len as i64) {
+        let now: i64 = linux_monotonic_ms();
+        if (now >= deadline) { result.error_code = 0 - 110; return result; }
+        let tail: LinuxWriteAllResult = linux_send_address_all_until_chunked(socket_fd,
+            data.*.words.data as i64 + result.written,
+            data.*.len as i64 - result.written, 0, deadline, 0);
+        result.written = result.written + tail.written;
+        if (tail.complete == 0) { result.error_code = tail.error_code; return result; }
+    }
+    result.complete = 1;
+    return result;
+}
+
+// Strict absolute-deadline SCM_RIGHTS send. Validation precedes the deadline
+// check; an expired valid call performs no sendmsg and transfers no descriptor.
+fn linux_send_buffer_fd_all_until(socket_fd: i64, data: *LinuxByteBuffer,
+    passed_fd: i64, deadline: i64) LinuxWriteAllResult {
+    return linux_send_buffer_fd_all_until_chunked(socket_fd, data,
+        passed_fd, 0, deadline, 0);
+}
+
+fn linux_send_buffer_fd_all_timeout_chunked(socket_fd: i64,
+    data: *LinuxByteBuffer, passed_fd: i64, first_payload_limit: i64,
+    timeout_ms: t27) LinuxWriteAllResult {
+    if (timeout_ms < 0) {
+        return LinuxWriteAllResult{ .written = 0,
+            .error_code = 0 - 22, .complete = 0 };
+    }
+    return linux_send_buffer_fd_all_until_chunked(socket_fd, data,
+        passed_fd, first_payload_limit,
+        linux_monotonic_ms() + timeout_ms as i64, 1);
+}
+
+fn linux_send_buffer_fd_all_chunked(socket_fd: i64, data: *LinuxByteBuffer,
+    passed_fd: i64, first_payload_limit: i64) LinuxWriteAllResult {
+    return linux_send_buffer_fd_all_timeout_chunked(socket_fd, data,
+        passed_fd, first_payload_limit, 1000);
+}
+
+fn linux_send_buffer_fd_all_timeout(socket_fd: i64, data: *LinuxByteBuffer,
+    passed_fd: i64, timeout_ms: t27) LinuxWriteAllResult {
+    return linux_send_buffer_fd_all_timeout_chunked(socket_fd, data,
+        passed_fd, 0, timeout_ms);
+}
+
+fn linux_send_buffer_fd_all(socket_fd: i64, data: *LinuxByteBuffer,
+    passed_fd: i64) LinuxWriteAllResult {
+    return linux_send_buffer_fd_all_chunked(socket_fd, data, passed_fd, 0);
+}
+
+fn linux_send_buffer_fd(socket_fd: i64, data: *LinuxByteBuffer, passed_fd: i64) i64 {
+    let result: LinuxWriteAllResult = linux_send_buffer_fd_all(socket_fd, data, passed_fd);
+    if (result.complete != 0) { return result.written; }
+    return result.error_code;
+}
+
+fn linux_cmsg_align(value: i64) i64 {
+    if (value < 0) { return 0; }
+    return ((value + 7) / 8) * 8;
+}
+
+// Reserve enough fixed control storage for accepted_fd_cap + one descriptors
+// even when each descriptor arrives in a separate minimally aligned cmsghdr.
+// The extra slot lets a peer crossing the cap be detected and closed without
+// deriving an allocation from the peer-provided cmsg length or descriptor count.
+fn linux_receive_fds_control_capacity(accepted_fd_cap: t27) i32 {
+    if (accepted_fd_cap < 0
+        || accepted_fd_cap > linux_receive_fds_max_count()) { return 0; }
+    return ((accepted_fd_cap + 1) * 24) as i32;
+}
+
+fn linux_control_fds_close_one(result: *LinuxControlFdsResult, fd: i64) void {
+    result.*.close_attempt_count = result.*.close_attempt_count + 1;
+    result.*.last_closed_fd = fd;
+    let closed: i64 = linux_close(fd);
+    if (closed == 0) { result.*.closed_fd_count = result.*.closed_fd_count + 1; }
+    else if (result.*.close_error_code == 0) { result.*.close_error_code = closed; }
+}
+
+fn linux_control_fds_close_all(result: *LinuxControlFdsResult) void {
+    let i: i32 = 0;
+    while (i < len[i64](result.*.fds)) {
+        let fd: i64 = result.*.fds.data[i];
+        if (fd >= 0) {
+            linux_control_fds_close_one(result, fd);
+            result.*.fds.data[i] = 0 - 1;
+        }
+        i = i + 1;
+    }
+    result.*.fds.len = 0;
+    result.*.retained_fd_count = 0;
+}
+
+// Parse every structurally complete SCM_RIGHTS record in wire order. At most
+// accepted_fd_cap descriptors are retained. Crossing that cap, malformed
+// control, caller-requested discard, or any close failure closes all retained
+// descriptors before returning an empty ownership list.
+fn linux_parse_scm_rights_many(control: *LinuxByteBuffer, control_len: i32,
+    accepted_fd_cap: t27, discard_all: i32) LinuxControlFdsResult {
+    let safe_cap: i32 = 0;
+    if (accepted_fd_cap >= 0
+        && accepted_fd_cap <= linux_receive_fds_max_count()) {
+        safe_cap = accepted_fd_cap as i32;
+    }
+    let owned_fds: ArrayList[i64] = ArrayList[i64]{
+        .data = null as *i64, .len = 0, .cap = 0 };
+    if (safe_cap > 0) { owned_fds = make[i64](safe_cap); }
+    let result: LinuxControlFdsResult = LinuxControlFdsResult{
+        .fds = owned_fds, .fd_count = 0, .retained_fd_count = 0,
+        .close_attempt_count = 0, .closed_fd_count = 0,
+        .last_closed_fd = 0 - 1, .invalid = 0, .overflow = 0,
+        .close_error_code = 0 };
+    if (accepted_fd_cap < 0
+        || accepted_fd_cap > linux_receive_fds_max_count()
+        || control_len < 0 || control_len > control.*.capacity_bytes
+        || control_len > linux_receive_fds_control_capacity(
+            linux_receive_fds_max_count())) {
+        result.invalid = 1;
+        return result;
+    }
+    let offset: i32 = 0;
+    while (offset < control_len) {
+        if (offset + 16 > control_len) {
+            result.invalid = 1;
+            linux_control_fds_close_all(&result);
+            return result;
+        }
+        let cmsg_len: i64 = linux_buffer_u64(control, offset);
+        if (cmsg_len < 16) {
+            result.invalid = 1;
+            linux_control_fds_close_all(&result);
+            return result;
+        }
+        let level: i64 = linux_buffer_u32(control, offset + 8);
+        let kind: i64 = linux_buffer_u32(control, offset + 12);
+        if (cmsg_len > (control_len - offset) as i64) {
+            // A truncated SCM_RIGHTS record can still contain complete kernel-
+            // installed descriptor slots. Close each complete slot visible in
+            // the owned control extent before rejecting the record.
+            if (level == 1 && kind == 1) {
+                let available_data: i32 = control_len - offset - 16;
+                let visible_i: i32 = 0;
+                while (visible_i < available_data / 4) {
+                    let encoded_fd: i64 = linux_buffer_u32(
+                        control, offset + 16 + visible_i * 4);
+                    if (encoded_fd <= 2147483647) {
+                        result.fd_count = result.fd_count + 1;
+                        linux_control_fds_close_one(&result, encoded_fd);
+                    }
+                    visible_i = visible_i + 1;
+                }
+            }
+            result.invalid = 1;
+            linux_control_fds_close_all(&result);
+            return result;
+        }
+        if (level == 1 && kind == 1) { // SOL_SOCKET, SCM_RIGHTS
+            let data_len: i64 = cmsg_len - 16;
+            if (data_len < 4 || (data_len % 4) != 0) {
+                // Even a malformed rights record may contain complete FD
+                // slots already installed by recvmsg. They are never retained.
+                let complete_i: i32 = 0;
+                while (complete_i < (data_len / 4) as i32) {
+                    let encoded_fd: i64 = linux_buffer_u32(
+                        control, offset + 16 + complete_i * 4);
+                    if (encoded_fd <= 2147483647) {
+                        result.fd_count = result.fd_count + 1;
+                        linux_control_fds_close_one(&result, encoded_fd);
+                    }
+                    complete_i = complete_i + 1;
+                }
+                result.invalid = 1;
+                linux_control_fds_close_all(&result);
+                return result;
+            }
+            let fd_i: i32 = 0;
+            let record_fd_count: i32 = (data_len / 4) as i32;
+            while (fd_i < record_fd_count) {
+                let encoded_fd: i64 = linux_buffer_u32(
+                    control, offset + 16 + fd_i * 4);
+                if (encoded_fd > 2147483647) {
+                    result.invalid = 1;
+                } else {
+                    result.fd_count = result.fd_count + 1;
+                    if (result.invalid != 0) {
+                        linux_control_fds_close_one(&result, encoded_fd);
+                    } else if (result.overflow == 0
+                        && result.retained_fd_count < accepted_fd_cap) {
+                        push[i64](&result.fds, encoded_fd);
+                        result.retained_fd_count = result.retained_fd_count + 1;
+                    } else {
+                        result.overflow = 1;
+                        linux_control_fds_close_one(&result, encoded_fd);
+                    }
+                }
+                fd_i = fd_i + 1;
+            }
+            if (result.invalid != 0) {
+                linux_control_fds_close_all(&result);
+                return result;
+            }
+        }
+        let record_end: i64 = offset as i64 + cmsg_len;
+        if (record_end == control_len as i64) { offset = control_len; }
+        else {
+            let next: i64 = offset as i64 + linux_cmsg_align(cmsg_len);
+            if (next <= offset as i64 || next > control_len as i64) {
+                result.invalid = 1;
+                linux_control_fds_close_all(&result);
+                return result;
+            }
+            offset = next as i32;
+        }
+    }
+    if (discard_all != 0 || result.invalid != 0 || result.overflow != 0
+        || result.close_error_code != 0) {
+        linux_control_fds_close_all(&result);
+    }
+    return result;
+}
+
+fn linux_receive_fds_close_owned(result: *LinuxReceiveFdsResult) void {
+    let i: i32 = 0;
+    while (i < len[i64](result.*.fds)) {
+        let fd: i64 = result.*.fds.data[i];
+        if (fd >= 0) {
+            result.*.close_attempt_count = result.*.close_attempt_count + 1;
+            result.*.last_closed_fd = fd;
+            let closed: i64 = linux_close(fd);
+            if (closed == 0) {
+                result.*.closed_fd_count = result.*.closed_fd_count + 1;
+            } else if (result.*.close_error_code == 0) {
+                result.*.close_error_code = closed;
+            }
+            result.*.fds.data[i] = 0 - 1;
+        }
+        i = i + 1;
+    }
+    result.*.fds.len = 0;
+    result.*.retained_fd_count = 0;
+}
+
+// Transfer one ordered descriptor out of the result. Other indices retain
+// their positions and remain owned by the result for deterministic FIFO use.
+fn linux_receive_fds_take_at(result: *LinuxReceiveFdsResult, index: t27) i64 {
+    if (result.*.released != 0 || result.*.ok == 0 || index < 0
+        || index >= len[i64](result.*.fds) as t27) { return 0 - 1; }
+    let fd: i64 = result.*.fds.data[index as i32];
+    if (fd < 0) { return 0 - 1; }
+    result.*.fds.data[index as i32] = 0 - 1;
+    result.*.retained_fd_count = result.*.retained_fd_count - 1;
+    return fd;
+}
+
+// Close every descriptor not transferred with take_at and release both owned
+// containers. Repeated cleanup is a no-op and reports the original close truth.
+fn linux_receive_fds_result_free(result: *LinuxReceiveFdsResult) i32 {
+    if (result.*.released != 0) {
+        if (result.*.close_error_code == 0) { return 1; }
+        return 0;
+    }
+    linux_receive_fds_close_owned(result);
+    free[i64](&result.*.fds);
+    linux_buffer_free(&result.*.data);
+    result.*.released = 1;
+    result.*.ok = 0;
+    if (result.*.close_error_code == 0) { return 1; }
+    return 0;
+}
+
+// Internal deterministic seam: prefer_atomic_cloexec=0 performs recvmsg
+// without MSG_CMSG_CLOEXEC and repairs every retained descriptor with fcntl.
+// Production calls linux_receive_buffer_fds, which always prefers the atomic
+// kernel flag and falls back only when the kernel rejects it with EINVAL.
+fn linux_receive_buffer_fds_with_cloexec_mode(socket_fd: i64, capacity: i32,
+    accepted_fd_cap: t27, prefer_atomic_cloexec: i32) LinuxReceiveFdsResult {
+    let arguments_valid: i32 = 1;
+    if (linux_fd_value_valid(socket_fd) == 0 || capacity < 1
+        || capacity > linux_receive_fd_max_payload() || accepted_fd_cap < 0
+        || accepted_fd_cap > linux_receive_fds_max_count()
+        || (prefer_atomic_cloexec != 0 && prefer_atomic_cloexec != 1)) {
+        arguments_valid = 0;
+    }
+    let safe_capacity: i32 = 0;
+    let safe_fd_cap: t27 = 0;
+    if (arguments_valid != 0) {
+        safe_capacity = capacity;
+        safe_fd_cap = accepted_fd_cap;
+    }
+    let empty_words: ArrayList[i64] = ArrayList[i64]{
+        .data = null as *i64, .len = 0, .cap = 0 };
+    let result_data: LinuxByteBuffer = LinuxByteBuffer{
+        .words = empty_words, .len = 0, .capacity_bytes = 0 };
+    let result_fds: ArrayList[i64] = ArrayList[i64]{
+        .data = null as *i64, .len = 0, .cap = 0 };
+    if (arguments_valid != 0) {
+        result_data = linux_buffer_new(safe_capacity);
+    }
+    let result: LinuxReceiveFdsResult = LinuxReceiveFdsResult{
+        .data = result_data, .fds = result_fds,
+        .accepted_fd_cap = safe_fd_cap, .got = 0, .payload_received = 0,
+        .eof = 0, .fd_count = 0, .retained_fd_count = 0,
+        .close_attempt_count = 0, .closed_fd_count = 0,
+        .last_closed_fd = 0 - 1, .message_truncated = 0,
+        .control_truncated = 0, .control_invalid = 0, .fd_overflow = 0,
+        .close_error_code = 0, .cloexec_applied_count = 0,
+        .used_cmsg_cloexec = 0, .error_code = 0, .ok = 0, .released = 0 };
+    if (arguments_valid == 0) { result.error_code = 0 - 22; return result; }
+    result.data.capacity_bytes = safe_capacity;
+    let iovec: LinuxByteBuffer = linux_buffer_new(16);
+    linux_buffer_set_u64(&iovec, 0, result.data.words.data as i64);
+    linux_buffer_set_u64(&iovec, 8, capacity as i64);
+    let control_capacity: i32 = linux_receive_fds_control_capacity(safe_fd_cap);
+    let control: LinuxByteBuffer = linux_buffer_new(control_capacity);
+    control.len = control_capacity;
+    let message: LinuxByteBuffer = linux_buffer_new(56);
+    linux_buffer_zero_storage(&message);
+    linux_buffer_set_u64(&message, 16, iovec.words.data as i64);
+    linux_buffer_set_u64(&message, 24, 1);
+    linux_buffer_set_u64(&message, 32, control.words.data as i64);
+    linux_buffer_set_u64(&message, 40, control_capacity as i64);
+    message.len = 56;
+    let got: i64 = 0;
+    if (prefer_atomic_cloexec != 0) {
+        result.used_cmsg_cloexec = 1;
+        got = _zag_raw_syscall(linux_sys_recvmsg(), socket_fd,
+            message.words.data as i64, linux_msg_cmsg_cloexec(), 0, 0, 0);
+        if (got == (0 - 22)) {
+            result.used_cmsg_cloexec = 0;
+            linux_buffer_set_u64(&message, 40, control_capacity as i64);
+            linux_buffer_set_u32(&message, 48, 0);
+            got = _zag_raw_syscall(linux_sys_recvmsg(), socket_fd,
+                message.words.data as i64, 0, 0, 0, 0);
+        }
+    } else {
+        got = _zag_raw_syscall(linux_sys_recvmsg(), socket_fd,
+            message.words.data as i64, 0, 0, 0, 0);
+    }
+    result.got = got;
+    if (got < 0) {
+        result.error_code = got;
+        linux_buffer_free(&message); linux_buffer_free(&control);
+        linux_buffer_free(&iovec);
+        return result;
+    }
+    if (got == 0) { result.eof = 1; }
+    else { result.data.len = got as i32; result.payload_received = 1; }
+    let message_flags: t27 = linux_buffer_u32(&message, 48) as t27;
+    result.message_truncated = linux_flag_set(message_flags, linux_msg_trunc());
+    result.control_truncated = linux_flag_set(message_flags, linux_msg_ctrunc());
+    let encoded_control_len: i64 = linux_buffer_u64(&message, 40);
+    let control_len: i32 = 0;
+    if (encoded_control_len < 0
+        || encoded_control_len > control.capacity_bytes as i64) {
+        result.control_invalid = 1;
+        control_len = control.capacity_bytes;
+    } else { control_len = encoded_control_len as i32; }
+    control.len = control_len;
+    let discard_all: i32 = 0;
+    if (result.payload_received == 0 || result.message_truncated != 0
+        || result.control_truncated != 0 || result.control_invalid != 0) {
+        discard_all = 1;
+    }
+    let parsed: LinuxControlFdsResult = linux_parse_scm_rights_many(
+        &control, control_len, safe_fd_cap, discard_all);
+    result.fds = parsed.fds;
+    result.fd_count = parsed.fd_count;
+    result.retained_fd_count = parsed.retained_fd_count;
+    result.close_attempt_count = parsed.close_attempt_count;
+    result.closed_fd_count = parsed.closed_fd_count;
+    result.last_closed_fd = parsed.last_closed_fd;
+    result.fd_overflow = parsed.overflow;
+    result.close_error_code = parsed.close_error_code;
+    if (parsed.invalid != 0) { result.control_invalid = 1; }
+    if (result.retained_fd_count > 0 && result.control_invalid == 0
+        && result.message_truncated == 0 && result.control_truncated == 0
+        && result.fd_overflow == 0 && result.close_error_code == 0) {
+        if (result.used_cmsg_cloexec != 0) {
+            result.cloexec_applied_count = result.retained_fd_count;
+        } else {
+            let fd_i: i32 = 0;
+            while (fd_i < len[i64](result.fds)) {
+                let flag_rc: i64 = linux_ensure_fd_cloexec(result.fds.data[fd_i]);
+                if (flag_rc < 0) {
+                    result.error_code = flag_rc;
+                    result.control_invalid = 1;
+                    linux_receive_fds_close_owned(&result);
+                    fd_i = len[i64](result.fds);
+                } else {
+                    result.cloexec_applied_count =
+                        result.cloexec_applied_count + 1;
+                    fd_i = fd_i + 1;
+                }
+            }
+        }
+    }
+    if (result.error_code == 0) {
+        if (result.message_truncated != 0 || result.control_truncated != 0) {
+            result.error_code = 0 - 90;
+        } else if (result.fd_overflow != 0) {
+            result.error_code = 0 - 75;
+        } else if (result.control_invalid != 0) {
+            result.error_code = 0 - 74;
+        } else if (result.close_error_code != 0) {
+            result.error_code = result.close_error_code;
+        }
+    }
+    if (result.payload_received != 0 && result.message_truncated == 0
+        && result.control_truncated == 0 && result.control_invalid == 0
+        && result.fd_overflow == 0 && result.close_error_code == 0
+        && result.error_code == 0
+        && result.retained_fd_count == result.fd_count
+        && result.cloexec_applied_count == result.retained_fd_count) {
+        result.ok = 1;
+    }
+    linux_buffer_free(&message); linux_buffer_free(&control);
+    linux_buffer_free(&iovec);
+    return result;
+}
+
+fn linux_receive_buffer_fds(socket_fd: i64, capacity: i32,
+    accepted_fd_cap: t27) LinuxReceiveFdsResult {
+    return linux_receive_buffer_fds_with_cloexec_mode(
+        socket_fd, capacity, accepted_fd_cap, 1);
+}
+
+fn linux_control_close_fd(result: *LinuxControlFdResult, fd: i64) void {
+    if (linux_fd_value_valid(fd) == 0) { result.*.invalid = 1; return; }
+    result.*.last_closed_fd = fd;
+    if (linux_close(fd) == 0) { result.*.closed_fd_count = result.*.closed_fd_count + 1; }
+    else { result.*.close_error = 1; result.*.invalid = 1; }
+}
+
+fn linux_control_close_retained(result: *LinuxControlFdResult) void {
+    if (result.*.received_fd >= 0) {
+        let retained: i64 = result.*.received_fd;
+        result.*.received_fd = 0 - 1;
+        linux_control_close_fd(result, retained);
+    }
+}
+
+// Parse native x86-64 cmsghdr records. This function takes ownership of every
+// SCM_RIGHTS descriptor represented by the control buffer: one may be returned,
+// while all others are closed. discard_all is used when recvmsg reported a
+// truncated payload/control stream, where no descriptor can be trusted by the
+// caller even if its individual cmsg record was complete.
+fn linux_parse_scm_rights(control: *LinuxByteBuffer, control_len: i32, discard_all: i32) LinuxControlFdResult {
+    let result: LinuxControlFdResult = LinuxControlFdResult{ .received_fd = 0 - 1,
+        .fd_count = 0, .excess_fd_count = 0, .closed_fd_count = 0,
+        .last_closed_fd = 0 - 1, .invalid = 0, .close_error = 0 };
+    if (control_len < 0 || control_len > control.*.capacity_bytes || control_len > 4096) {
+        result.invalid = 1;
+        return result;
+    }
+    let offset: i32 = 0;
+    while (offset < control_len) {
+        if (offset + 16 > control_len) {
+            result.invalid = 1;
+            linux_control_close_retained(&result);
+            return result;
+        }
+        let cmsg_len: i64 = linux_buffer_u64(control, offset);
+        if (cmsg_len < 16 || cmsg_len > (control_len - offset) as i64) {
+            result.invalid = 1;
+            linux_control_close_retained(&result);
+            return result;
+        }
+        let level: i64 = linux_buffer_u32(control, offset + 8);
+        let kind: i64 = linux_buffer_u32(control, offset + 12);
+        if (level == 1 && kind == 1) { // SOL_SOCKET, SCM_RIGHTS
+            let data_len: i64 = cmsg_len - 16;
+            if (data_len < 4 || (data_len % 4) != 0) {
+                result.invalid = 1;
+                linux_control_close_retained(&result);
+                return result;
+            }
+            let fd_i: i32 = 0;
+            let fd_count: i32 = (data_len / 4) as i32;
+            while (fd_i < fd_count) {
+                let encoded_fd: i64 = linux_buffer_u32(control, offset + 16 + fd_i * 4);
+                if (encoded_fd > 2147483647) {
+                    result.invalid = 1;
+                    linux_control_close_retained(&result);
+                    return result;
+                }
+                result.fd_count = result.fd_count + 1;
+                if (result.received_fd < 0) { result.received_fd = encoded_fd; }
+                else {
+                    result.excess_fd_count = result.excess_fd_count + 1;
+                    linux_control_close_fd(&result, encoded_fd);
+                }
+                fd_i = fd_i + 1;
+            }
+        }
+        let record_end: i64 = offset as i64 + cmsg_len;
+        if (record_end == control_len as i64) { offset = control_len; }
+        else {
+            let next: i64 = offset as i64 + linux_cmsg_align(cmsg_len);
+            if (next <= offset as i64 || next > control_len as i64) {
+                result.invalid = 1;
+                linux_control_close_retained(&result);
+                return result;
+            }
+            offset = next as i32;
+        }
+    }
+    if (discard_all != 0 || result.close_error != 0) {
+        linux_control_close_retained(&result);
+    }
+    return result;
+}
+
+fn linux_receive_buffer_fd(socket_fd: i64, capacity: i32) LinuxReceiveFdResult {
+    let safe_capacity: i32 = 0;
+    if (capacity > 0 && capacity <= linux_receive_fd_max_payload()) { safe_capacity = capacity; }
+    let data: LinuxByteBuffer = linux_buffer_new(safe_capacity);
+    data.capacity_bytes = safe_capacity;
+    let result: LinuxReceiveFdResult = LinuxReceiveFdResult{ .data = data,
+        .received_fd = 0 - 1, .got = 0, .payload_received = 0, .has_fd = 0,
+        .fd_count = 0, .excess_fd_count = 0, .closed_fd_count = 0,
+        .last_closed_fd = 0 - 1, .message_truncated = 0, .control_truncated = 0,
+        .control_invalid = 0, .close_error = 0, .cloexec_applied = 0,
+        .error_code = 0, .ok = 0 };
+    if (linux_fd_value_valid(socket_fd) == 0 || safe_capacity == 0) {
+        result.error_code = 0 - 22; return result;
+    }
+    let iovec: LinuxByteBuffer = linux_buffer_new(16);
+    linux_buffer_set_u64(&iovec, 0, result.data.words.data as i64);
+    linux_buffer_set_u64(&iovec, 8, capacity as i64);
+    let control: LinuxByteBuffer = linux_buffer_new(linux_receive_fd_control_capacity());
+    control.len = linux_receive_fd_control_capacity();
+    let message: LinuxByteBuffer = linux_buffer_new(56);
+    linux_buffer_zero_storage(&message);
+    linux_buffer_set_u64(&message, 16, iovec.words.data as i64);
+    linux_buffer_set_u64(&message, 24, 1);
+    linux_buffer_set_u64(&message, 32, control.words.data as i64);
+    linux_buffer_set_u64(&message, 40, linux_receive_fd_control_capacity() as i64);
+    message.len = 56;
+    let used_cmsg_cloexec: i32 = 1;
+    let got: i64 = _zag_raw_syscall(linux_sys_recvmsg(), socket_fd, message.words.data as i64,
+        linux_msg_cmsg_cloexec(), 0, 0, 0);
+    if (got == (0 - 22)) {
+        // Kernels predating MSG_CMSG_CLOEXEC reject the flag without consuming
+        // the message. Retry, then apply FD_CLOEXEC explicitly to the retained FD.
+        used_cmsg_cloexec = 0;
+        linux_buffer_set_u64(&message, 40, linux_receive_fd_control_capacity() as i64);
+        linux_buffer_set_u32(&message, 48, 0);
+        got = _zag_raw_syscall(linux_sys_recvmsg(), socket_fd, message.words.data as i64, 0, 0, 0, 0);
+    }
+    result.got = got;
+    if (got < 0) {
+        result.error_code = got;
+        linux_buffer_free(&message); linux_buffer_free(&control); linux_buffer_free(&iovec);
+        return result;
+    }
+    if (got > 0) { result.data.len = got as i32; result.payload_received = 1; }
+    let message_flags: t27 = linux_buffer_u32(&message, 48) as t27;
+    result.message_truncated = linux_flag_set(message_flags, linux_msg_trunc());
+    result.control_truncated = linux_flag_set(message_flags, linux_msg_ctrunc());
+    let encoded_control_len: i64 = linux_buffer_u64(&message, 40);
+    let control_len: i32 = 0;
+    if (encoded_control_len < 0 || encoded_control_len > control.capacity_bytes as i64) {
+        result.control_invalid = 1;
+        control_len = control.capacity_bytes;
+    } else { control_len = encoded_control_len as i32; }
+    control.len = control_len;
+    let discard_all: i32 = 0;
+    if (result.payload_received == 0 || result.message_truncated != 0
+        || result.control_truncated != 0 || result.control_invalid != 0) { discard_all = 1; }
+    let parsed: LinuxControlFdResult = linux_parse_scm_rights(&control, control_len, discard_all);
+    result.received_fd = parsed.received_fd;
+    result.fd_count = parsed.fd_count;
+    result.excess_fd_count = parsed.excess_fd_count;
+    result.closed_fd_count = parsed.closed_fd_count;
+    result.last_closed_fd = parsed.last_closed_fd;
+    result.close_error = parsed.close_error;
+    if (parsed.invalid != 0) { result.control_invalid = 1; }
+    if (result.received_fd >= 0 && result.control_invalid == 0
+        && result.message_truncated == 0 && result.control_truncated == 0) {
+        if (used_cmsg_cloexec != 0 || linux_set_fd_cloexec(result.received_fd) == 1) {
+            result.cloexec_applied = 1;
+            result.has_fd = 1;
+        } else {
+            result.last_closed_fd = result.received_fd;
+            if (linux_close(result.received_fd) == 0) { result.closed_fd_count = result.closed_fd_count + 1; }
+            else { result.close_error = 1; }
+            result.received_fd = 0 - 1;
+            result.control_invalid = 1;
+        }
+    }
+    if (result.payload_received != 0 && result.message_truncated == 0
+        && result.control_truncated == 0 && result.control_invalid == 0 && result.close_error == 0) { result.ok = 1; }
+    linux_buffer_free(&message); linux_buffer_free(&control); linux_buffer_free(&iovec);
+    return result;
+}
+
+fn linux_socketpair_probe() i32 {
+    let pair: LinuxFdPair = linux_socketpair_stream();
+    if (pair.ok == 0) { return 0 - 1; }
+    let outgoing: LinuxByteBuffer = linux_buffer_new(16);
+    linux_buffer_set_byte(&outgoing, 0, 'f'); linux_buffer_set_byte(&outgoing, 1, 'l');
+    linux_buffer_set_byte(&outgoing, 2, 'a'); linux_buffer_set_byte(&outgoing, 3, 's');
+    linux_buffer_set_byte(&outgoing, 4, 'h'); linux_buffer_set_byte(&outgoing, 5, '-');
+    linux_buffer_set_byte(&outgoing, 6, 'l'); linux_buffer_set_byte(&outgoing, 7, 'i');
+    linux_buffer_set_byte(&outgoing, 8, 'g'); linux_buffer_set_byte(&outgoing, 9, 'h');
+    linux_buffer_set_byte(&outgoing, 10, 't');
+    let sent: i64 = linux_write_buffer(pair.first, &outgoing);
+    let received: LinuxByteBuffer = linux_buffer_new(16);
+    let got: i64 = linux_read_into(pair.second, &received);
+    let ok: i32 = 1;
+    if (sent != 11) { ok = 0 - 2; }
+    else if (got != 11) { ok = 0 - 3; }
+    else if (linux_buffer_byte(&received, 0) != 'f' || linux_buffer_byte(&received, 1) != 'l'
+        || linux_buffer_byte(&received, 2) != 'a' || linux_buffer_byte(&received, 3) != 's'
+        || linux_buffer_byte(&received, 4) != 'h' || linux_buffer_byte(&received, 5) != '-'
+        || linux_buffer_byte(&received, 6) != 'l' || linux_buffer_byte(&received, 7) != 'i'
+        || linux_buffer_byte(&received, 8) != 'g' || linux_buffer_byte(&received, 9) != 'h'
+        || linux_buffer_byte(&received, 10) != 't') {
+        ok = 0 - 4;
+    }
+    let _close_a: i64 = linux_close(pair.first);
+    let _close_b: i64 = linux_close(pair.second);
+    linux_buffer_free(&outgoing);
+    linux_buffer_free(&received);
+    return ok;
+}

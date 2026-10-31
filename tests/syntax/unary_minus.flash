@@ -1,0 +1,21 @@
+// tests/syntax/unary_minus.flash — W3.1: unary minus on literals.
+
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    let a: t9 = 9841;
+    let b: t9 = -9841;
+    let s: t9 = a + b;
+    if (s != 0) { return 1; }
+
+    let big: t27 = 3812798742493;
+    let neg: t27 = -3812798742493;
+    let sum: t27 = big + neg;
+    if (sum != 0) { return 2; }
+
+    let x: i32 = -42;
+    if (x != -42) { return 3; }
+
+    flash_println("unary_minus: ok");
+    return 0;
+}

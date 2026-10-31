@@ -1,0 +1,30 @@
+// flash/compiler/flash_emit_zag_test.zag — focused legacy emitter type lowering.
+
+@import("../toolchain/zag-poc/std/rt.zag")
+@import("flash_emit_zag.zag")
+
+fn fez_test_fail(name: []u8) void {
+    _zag_print("flash_emit_zag_test: FAIL ");
+    _zag_println(name);
+    _zag_exit(1);
+}
+
+fn main() i32 {
+    if (@strEq(fez_type("Box[t27]"), "Box[i64]") == 0) {
+        fez_test_fail("concrete_generic_t27");
+    }
+    if (@strEq(fez_type("Pair[t9,Box[t27]]"), "Pair[i64,Box[i64]]") == 0) {
+        fez_test_fail("nested_concrete_generic_tunits");
+    }
+    if (@strEq(fez_type("*Box[[]t27]"), "*Box[[]i64]") == 0) {
+        fez_test_fail("qualified_nested_concrete_generic_tunit");
+    }
+    if (@strEq(fez_type("fn(t27)t27"), "fn(i64)i64") == 0) {
+        fez_test_fail("function_signature_tunits");
+    }
+    if (@strEq(fez_type("Box[fn(t9,t27)t27]"), "Box[fn(i64,i64)i64]") == 0) {
+        fez_test_fail("generic_function_signature_tunits");
+    }
+    _zag_println("flash_emit_zag_test: ok");
+    return 0;
+}

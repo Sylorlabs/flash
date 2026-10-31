@@ -49,20 +49,18 @@ fn manager_rebuild_pool(m: *HardwareManager) void {
 
 // ── chamber setup ─────────────────────────────────────────────────────────────
 
-fn seat_nano_block(m: *HardwareManager, c: ChamberCoord, rot: RotationState) i32 {
-    let ok: i32 = set_chamber_occupied(&m.*.lattice, c, 1);
-    if (ok == 0) { return 0; }
+fn seat_nano_block(m: *HardwareManager, c: ChamberCoord, rot: RotationState) bool {
+    if (!set_chamber_occupied(&m.*.lattice, c, 1)) { return false; }
     set_chamber_rotation(&m.*.lattice, c, rot);
     manager_rebuild_pool(m);
-    return 1;
+    return true;
 }
 
-fn remove_nano_block(m: *HardwareManager, c: ChamberCoord) i32 {
-    let ok: i32 = set_chamber_occupied(&m.*.lattice, c, 0);
-    if (ok == 0) { return 0; }
+fn remove_nano_block(m: *HardwareManager, c: ChamberCoord) bool {
+    if (!set_chamber_occupied(&m.*.lattice, c, 0)) { return false; }
     set_chamber_rotation(&m.*.lattice, c, RotationState.R0);
     manager_rebuild_pool(m);
-    return 1;
+    return true;
 }
 
 // ── rotation auto-detect ──────────────────────────────────────────────────────

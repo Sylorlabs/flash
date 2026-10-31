@@ -9,6 +9,11 @@ fn TRIT_NEG() i32 { return -1; }
 fn TRIT_ZERO() i32 { return 0; }
 fn TRIT_POS() i32 { return 1; }
 
+fn grid_null_panic(msg: []u8) void {
+    _zag_eprintln(msg);
+    _zag_exit(1);
+}
+
 // ── rotation / laser enums ──────────────────────────────────────────────────
 
 enum RotationState {
@@ -153,6 +158,7 @@ fn lattice_new(width: i32, height: i32, depth: i32) LatticeGrid {
     if (d < 1) { d = 1; }
     let count: i32 = w * h * d;
     let raw: *i8 = _zag_malloc(count * @sizeOf[ChamberCell]());
+    if (raw == null as *i8) { grid_null_panic("panic: lattice_new allocation failed"); }
     let cells: *ChamberCell = raw as *ChamberCell;
     let i: i32 = 0;
     while (i < count) {
@@ -189,20 +195,20 @@ fn lattice_get_mut(g: *LatticeGrid, c: ChamberCoord) ?*ChamberCell {
     return &g.*.cells[idx];
 }
 
-fn set_chamber_rotation(g: *LatticeGrid, c: ChamberCoord, rot: RotationState) i32 {
+fn set_chamber_rotation(g: *LatticeGrid, c: ChamberCoord, rot: RotationState) bool {
     if (lattice_get_mut(g, c)) |cell| {
         cell.*.rotation = rot;
-        return 1;
+        return true;
     }
-    return 0;
+    return false;
 }
 
-fn set_chamber_occupied(g: *LatticeGrid, c: ChamberCoord, occupied: i32) i32 {
+fn set_chamber_occupied(g: *LatticeGrid, c: ChamberCoord, occupied: i32) bool {
     if (lattice_get_mut(g, c)) |cell| {
         cell.*.occupied = occupied;
-        return 1;
+        return true;
     }
-    return 0;
+    return false;
 }
 
 // Global voxel address: chamber index * edge³ + local linear offset.

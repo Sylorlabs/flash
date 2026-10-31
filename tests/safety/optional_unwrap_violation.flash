@@ -1,0 +1,5 @@
+fn main() i32 {
+    let opt: ?*i32 = null;
+    let v: i32 = opt.*;
+    return 0;
+}

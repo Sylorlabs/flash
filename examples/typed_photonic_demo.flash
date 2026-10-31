@@ -1,0 +1,38 @@
+// examples/typed_photonic_demo.flash — W6: typed photonic API demo.
+//
+// This example shows the new typed photonic surface replacing raw { } blocks.
+// Each hardware call uses typed arguments (FlashVoxel, FlashBeam, FlashPhase,
+// FlashPower, FlashPolarity) instead of untyped integer/float tuples.
+
+program typed_photonic_demo
+
+@import("photonic_stubs.flash")
+@import("std/photonic.flash")
+@import("std/flash_std.flash")
+
+fn main() i32 {
+    // Typed constructors — the primary photonic surface
+    let v: FlashVoxel = voxel(2, 1, 0);
+    let b: FlashBeam = beam(wall_n(), 0);
+    let p: FlashPhase = rad(0.785);
+    let pw: FlashPower = mw(1.5);
+    let pol: FlashPolarity = polarity(axis_vert(), 0);
+
+    // Typed API calls — unit types prevent mixing radians and milliwatts
+    // fire_shield(v, 1.5) would be a compile error — must use mw(1.5)
+    let _r1: i32 = fire_shield(v, pw);
+    let _r2: i32 = inject_phase(v, p);
+    let _r3: i32 = set_laser(b, pw);
+    let _r4: i32 = target_voxel(v);
+    let _r5: i32 = manual_polarity(v, pol);
+
+    // Print results
+    flash_println_str_int("fire_shield=", _r1 as i64);
+    flash_println_str_int("inject_phase=", _r2 as i64);
+    flash_println_str_int("set_laser=", _r3 as i64);
+    flash_println_str_int("target_voxel=", _r4 as i64);
+    flash_println_str_int("manual_polarity=", _r5 as i64);
+
+    flash_println("typed_photonic_demo: ok");
+    return 0;
+}

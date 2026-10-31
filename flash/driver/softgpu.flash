@@ -39,6 +39,7 @@ struct SoftFb {
     dmg_y0:  i32,
     dmg_x1:  i32,
     dmg_y1:  i32,
+    glyph_cache: i64, // optional vector-text cache owned by the text backend
 }
 
 struct SoftGpuDevice {
@@ -49,6 +50,16 @@ struct SoftGpuDevice {
 fn softgpu_kernel_gradient() i32     { return 0; }
 fn softgpu_kernel_ternary() i32      { return 1; }
 fn softgpu_kernel_checker() i32      { return 2; }
+
+// Copy an already-rasterized byte span into a display-owned framebuffer.
+// Display chambers use this boundary instead of reaching through SoftFb's
+// allocation internals. Invalid spans fail closed without touching memory.
+fn softgpu_copy_bytes(dst: *i8, src: *i8, byte_count: i32) i32 {
+    if (dst == null as *i8 || src == null as *i8 || byte_count < 0) { return 0; }
+    if (byte_count == 0) { return 1; }
+    _zag_memcpy(dst, src, byte_count);
+    return 1;
+}
 
 fn softgpu_new(w: i32, h: i32) SoftFb {
     let n: i32 = w * h * 3;
@@ -64,6 +75,7 @@ fn softgpu_new(w: i32, h: i32) SoftFb {
         .mask_on = 0, .mask = make[u8](0),
         .acc_on = 0, .acc = make[u8](0),
         .dmg_on = 0, .dmg_x0 = 0, .dmg_y0 = 0, .dmg_x1 = -1, .dmg_y1 = -1,
+        .glyph_cache = 0,
     };
 }
 
@@ -129,6 +141,127 @@ fn softgpu_clip_test(fb: *SoftFb, x: i32, y: i32) i32 {
         }
     }
     return 1;
+}
+
+fn softgpu_blend_pixel(fb: *SoftFb, x: i32, y: i32,
+    r: i32, g: i32, b: i32, a: i32) void {
+    if (a < 1 || x < 0 || y < 0 || x >= fb.*.w || y >= fb.*.h) { return; }
+    if (softgpu_clip_test(fb, x, y) == 0) { return; }
+    let o: i32 = (y * fb.*.w + x) * 3;
+    if (a >= 255) {
+        set[u8](&fb.*.pix, o, r as u8);
+        set[u8](&fb.*.pix, o + 1, g as u8);
+        set[u8](&fb.*.pix, o + 2, b as u8);
+    } else {
+        let inv: i32 = 255 - a;
+        set[u8](&fb.*.pix, o,
+            ((get[u8](fb.*.pix, o) as i32 * inv + r * a) / 255) as u8);
+        set[u8](&fb.*.pix, o + 1,
+            ((get[u8](fb.*.pix, o + 1) as i32 * inv + g * a) / 255) as u8);
+        set[u8](&fb.*.pix, o + 2,
+            ((get[u8](fb.*.pix, o + 2) as i32 * inv + b * a) / 255) as u8);
+    }
+}
+
+fn softgpu_blend_rect(fb: *SoftFb, x0: i32, y0: i32, w: i32, h: i32,
+    r: i32, g: i32, b: i32, a: i32) void {
+    if (w < 1 || h < 1 || a < 1) { return; }
+    let y: i32 = y0;
+    while (y < y0 + h) {
+        let x: i32 = x0;
+        while (x < x0 + w) {
+            softgpu_blend_pixel(fb, x, y, r, g, b, a);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    softgpu_damage_mark_rect(fb, x0, y0, x0 + w - 1, y0 + h - 1);
+}
+
+fn softgpu_blend_vgrad_rect(fb: *SoftFb, x0: i32, y0: i32,
+    w: i32, h: i32, r0: i32, g0: i32, b0: i32,
+    r1: i32, g1: i32, b1: i32, a: i32) void {
+    if (w < 1 || h < 1 || a < 1) { return; }
+    let den: i32 = h - 1;
+    if (den < 1) { den = 1; }
+    let row: i32 = 0;
+    while (row < h) {
+        let rr: i32 = r0 + ((r1 - r0) * row) / den;
+        let gg: i32 = g0 + ((g1 - g0) * row) / den;
+        let bb: i32 = b0 + ((b1 - b0) * row) / den;
+        softgpu_blend_rect(fb, x0, y0 + row, w, 1, rr, gg, bb, a);
+        row = row + 1;
+    }
+}
+
+fn softgpu_round_rect_contains(px: i32, py: i32, w: i32, h: i32,
+    radius: i32) i32 {
+    if (radius < 1) { return 1; }
+    if (px >= radius && px < w - radius) { return 1; }
+    if (py >= radius && py < h - radius) { return 1; }
+    let cx: i32 = radius - 1;
+    let cy: i32 = radius - 1;
+    if (px >= w - radius) { cx = w - radius; }
+    if (py >= h - radius) { cy = h - radius; }
+    let dx: i32 = px - cx;
+    let dy: i32 = py - cy;
+    if (dx * dx + dy * dy <= radius * radius) { return 1; }
+    return 0;
+}
+
+fn softgpu_blend_round_rect_vgrad(fb: *SoftFb, x0: i32, y0: i32,
+    w: i32, h: i32, radius: i32, r0: i32, g0: i32, b0: i32,
+    r1: i32, g1: i32, b1: i32, a: i32) void {
+    if (w < 1 || h < 1 || a < 1) { return; }
+    let rad: i32 = radius;
+    if (rad < 0) { rad = 0; }
+    if (rad > w / 2) { rad = w / 2; }
+    if (rad > h / 2) { rad = h / 2; }
+    let den: i32 = h - 1;
+    if (den < 1) { den = 1; }
+    let py: i32 = 0;
+    while (py < h) {
+        let rr: i32 = r0 + ((r1 - r0) * py) / den;
+        let gg: i32 = g0 + ((g1 - g0) * py) / den;
+        let bb: i32 = b0 + ((b1 - b0) * py) / den;
+        let px: i32 = 0;
+        while (px < w) {
+            if (softgpu_round_rect_contains(px, py, w, h, rad) == 1) {
+                softgpu_blend_pixel(fb, x0 + px, y0 + py, rr, gg, bb, a);
+            }
+            px = px + 1;
+        }
+        py = py + 1;
+    }
+    softgpu_damage_mark_rect(fb, x0, y0, x0 + w - 1, y0 + h - 1);
+}
+
+fn softgpu_blend_round_rect(fb: *SoftFb, x0: i32, y0: i32,
+    w: i32, h: i32, radius: i32, r: i32, g: i32, b: i32, a: i32) void {
+    softgpu_blend_round_rect_vgrad(fb, x0, y0, w, h, radius,
+        r, g, b, r, g, b, a);
+}
+
+fn softgpu_compose_round_rect(dst: *SoftFb, src: *SoftFb,
+    dx: i32, dy: i32, radius: i32) void {
+    let y: i32 = 0;
+    while (y < src.*.h) {
+        let x: i32 = 0;
+        while (x < src.*.w) {
+            if (softgpu_round_rect_contains(x, y, src.*.w, src.*.h,
+                radius) == 1) {
+                let so: i32 = (y * src.*.w + x) * 3;
+                softgpu_blend_pixel(dst, dx + x, dy + y,
+                    get[u8](src.*.pix, so) as i32,
+                    get[u8](src.*.pix, so + 1) as i32,
+                    get[u8](src.*.pix, so + 2) as i32, 255);
+            }
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    softgpu_damage_mark_rect(dst, dx, dy,
+        dx + src.*.w - 1, dy + src.*.h - 1);
 }
 
 fn softgpu_clear(fb: *SoftFb, r: i32, g: i32, b: i32) void {

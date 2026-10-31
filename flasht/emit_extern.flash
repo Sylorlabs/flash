@@ -26,21 +26,21 @@ fn extern_sym_for_raw_op(op: []u8) []u8 {
 
 fn extern_scan_op_quoted(text: []u8, start: i32, syms: *ArrayList[[]u8]) void {
     if (start < 0 || start >= text.len) { return; }
-    let q0: i32 = flash_str_index_of(text[start..], "\"");
-    if (q0 < 0) { return; }
-    q0 = start + q0 + 1;
-    let q1: i32 = q0;
-    while (q1 < text.len && text[q1] != '"') {
-        q1 = q1 + 1;
+    if (flash_str_index_of(text[start..], "\"")) |qi| {
+        let q0: i32 = start + qi + 1;
+        let q1: i32 = q0;
+        while (q1 < text.len && text[q1] != 34) {
+            q1 = q1 + 1;
+        }
+        if (q1 >= text.len) { return; }
+        let op: []u8 = text[q0..q1];
+        let sym: []u8 = extern_sym_for_raw_op(op);
+        if (sym.len > 0) { extern_push_unique(syms, sym); }
     }
-    if (q1 >= text.len) { return; }
-    let op: []u8 = text[q0..q1];
-    let sym: []u8 = extern_sym_for_raw_op(op);
-    if (sym.len > 0) { extern_push_unique(syms, sym); }
 }
 
 fn extern_scan_for_literal(text: []u8, needle: []u8, sym: []u8, syms: *ArrayList[[]u8]) void {
-    if (flash_str_index_of(text, needle) >= 0) {
+    if (flash_str_index_of(text, needle)) |_| {
         extern_push_unique(syms, sym);
     }
 }
@@ -49,8 +49,8 @@ fn extern_scan_text(text: []u8, syms: *ArrayList[[]u8]) void {
     let i: i32 = 0;
     while (i < text.len) {
         if (i + 6 < text.len) {
-            if (text[i] == 'o' && text[i + 1] == 'p' && text[i + 2] == ' '
-                && text[i + 3] == '=' && text[i + 4] == ' ') {
+            if (text[i] == 111 && text[i + 1] == 112 && text[i + 2] == 32
+                && text[i + 3] == 61 && text[i + 4] == 32) {
                 extern_scan_op_quoted(text, i + 5, syms);
             }
         }

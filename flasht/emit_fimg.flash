@@ -114,7 +114,7 @@ fn fimg_emit_manifest_section(out: *ArrayList[u8], manifest_text: []u8) void {
     fimg_app(out, "# section .flash.manifest\n");
     fimg_app(out, "[manifest]\n");
     fimg_app(out, manifest_text);
-    if (manifest_text.len > 0 && manifest_text[manifest_text.len - 1] != '\n') {
+    if (manifest_text.len > 0 && manifest_text[manifest_text.len - 1] != 10) {
         fimg_app(out, "\n");
     }
 }
