@@ -1,11 +1,12 @@
-# Flash H — The Hardware-Native Plan
+# Flash H — The Hardware-Native Plan (revised)
 
-**Status:** Design proposal. Not yet implemented.
-**Author:** Devin, direction set with Micah (2026-11-20).
-**Scope:** The post-2.0/A+ plan. Five pillars: emulation (E), control (C),
-verification (V), optimization (O), language polish (L). Thirteen workstreams
-(H-E1..H-L3). This document is the contract: every change is named, motivated,
-scoped, and ordered.
+**Status:** Design proposal, revision 2. Incorporates the external
+architecture review (2026-11-21); the review's verdict — "correctness ahead
+of sophistication" — is the ordering principle of this document.
+**Author:** Devin, direction set with Micah; architecture review by
+independent critique.
+**Scope:** Post-2.0/A+ plan. Six phases P0–P6, nineteen workstreams, each
+with files touched, gating tests, and risks.
 
 **Companions:** [`FLASH_2_0_PLAN.md`](FLASH_2_0_PLAN.md) (W1–W12, landed),
 [`FLASH_2_0_SPEC.md`](FLASH_2_0_SPEC.md),
@@ -14,84 +15,86 @@ scoped, and ordered.
 
 ---
 
-## 0. The thesis
+## 0. The thesis (revised)
 
-Flash 2.0 made it a real language. A+ made it catch its own bugs. What it is
-not yet is **the fastest and best core language for photonic computing
-hardware in native ternary** — because today there is no photonic-ternary
-machine it can measure itself against. Every number Flash produces is a
-binary-host number. The language claims ternary; the measurements lie.
+The original draft aimed at "the fastest and best language for native
+photonic ternary hardware." The review was right: that goal cannot be a
+design assumption — it can only be a *demonstrated result*. The strategic
+target is:
 
-Flash H fixes the foundation, then builds what the hardware story actually
-needs:
+> **Flash is a verifiable, hardware-aware balanced-ternary systems language
+> with explicit control, a reproducible compiler, and a validated path from
+> program semantics to photonic execution.**
 
-1. **A photonic-ternary emulator.** `qemu_ppu32` executes 2 of the 12
-   `Ppu32Class` op classes today. H completes it into a real machine model —
-   full ISA, chamber physics, counters in photonic units — so Flash programs
-   can be *run and measured* on emulated ternary hardware. Numbers reported
-   to users come from this model. Host x86 numbers never appear in a
-   Flash-facing metric.
+The differentiation comes from three properties the project can actually
+build and test: **correct ternary semantics**, **explicit photonic resource
+control**, and **trustworthy optimization evidence**. Hardware performance
+leadership is claimed only when measured on real devices.
 
-2. **Total control, progressively unlocked.** Writing raw Flash should feel
-   like writing raw C — same controllability — but the default surface stays
-   simple. `raw { }` exists; it is the floor. On top of it, `control { }`
-   scopes let the programmer decide, per piece, what the compiler manages
-   and what they manage themselves. Every hardware control is reachable;
-   nothing is hidden.
+What the revision changes, concretely:
 
-3. **Verification is part of the language, not a flag.** The A+ catches —
-   null safety, optional unwrap, exhaustive switch, definite assignment,
-   affine ownership, effects — become always-on. Broken code does not ship.
-   Diagnostics are structured and machine-readable: the primary authors of
-   Flash code will include AI agents, and an error an agent can't parse is
-   an error nobody fixes.
+- Semantics freeze comes **first** (P0), not last — because the emulator,
+  the optimizer, and the spec all need it.
+- One **vertical slice** (P1) proves the whole path end-to-end before
+  breadth begins.
+- The emulator is extended (P2) with **measurement discipline**: counted,
+  modeled, and measured numbers are labeled and never conflated.
+- Verification and agent interfaces (P3) land **before** optimization —
+  diagnostics move early, safety boundaries are auditable.
+- Optimization (P4) requires a **typed dependency-aware IR and proven
+  rewrite rules**; the equivalence gate precedes the optimizer, not
+  follows it.
+- `flashd` (P5) is an **exploration engine with explicit promotion**, not
+  an authority that rewrites release artifacts.
+- Language polish and certification (P6) close the loop last.
 
-4. **A background super-optimizer, not a garbage collector.** No GC, ever.
-   Instead `flashd`: a daemon that takes compiled FIR, rewrites it toward
-   mathematical optimum against the photonic cost model, and converges in
-   the background — fast compiles stay fast; the optimizer spends *time*,
-   not *compile time*. The research question — how to do this *properly* —
-   has a known candidate answer: equality saturation. H builds the
-   differential-equivalence harness that makes adopting it safe.
+The review also caught real defects in the first draft, now fixed here:
 
-5. **The language finishes unifying.** `t<width>` *is* the trit-vector
-   type. On balanced-ternary hardware a `t9` is physically a vector of nine
-   trits; a separate `tritvec[N]` type gives developers two names for one
-   machine object. We unify on `t`-width words.
+| Draft claim | Reality / correction |
+|---|---|
+| "12 PPU32 op classes" | `Ppu32Class` has **13** members. Fixed throughout. |
+| `a @ ~a → 0`, `a @ 0 → a`, `~(a@b) → ~a@~b` as rewrites | **Invalid under the 2.0 spec's digit-wise-multiplication semantics**; valid under the *consensus* semantics the tests actually implement. The semantics themselves disagree across docs — freezing them is P0 work. |
+| Ban host metrics (`ns`, `cycles`, `x86`) from output | Wrong tool. Replaced with a *provenance label* on every reported number (§5, H-E3). Host metrics stay, separately labeled. |
+| `control { verify: off }` | Too broad. Replaced by **named, auditable per-check exemptions** (H-V2). |
+| `tritvec[N]` removed; `t<width>` is the vector | Semantic decision, not a storage one. Deferred to a design gate (H-L1); default posture now: keep the distinction + zero-cost views until semantics are proven. |
+| `flashd` publishes improved artifacts | Now an exploration engine producing versioned candidates; promotion is explicit and gated (H-D1). |
+| e-graph finds "most mathematically efficient" program | Corrected: finds the lowest-cost *represented* expression under a declared cost model. Global hardware optimality is not claimed. |
 
 ---
 
 ## 1. Design principles (non-negotiable)
 
-1. **Photonic-ternary is the only measurement standard.** Every performance
-   number Flash reports — energy, latency, op counts — is expressed in
-   photonic-ternary units from the emulator model. No x86 cycles, no host
-   nanoseconds, no "emulation tax" numbers mixed in.
+1. **Correctness ahead of sophistication.** No advanced component ships on
+   semantics that aren't frozen and independently verified. Foundational
+   gates are load-bearing — you do not proceed through a failed one.
 
-2. **Managed by default, control on request.** The default language is the
-   simple one: bounds checked, effects inferred, memory pooled, routes
-   auto-scheduled. A `control { }` scope opts down per knob. `raw { }` under
-   `@unsafe` is the floor beneath every knob — full hardware access, always.
+2. **Measurement provenance.** Every performance number Flash reports is
+   labeled as one of: **counted** (exact simulated quantity),
+   **modeled** (estimated with declared parameters, version, and
+   uncertainty), or **measured** (physical device data). Never report a
+   modeled number as a measurement; never report a host number as a
+   photonic number.
 
-3. **Every control is shown.** The PPU32 ISA and the wave/chamber API get
-   complete typed coverage. A test enumerates the ISA and asserts a typed
-   surface exists for each class — coverage is verified, not claimed.
+3. **Managed by default, control on request.** The default language stays
+   simple; `control { }` scopes opt down per named knob; `raw { }` under
+   `@unsafe` is the floor. Exemptions are narrow and auditable — never a
+   blanket "stop checking."
 
-4. **Broken code does not ship.** Compile-time verification is always on
-   and strict by default. The escape hatch is scoped (`control { verify:
-   off }` / `@unsafe`), never global silence.
+4. **Safe code is checked; unsafe code is visible and limited; neither is
+   mislabeled.** The type system and the verification report both say
+   exactly which guarantees hold and which were waived.
 
-5. **The optimizer spends time, not compile time.** `flashd` runs in the
-   background against build artifacts. `flasht -O` levels cover the
-   compile-time fast path. The daemon is where the slow, deep search lives.
+5. **A target-specific package owns hardware specifics.** The core
+   language describes portable computations and effects; `std.ppu32` owns
+   registers, instruction encodings, and chamber topology. Full control
+   without coupling every program to one processor.
 
-6. **AI agents are first-class users.** Grammar stays small and regular;
-   every diagnostic has a stable code and machine-readable form; every
-   knob is enumerable (`flashc controls --list`). Legibility is a feature.
+6. **AI agents are first-class users.** Small regular grammar, stable
+   diagnostic codes, machine-readable errors and reports, enumerable
+   knobs — from the start, not retrofitted.
 
-7. **Balanced ternary remains the home radix.** Inherited from 1.0/2.0.
-   `t<width>` words are the vector type; negation is free; foreign radices
-   pay their own embedding cost.
+7. **Balanced ternary remains the home radix.** `t<width>` native, foreign
+   radices pay their own embedding cost.
 
 ---
 
@@ -99,816 +102,894 @@ needs:
 
 | Asset | State | Gap H closes |
 |-------|-------|--------------|
-| `flasht/isa/ppu32.flash` | 12-class ISA defined (Nop, PcmPhaseShift, PcmCouple, LatticeRoute, TritRegLoad, TritAlu, Raw×7) | Only a spec — no execution |
-| `flasht/qemu_ppu32.zag` | Interpreter runs LatticeRoute + PcmPhaseShift | 10 of 12 classes unexecuted |
-| `flash/runtime/chamber_sim.zag`, `raw_sim.zag` | 8×8×8 Active Lattice device model | Hardwired 8³; not wired to PPU32 execution |
-| `flash/ir/flash_ir.flash` (FIR) | Post-emit pre-machine IR; `.fir` text format | No optimizer, no cost model |
-| Typed photonic API (W6/W7) | `fire_shield`, `inject_phase`, `set_laser`, `target_voxel`, `manual_polarity`, mat3/wave | ISA classes `PcmCouple`, `TritRegLoad`, `TritAlu`, mode enter/exit have no typed surface |
-| A+ checks (S4–S8) | Landed as tests: null, unwrap, exhaustiveness, ownership | Not all promoted to always-on errors |
-| `control { }` | Does not exist | The entire progressive-control model is new |
-| `flashd` | Does not exist | The entire optimizer daemon is new |
+| `flasht/isa/ppu32.flash` | 13-class ISA enum + `Ppu32Insn` operand struct | No normative encoding spec (8-bit class + 24-bit operand layout undefined), no carry/fault semantics |
+| `flasht/qemu_ppu32.zag` | Bring-up interpreter: parses + executes `LatticeRoute`, `PcmPhaseShift` | 11 classes unexecuted; no machine state; a parser, not a reference machine |
+| `flash/runtime/chamber_sim.zag`, `raw_sim.zag` | 8×8×8 Active Lattice device model | Hardwired 8³; disconnected from PPU32 execution |
+| `flash/ir/flash_ir.flash` (FIR) | Post-emit IR: routes, PCM, raw externs, `FirTritAlu` | Not an optimization IR: no def-use, no CFG, no effect ordering, op names carried as strings |
+| Typed photonic API (W6/W7) | `fire_shield`, `inject_phase`, `set_laser`, `target_voxel`, `manual_polarity`, mat3/wave | ISA classes `PcmCouple`, `TritRegLoad`, `TritAlu`, `Nop`, mode enter/exit have no typed surface; no `std.ppu32` split |
+| `@` interference operator | Implemented as **consensus** semantics per `tests/trit/interfere.flash`; spec'd as **digit-wise multiplication** in `FLASH_2_0_PLAN.md` W5 | **The documents disagree.** P0 freezes one semantics and aligns spec, impl, and tests. |
+| A+ checks (S4–S8) | Landed as tests | Not all promoted to always-on errors; `--check` self-host still red |
+| `control { }`, `flashd`, JSON diagnostics | Do not exist | New |
 
 ---
 
-## 3. Phase map
+## 3. Phase map (revised execution order)
 
-| Phase | Workstreams | Goal |
-|-------|-------------|------|
-| **P1 — Emulation foundation** | E1, E2, E3 | Full PPU32 machine model + photonic counters |
-| **P2 — Control + verification** | C1, C2, C3, C4, V1, V2, V3 | Total control model; always-on verifiers; agent-grade diagnostics |
-| **P3 — Super-optimizer** | O1, O2, O3, O4 | FIR rewrite engine, photonic cost model, `flashd` daemon, equivalence gate |
-| **P4 — Language polish** | L1, L2, L3 | t-width vector story, control-level docs, spec + conformance |
-
-P1 goes first — nothing else can claim to be photonic-measured without it.
-C/V can run in parallel with P1 (they are mostly sema + surface work).
-O needs E3's counters. L documents everything and goes last.
+| Phase | Workstreams | Goal | Exit gate |
+|-------|-------------|------|-----------|
+| **P0 — Freeze semantics** | F1, F2 | Normative ISA, operator truth tables, encoding, bootstrap reliability | No unspecified opcode behavior; all reference semantic tests pass |
+| **P1 — Vertical slice** | S1 | Source → FIR → encoded PPU32 → independent interpreter → verified state | Exact end-state + encoding round-trips, differential tests |
+| **P2 — Emulation + measurement** | E1, E2, E3 | All 13 classes, chamber model, deterministic counters with provenance | Functional conformance; no unsupported physical claims |
+| **P3 — Verification + agent interfaces** | V1, V2, V3, C1, C2, C3, C4 | JSON diagnostics, auditable safety boundaries, layered `flash verify`, control model | Compiler+verifier reject invalid programs correctly; control surface enumerable |
+| **P4 — Proven optimization** | O0, O1, O2, O3 | Typed dep-aware IR, equivalence harness, proven rewrites, bounded search | Zero known semantic regressions; demonstrated cost improvement |
+| **P5 — Daemon (conditional)** | D1, D2 | `flashd` exploration engine; separate e-graph track | Incremental benefit over P4 optimization, no build instability |
+| **P6 — Polish + certify** | L1, L2, L3 | Scalar/vector resolution, docs, benchmarks, reproducible conformance | Documented behavior; externally reproducible results |
 
 ---
 
-## 4. Pillar E — The photonic-ternary emulator
+## 4. P0 — Freeze semantics and repair the foundation
 
-### H-E1 — Complete PPU32 emulator  *(P1, foundational)*
+*Nothing else is built until this phase is green. The review was blunt and
+correct: the emulator, optimizer, and spec are all downstream of semantics
+that are currently unfrozen and partially contradictory.*
 
-**Problem.** `qemu_ppu32` executes `LatticeRoute` and `PcmPhaseShift` only.
-The other ten `Ppu32Class`es — `Nop`, `PcmCouple`, `TritRegLoad`, `TritAlu`,
-`RawFireShield`, `RawInjectPhase`, `RawSetLaserMw`, `RawTargetVoxel`,
-`RawSetPolarity`, `RawModeEnter`, `RawModeExit` — are defined in
-`flasht/isa/ppu32.flash` but have no execution semantics. A `.ppu32` image
-that uses them cannot run.
+### H-F1 — Normative machine + operator specification  *(P0)*
 
-**Goal.** A complete machine model: every `Ppu32Insn` executes against an
-explicit machine state.
+**Problem.** Three normative gaps, each a real defect:
 
-**Machine state.**
+1. **The `@` operator has two documented semantics.** `FLASH_2_0_PLAN.md`
+   W5 defines `@` as digit-wise trit *multiplication* (under which
+   `a @ ~a = -a²`, `a @ 0 = 0`). `tests/trit/interfere.flash` implements
+   *consensus* (`+@+=+`, `-@-=-`, `+@-=0`, `0@x=x`) — a different operator
+   entirely. Optimizer rules written against either one are silently wrong
+   under the other.
+2. **The PPU32 ISA is under-specified.** `Ppu32Insn` declares ~15 operand
+   fields but the instruction format ("8-bit class + 24-bit operands") has
+   no defined field encoding. `TritAlu Add` has no specified carry
+   behavior even though `trit_math.zag` returns sum+carry. A voxel-read
+   op has no encoding. Fault conditions are undefined.
+3. **Bootstrap reliability is asserted, not gated.** `AGENTS.md` documents
+   transient self-compilation segfaults; the plan treated fixpoint as a
+   settled gate.
+
+**Deliverables.**
+
+- **`docs/PPU32_ISA_V1.md`** — normative ISA: complete per-class encoding
+  (operand field layout within the 24-bit operand space, or an explicit
+  variable-length/secondary-word format if fields don't fit — decide and
+  write it down), register semantics, `TritAlu` carry/overflow rules,
+  memory behavior, fault conditions, instruction ordering guarantees,
+  and device-op semantics. Adds the voxel-read op with a real encoding
+  (name: `RawReadVoxel`, class id assigned in the spec).
+- **`docs/TRIT_OPS_V1.md`** — executable operator semantics: the canonical
+  truth tables for every trit operation (`@`, `~`, `&`, `|`, `^`, add,
+  mul, nand, neg), including the resolution of the `@` contradiction —
+  **decision: consensus semantics** (matches the implemented tests and
+  the physical superposition reading; multiplication semantics is
+  renamed `trit_mul` where numeric multiplication is meant, keeping the
+  two operations distinct and each unambiguous). The doc is executable:
+  the tables live as data the test suite reads, not prose.
+- **Bootstrap reliability gate** — `build.sh` self-compilation gets a
+  retry-with-log wrapper plus a recorded flake rate; transient segfaults
+  become measured, not folklore. `tests/bootstrap_gate.sh` asserts
+  fixpoint across N=5 consecutive clean builds.
+- **Target boundary freeze** — restate `OS_READINESS.md` contract as
+  normative: `ppu32` lowers photonic surface routes only; full-language
+  → PPU32 is rejected; `rayos-ternary` reserved. (Already enforced by
+  `os_target_contract_gate.sh`; documented here as a frozen boundary.)
+
+**Files touched.**
+- `docs/PPU32_ISA_V1.md`, `docs/TRIT_OPS_V1.md` (new, normative).
+- `docs/FLASH_2_0_SPEC.md`, `FLASH_2_0_GRAMMAR.md` — align `@` semantics
+  to the frozen table.
+- `build.sh`, `tests/run_all.sh`, `tests/bootstrap_gate.sh` (new).
+
+**Gate.** Every opcode has an encoding/decoding round-trip test and a
+reference semantic test; every trit op's truth table is verified
+exhaustively (3² for binary ops) against the executable spec — *before*
+the full emulator is considered complete. No unspecified opcode behavior
+remains.
+
+---
+
+### H-F2 — Baseline test suite hardening  *(P0)*
+
+**Problem.** Golden tests alone certify "output matched last time," not
+"output is right." The review's operating rule — no feature accepted
+solely because a golden test passes — becomes a suite-level property.
+
+**Deliverables.**
+- For every existing golden test, add a **negative pair** where one
+  exists: malformed input → fault (not silent accept), boundary values,
+  semantic properties (`x @ x == x` for consensus; `x + y == y + x`), and
+  a regression entry for each bug fixed during H.
+- Property-based smoke layer for trit ops: exhaustively enumerate all 3²
+  pairs for binary ops and 3³ for three-input cases — small enough to be
+  exhaustive, not sampled.
+
+**Files touched.**
+- `tests/` — new `tests/negative/`, `tests/property/` directories;
+  `run_all.sh` picks them up.
+
+**Gate.** Suite stays 100% green with the new negative/property layers;
+fuzz lex smoke (exists) extended to the PPU32 parser.
+
+---
+
+## 5. P1 — One complete vertical slice
+
+### H-S1 — Source → FIR → encoded PPU32 → independent interpreter → verified state  *(P1)*
+
+**Problem.** "It compiles" and "the manifest looks right" are not the same
+as "it executes correctly on the target model." No end-to-end proof of
+the full path exists.
+
+**Goal.** Take **one** representative photonic program —
+`examples/ternary_logic.flash` is the candidate (trit ops + interference,
+small manifest) — and prove the entire chain:
+
+1. `flashc` compiles it to FIR + manifest (existing).
+2. `flasht` encodes to `.ppu32` per `PPU32_ISA_V1.md` (F1's encoding is
+   the authority; fix `emit_ppu32.flash` to match it).
+3. An **independent reference interpreter** executes the encoded image.
+   *Independent* means: written against `PPU32_ISA_V1.md`, not ported
+   from `emit_ppu32`'s assumptions — separate author path so compiler
+   and interpreter can't share the same bug. Implement it as
+   `selfhost/ref_interp.flash`, a deliberately dumb, spec-literal
+   executor (no shared code with the encoder).
+4. Machine end-state is verified: trit registers, PCM grid, and emitted
+   side-effects match the spec-computed expected state (hand-computed
+   for this one program, checked into the test).
+5. Malformed-input and fault paths exercised: truncated encoding,
+   out-of-range register, `Raw*` outside mode-enter — each produces the
+   spec'd fault, never a skip.
+
+**Files touched.**
+- `flasht/emit_ppu32.flash` — conform to `PPU32_ISA_V1.md` encoding.
+- `selfhost/ref_interp.flash` (new) — independent reference interpreter.
+- `tests/slice/` — end-to-end fixtures + hand-computed expected states.
+
+**Gate.** Exact end-state match and encoding round-trips on the slice
+program, plus all fault cases behaving per spec. This is the *template*
+every later workstream's verification copies.
+
+---
+
+## 6. P2 — Finish emulation and measurement discipline
+
+### H-E1 — Complete PPU32 machine model  *(P2)*
+
+**Problem.** The bring-up interpreter executes 2 of 13 classes. Porting
+`qemu_ppu32.zag` to Flash doesn't make it correct — it's a parser, not a
+reference machine.
+
+**Goal.** A complete machine model per `PPU32_ISA_V1.md`:
+
 ```flash
 struct Ppu32State {
-    trit_regs: [32]i8,          // trit register file, -1/0/+1
+    trit_regs: [32]i8,          // trit register file
+    trit_carry: i8,             // carry flag per ISA carry rules
     pcm_rows: i32,
     pcm_cols: i32,
     pcm_grid: *i8,              // PCM phase state, rows×cols
-    chamber: ChamberState,      // E2 — beam/laser/voxel device model
-    mode: i32,                  // raw mode active flag
+    chamber: ChamberState,      // E2 device model
+    mode: i32,                  // raw-mode flag per ISA fault rules
     pc: i32,
     counters: PhotonCounters,   // E3
+    faults: i32,                // sticky fault log (structured, V3)
 }
 ```
 
-- `TritRegLoad` moves trit literals/values into `trit_regs`.
-- `TritAlu` executes `Add`/`Mul`/`Nand`/`Neg` per the balanced-ternary truth
-  tables already canonical in `flash/stdlib/trit_math.zag`.
-- `PcmPhaseShift`/`PcmCouple` mutate `pcm_grid` (row/col phase state and
-  coupling).
-- `Raw*` ops drive the chamber device model (E2).
-- `Nop` is a real instruction (timing/counter semantics), not a skip.
-- `RawModeEnter`/`Exit` bracket chamber access; a `Raw*` op outside raw
-  mode is a machine fault — the emulator *checks the contract*, it does not
-  silently accept.
-
-**Implementation note.** The emulator is written in Flash, not Zag —
-`flasht/qemu_ppu32.zag` ports to `selfhost/qemu_ppu32.flash` (name TBD:
-`fvemu`?). The toolchain is self-hosted; its emulator should be too.
+- All 13 `Ppu32Class`es execute: `Nop` (real timing semantics), `PcmPhaseShift`,
+  `PcmCouple`, `LatticeRoute`, `TritRegLoad`, `TritAlu` (Add/Mul/Nand/Neg
+  with ISA-defined carry), all 7 `Raw*` ops, and the new `RawReadVoxel`.
+- `Raw*` outside `RawModeEnter`/`Exit` is a **machine fault** — the
+  emulator checks the contract; it does not silently accept.
+- Written in Flash (`selfhost/`): the toolchain is self-hosted; its
+  emulator should be too. `ref_interp` (S1) stays deliberately separate —
+  this emulator is the full-featured one; ref_interp is the dumb spec
+  oracle used by differential tests.
 
 **Files touched.**
-- `selfhost/qemu_ppu32.flash` (new) — the emulator, ported from
-  `flasht/qemu_ppu32.zag`.
-- `flasht/isa/ppu32.flash` — semantics table per class (already has the
-  encoding; add the contract each op enforces).
-- `selfhost/lib/` — reuse `hardware_manager.flash`, `manifest.flash`,
-  `spatial_probe.flash` for chamber/route state.
+- `selfhost/qemu_ppu32.flash` (new) — full emulator.
+- `flasht/isa/ppu32.flash` — per-class semantics table conforming to
+  `PPU32_ISA_V1.md`.
+- `selfhost/lib/` — reuse `hardware_manager`, `manifest`, `spatial_probe`.
 
 **Tests gating E1.**
-- `tests/emulator/all_classes.flash` — a `.ppu32` exercising all 12
-  classes; executes end-to-end, golden register/machine end-state.
-- `tests/emulator/raw_mode_fault.ppu32` — `Raw*` outside mode-enter is a
-  fault, not silent success.
-- All existing `.ppu32` examples (`photonic_massive.ppu32`,
-  `ternary_logic.ppu32`) execute and produce their manifests' declared end
-  state.
-- **Gate rule:** the test suite reports *emulator* end-state, not just
-  process exit code.
-
-**Risk.** The `.ppu32` text format is loose (key=value lines). The emulator
-parser must fail closed on malformed input — a malformed instruction is a
-fault, never a skip. Add `tests/emulator/malformed.ppu32` cases.
+- `tests/emulator/all_classes.flash` — all 13 classes execute; golden
+  end-state.
+- `tests/emulator/faults.ppu32` — every ISA-defined fault triggers
+  exactly.
+- `tests/emulator/differential.sh` — full emulator vs. `ref_interp`
+  agree on every test image (the independence property, exercised).
+- All existing `.ppu32` examples execute to their declared end-state.
 
 ---
 
-### H-E2 — Chamber physics device model  *(P1)*
+### H-E2 — Chamber device model  *(P2)*
 
-**Problem.** `chamber_sim.zag`/`raw_sim.zag` model an 8×8×8 Active Lattice,
-but hardwired, in Zag, and disconnected from PPU32 execution — `Raw*` ops
-in the emulator need a device to act on.
+**Problem.** `chamber_sim`/`raw_sim` model an 8×8×8 Active Lattice —
+hardwired, in Zag, disconnected from PPU32 execution.
 
-**Goal.** The chamber model becomes the emulator's photonic device: beams,
-laser power, polarity, voxel cells, phase injection, shield firing —
-parametric lattice edge (default 8, not hardwired), expressed in Flash.
+**Goal.** The chamber becomes the emulator's photonic device:
+- Parametric lattice edge (default 8), coordinates checked against the
+  *target descriptor* (C1), not a hardcoded constant.
+- `fire_shield`, `inject_phase`, `set_laser_mw`, `target_voxel`,
+  `manual_polarity`, `RawReadVoxel` act on explicit `ChamberState`.
+- Interference executes as superposition in the lattice per the frozen
+  `@` semantics — device truth table == language truth table ==
+  `TRIT_OPS_V1.md`. One source of truth.
+- Voxel readback lets tests assert chamber end-state directly.
 
-**Semantics to model (functional fidelity, not physics-accurate — see
-decisions):**
-- `fire_shield(voxel, mw)` — mark cell shielded, charge power counter.
-- `inject_phase(voxel, rad)` — write phase state at coordinate.
-- `set_laser_mw(beam, mw)` — set beam power.
-- `target_voxel(voxel)` / `manual_polarity(voxel, pol)` — target + write
-  polarity.
-- Interference: `a @ b` on the device executes as superposition in the
-  lattice — the physical thing the operator models.
-- Voxel readback — a `RawReadVoxel` path (or probe op) lets tests assert
-  chamber end-state.
+**Honest bound (from the review):** the model is functional — ISA-, unit-,
+and state-accurate. Loss, crosstalk, thermal are deferred (non-goals);
+the model is honest about what it does not simulate, and E3's provenance
+labels prevent modeled numbers from masquerading as physics.
 
 **Files touched.**
-- `selfhost/lib/chamber.flash` (new, port of `chamber_sim.zag` +
-  `raw_sim.zag`) — `ChamberState`, cell array, parametric edge.
-- `selfhost/qemu_ppu32.flash` — `Raw*` dispatch into chamber.
-- `selfhost/lib/hardware_manager.flash` — coordinate/route bookkeeping is
-  already ported; wire it through.
+- `selfhost/lib/chamber.flash` (new; port of `chamber_sim`+`raw_sim`,
+  parametric edge).
+- `selfhost/qemu_ppu32.flash` — `Raw*` dispatch.
 
 **Tests gating E2.**
-- `tests/emulator/chamber_state.flash` — `raw_chamber.flash` compiled to
-  `.ppu32`, executed; voxel end-state matches `raw_sim`'s output
-  (differential against the existing Zag sim).
-- `tests/emulator/lattice_edge.flash` — edge 4/8/16 lattices all run;
-  out-of-lattice coordinate is a machine fault.
-- Interference differential: `@` on the device matches the trit truth
-  tables for all 3³ input pairs.
-
-**Decision:** fidelity level is *functional* — ISA-accurate, unit-accurate,
-state-accurate. Loss, crosstalk, and thermal are explicitly deferred (see
-non-goals); the model is where cost numbers live, and it is honest about
-what it does and doesn't simulate.
+- `tests/emulator/chamber_state.flash` — `raw_chamber.flash` → `.ppu32`
+  → executed; voxel end-state differential vs. the existing Zag sim.
+- `tests/emulator/lattice_edge.flash` — edge 4/8/16; out-of-lattice
+  coordinate is the spec'd fault.
+- Interference differential: device `@` == `TRIT_OPS_V1.md` for all 3²
+  input pairs.
 
 ---
 
-### H-E3 — Photonic counters + `flasht stat`  *(P1, the measurement rule)*
+### H-E3 — Counters with measurement provenance + `flasht stat`  *(P2)*
 
-**Problem.** Today nothing measures a Flash program in photonic terms. The
-`trit_encoding_bits` cost model prices *types*; nothing prices *execution*.
+**Problem.** Nothing measures a Flash program in photonic terms — but the
+fix is not "pretend the model is hardware." The fix is labeled numbers.
 
-**Goal.** The emulator accumulates counters in photonic units, and
-`flasht stat <image>` reports them. This is the only sanctioned source of
-Flash performance numbers.
+**Goal.** The emulator accumulates counters; `flasht stat <image>` reports
+them with a provenance label on every line.
 
-**Counters.**
-| Counter | Unit | Charged by |
+**Counter table (provenance in parentheses).**
+| Counter | Unit | Provenance |
 |---------|------|------------|
-| `energy_uws` | µW·s | every powered op (route power × duration model) |
-| `route_um` | µm | `LatticeRoute` path length |
-| `pcm_ops` | count | `PcmPhaseShift`, `PcmCouple` |
-| `interfere_ops` | count | `TritAlu` + device `@` ops |
-| `trit_reg_writes` | count | `TritRegLoad`, `TritAlu` dst |
-| `optical_latency` | path units | route + PCM depth model |
-| `chamber_writes` | count | `Raw*` ops |
+| `insn_count` | count | **counted** — exact |
+| `trit_reg_writes` | count | **counted** — exact |
+| `interfere_ops` | count | **counted** — exact |
+| `pcm_ops` | count | **counted** — exact |
+| `chamber_writes` | count | **counted** — exact |
+| `route_um` | µm of route | **counted** — under declared geometry |
+| `energy_uws` | µW·s | **modeled** — parameters: power/µs per op class, model version |
+| `optical_latency` | path units | **modeled** — parameters: route+PCM depth model, model version |
 
-- Counters are per-program and per-region (bracketed by `RawModeEnter` or
-  by `@region` markers — cheap to add, large profiling win).
+- **Modeled numbers carry the model**: `energy_uws` reports alongside
+  `cost_model_version` and the parameter table used (power per op class,
+  per-route, per-PCM-shift). Changing parameters changes the reported
+  number and the version — never silently.
+- **Host metrics stay, labeled.** Compiler throughput, simulator
+  wall-clock, build latency are legitimate engineering metrics — they
+  appear in a separate `host:` section, clearly labeled as not-photonic.
+  (Replaces the draft's banned-token lint, which was the wrong tool —
+  a real device's latency is legitimately reported in ns.)
+- **Measured numbers** arrive only when a real device exists; the report
+  schema already has the field so the discipline is built before the
+  hardware is.
+- Per-program and per-region counters (`RawModeEnter` brackets; an
+  `@region` marker is cheap to add).
 - `flasht stat` emits text and `--json`; the JSON schema is stable and
-  versioned (agents consume this).
-- **The measurement rule:** a test greps every counter/report name in the
-  toolchain output — `ns`, `cycles`, `x86`, `mips` are banned tokens. The
-  binary host is a bootstrap; its numbers are not photonic numbers.
+  versioned.
 
 **Files touched.**
-- `selfhost/qemu_ppu32.flash` — `PhotonCounters` accumulation per class.
-- `flasht/emit_ppu32.flash` — region markers if needed.
-- `flasht`/driver CLI — `stat` subcommand.
+- `selfhost/qemu_ppu32.flash` — `PhotonCounters` accumulation +
+  provenance labels.
+- `selfhost/opt/cost_model.flash` (new) — the declared parameter table
+  (also feeds O3).
+- `flasht`/driver CLI — `stat` subcommand + JSON.
 
 **Tests gating E3.**
-- `tests/emulator/counters.flash` — a program with known op counts;
-  counter values asserted exactly.
-- `tests/emulator/no_host_metrics.sh` — the banned-token lint over
-  `flasht stat` output and test logs.
-- Counter determinism: same image → same counters, byte-identical report.
+- `tests/emulator/counters.flash` — counted fields asserted exactly.
+- `tests/emulator/provenance.sh` — every numeric line in `stat` output
+  carries counted/modeled/measured/host label (the lint that replaces
+  the token ban).
+- `tests/emulator/counters_deterministic.sh` — same image → byte-
+  identical report.
+- `tests/emulator/model_version.sh` — changing the parameter table
+  changes `cost_model_version` in the report.
 
 ---
 
-## 5. Pillar C — Total control, progressively unlocked
+## 7. P3 — Verification and agent interfaces
 
-### H-C1 — Hardware control inventory: every control shown  *(P2)*
+*Structured diagnostics move early per the review — an agent should be
+able to consume compiler errors from the beginning of execution, not
+after most features exist.*
 
-**Problem.** The typed photonic API (W6/W7) covers `fire_shield`,
-`inject_phase`, `set_laser`, `target_voxel`, `manual_polarity`, and
-mat3/wave. It does **not** cover `PcmCouple`, `TritRegLoad`, `TritAlu`,
-`RawModeEnter`/`Exit`, or voxel readback. Today those exist only as
-manifest internals — invisible to the programmer, exactly the "hidden
-control" H rejects.
+### H-V1 — Structured diagnostics early  *(P3, first)*
 
-**Goal.** Every ISA class and every chamber primitive has a typed
-first-class surface:
+**Problem.** Diagnostics are human strings; agent-authored code needs
+machine-parseable errors. Also per review: **diagnostics must prioritize
+repairs over unsafe switches** — an OOB error must not lead with
+"disable bounds checking."
 
-```flash
-pcm_couple(row, col, phase)                 // PcmCouple
-let r: trit = trit_reg_load(3)              // TritRegLoad read
-trit_reg_store(3, +1)                       // TritRegLoad write
-let q: trit = trit_alu_add(a, b)            // TritAlu (typed wrappers
-let q2: trit = trit_alu_nand(a, b)          //   per Ppu32TritAluOp)
-raw_mode_enter() / raw_mode_exit()          // explicit chamber bracketing
-let pol: polarity = read_voxel(v)           // voxel readback
-```
-
-- Typed signatures, unit literals enforced (`mw`/`rad`), `@photonic`
-  effect required — same discipline as W6.
-- **Coverage gate:** a test iterates `Ppu32Class` and asserts each class
-  has a declared typed binding in `std/photonic`. "Every control is shown"
-  is a machine-checked property.
+**Goal.**
+- Every diagnostic: stable code (F0xxx compile, P0xxx photonic, T0xxx
+  trit, L0xxx leak, A0xxx agent-bug, V0xxx verify), file/line/col,
+  severity, message, **`suggestion`** field.
+- Suggestion ordering rule: the suggestion names the *repair* first
+  (e.g., "check index against `len`"), and mentions the knob that would
+  silence the check only as a last, labeled alternative
+  (`waive via control { checks: -bounds } — loses bounds guarantee`).
+- `flashc --json` emits `{code, file, line, col, severity, message,
+  suggestion, waivable}`; `waivable` names the exact exemption that
+  would silence it — legibility for humans and agents both.
+- `docs/DIAGNOSTICS.md` — the code catalog; a drift test keeps catalog
+  and emitted codes in sync.
 
 **Files touched.**
-- `selfhost/std/photonic.flash` (new; W6's surface, consolidated) —
-  full inventory.
-- `selfhost/fsema.flash` — effect + unit checking on new calls.
-- `selfhost/femit.flash` — lowering to manifest/PPU32 for each.
+- `selfhost/flashc1.flash`, `fsema.flash` — diagnostic record + JSON
+  emitter (reuse fmt/PrintBuf).
+- `docs/DIAGNOSTICS.md` (new).
 
-**Tests gating C1.**
-- `tests/photonic/coverage.sh` — ISA-coverage assertion above.
-- `tests/photonic/all_controls.flash` — golden manifest for every new call.
-- `tests/photonic/mode_contract.flash` — `Raw*` without explicit
-  mode-enter emits `RawModeEnter`/`Exit` automatically in managed mode;
-  in `control { modes: manual }` (C2) the programmer writes them and
-  forgetting one is a compile error.
+**Tests gating V1.**
+- `tests/verify/json_diag.sh` — schema snapshot: every diagnostic has
+  code/file/line/severity; `--json` parses.
+- `tests/verify/code_stable.sh` — catalog ↔ emitted-code drift test.
+- `tests/verify/suggestion_order.sh` — sample diagnostics assert repair
+  precedes waiver in `suggestion`.
 
 ---
 
-### H-C2 — `control { }` directives: the progressive-control model  *(P2, the centerpiece)*
+### H-V2 — Auditable safety boundaries  *(P3)*
 
-**Problem.** The user wants "every control shown" *and* a language that
-feels simple by default — control chosen per piece, not per language. No
-current mechanism exists.
+**Problem.** The draft's `control { verify: off }` switches off the whole
+verifier — too broad for a language whose pitch is strong verification.
+Separately: the A+ ownership model claims UAF protection *and* unrestricted
+aliasing; those don't automatically coexist (an alias can outlive the
+freed owner). And `AGENTS.md` documents arena `realloc` falling back to
+heap — arena tests must account for allocations that escape the arena.
 
-**Goal.** A scoped directive that sets compiler-behavior knobs for a
-region, plus a file-level default form:
+**Goal.**
+- **Named per-check exemptions, not an off-switch.** `control` gains a
+  `checks:` knob taking a *list*: `control { checks: -bounds }` disables
+  only bounds checking in that scope. `-verify` as a whole-group
+  exemption does **not** exist. Every waiver is named in the source.
+- **Waivers are auditable data.** `--check`/`verify` output (incl. JSON)
+  lists every waived check and its scope: `waived: [bounds @
+  file:line-col]`. The verification report says exactly which guarantees
+  hold — per the principle: safe checked, unsafe visible and limited,
+  neither mislabeled.
+- **Unsafe boundaries preserve information.** `raw { }`/`@unsafe`
+  regions still propagate effects and record which guarantee families
+  were waived at the boundary.
+- **Aliasing honesty.** The ownership checker tracks owner consumption
+  (landed); the docs and diagnostics stop claiming full UAF where
+  aliasing defeats it — `unsafe` pointer aliases are tracked as *waived
+  coverage*, reported, not silently unprotected. Region-lifetime +
+  escape analysis for scope-bound arenas is a dedicated sub-deliverable
+  before any "arenas prevent UAF" claim:
+  - `tests/safety/arena_escape.flash` — pointer escaping an arena scope
+    is caught or reported as waived; never silently accepted.
+  - `tests/safety/arena_realloc_heap.flash` — realloc-fallback-to-heap
+    ownership path covered (per AGENTS.md), freed-by-heap vs
+    freed-by-arena tracked separately.
+
+**Files touched.**
+- `selfhost/fsema.flash` — per-check exemption mechanism, waiver log,
+  escape analysis for arena scopes.
+- `selfhost/femit.flash` — honor per-check waivers.
+- `docs/DIAGNOSTICS.md` — waiver codes.
+
+**Gate.** `tests/verify/` proves: representative invalid programs are
+rejected; waivers appear in the report; no waiver exists that isn't
+named in source.
+
+---
+
+### H-V3 — `flash verify`: layered, honest gates  *(P3)*
+
+**Problem.** The draft's `flash verify` implied "compiled + emulated =
+verified," but PPU32 lowers only surface routes — general-purpose Flash
+has no PPU32 lowering. A green exit must not imply verification that
+never occurred.
+
+**Goal.** `flash verify <prog>` runs the applicable gates and reports
+each one's status — `passed`, `failed`, or **`unsupported`/`skipped`**
+— never conflating "skipped" with "passed":
+
+| Gate | Establishes |
+|------|-------------|
+| Static correctness | Types, ownership, effects, dataflow (V1/V2 checks, strict) |
+| Host execution | Runtime tests for general-purpose Flash on the binary host |
+| PPU32 execution | Target instructions execute per `PPU32_ISA_V1.md` (when a PPU32 lowering exists; else reported `unsupported`) |
+| Photonic validation | Chamber end-state + op ordering satisfy declared constraints |
+| Performance evaluation | Modeled costs (E3) + benchmark comparison vs. baseline |
+
+- A full-language program with no PPU32 lowering gets static + host
+  gates and reports `ppu32: unsupported` — honest, not green.
+- Verification report is machine-readable (`--json`): per-gate status,
+  waivers applied, provenance of every number.
+
+**Files touched.**
+- `selfhost/flashc1.flash` — `verify` subcommand + per-gate status.
+- `tests/run_all.sh` — `@verified` examples run through it.
+
+**Tests gating V3.**
+- `tests/verify/gate_status.sh` — a program with no PPU32 lowering
+  reports `unsupported`, not `passed`; exit code reflects only what ran.
+- `tests/verify/assert_end_state.flash` — assert-driven verification on
+  the PPU32 path.
+
+---
+
+### H-C1 — `std.ppu32`: target package, not language pollution  *(P3)*
+
+**Problem.** Full ISA exposure is required ("every control shown"), but
+baking `trit_reg_store(3, +1)` into the core language couples every Flash
+program to one processor layout — fragmentation when a second photonic
+target exists.
+
+**Goal.** Two layers:
+- **Core language** — portable computations and effects (typed photonic
+  API from W6/W7 stays portable: `fire_shield`, `inject_phase`, voxels,
+  power, phase, polarity).
+- **`std.ppu32` package** — every register, instruction, and raw device
+  capability of the PPU32 target: `trit_reg_load/store`, `trit_alu_*`,
+  `pcm_couple`, `raw_mode_enter/exit`, `read_voxel`, `nop`.
+- **`std.target` descriptor** — a machine-readable target description
+  (instructions supported, chamber dims, register count, timing
+  constraints, capabilities). The compiler reads it; `control` knobs and
+  `verify` consult it; a second target = a second descriptor, not a
+  fork of the language.
+
+**Files touched.**
+- `selfhost/std/ppu32.flash` (new) — the target package.
+- `selfhost/std/target.flash` (new) — descriptor type + PPU32 instance.
+- `selfhost/fsema.flash` — typed bindings checked against the descriptor.
+- `selfhost/femit.flash` — lowering per descriptor, not hardcoded.
+
+**Tests gating C1.**
+- `tests/photonic/coverage.sh` — iterate `Ppu32Class`, assert each has a
+  typed binding in `std.ppu32`. 100% ISA coverage is machine-checked.
+- `tests/photonic/all_controls.flash` — golden manifest per new call.
+- `tests/photonic/descriptor.flash` — chamber-dim mismatch against the
+  descriptor is a compile error.
+- `tests/photonic/mode_contract.flash` — managed mode auto-emits
+  `RawModeEnter`/`Exit`; `control { modes: manual }` requires explicit
+  bracketing (forgetting = compile error).
+
+---
+
+### H-C2 — `control { }` directives  *(P3)*
+
+**Problem.** Total control, per piece, user-chosen — needs a mechanism.
+(Revised per review: the knob set governs compiler *behavior*, and the
+safety knob is per-check, never whole-verifier.)
+
+**Goal.** Scoped directives + file-level defaults:
 
 ```flash
 control { bounds: manual, alloc: arena, routes: explicit,
-          modes: manual, effects: declared } {
-    // this scope: full manual. The programmer owns what the
-    // compiler would otherwise do — and the verifier still checks.
-}
-
-control { verify: off } {
-    // scoped escape hatch for code the checks can't see through.
-    // The knob, not the bug, is what gets hidden.
+          modes: manual, effects: declared, checks: -bounds } {
+    // full manual scope; every waiver named; report lists them
 }
 ```
 
-**Knob set (v1).** Each knob: `managed` (default) or `manual`/`off` as noted.
+**Knob set (v1, closed and enumerable).**
+| Knob | Values | Governs |
+|------|--------|---------|
+| `bounds` | `managed` / `manual` | index checks on `[]`/ArrayList |
+| `alloc` | `managed` / `arena` / `pool` / `manual` | default allocator for the scope |
+| `routes` | `auto` / `explicit` | photonic place-and-route vs. programmer coordinates |
+| `modes` | `managed` / `manual` | raw-mode bracketing (C1) |
+| `effects` | `infer` / `declared` | `@photonic`/`@realtime` propagation vs. declaration |
+| `checks` | `+name` / `-name` list | **per-check** waivers — auditable, named (V2) |
+| `layout` | `packed` / `natural` / `explicit` | t-word storage packing |
+| `opt` | `none` / `fast` / `max` | per-scope hint to the optimizer |
 
-| Knob | Values | What it governs |
-|------|--------|-----------------|
-| `bounds` | `managed` / `manual` | index checks on `[]`/ArrayList — `manual` = C-style unchecked |
-| `alloc` | `managed` / `arena` / `pool` / `manual` | default allocator for the scope; `manual` = you malloc/free |
-| `routes` | `auto` / `explicit` | photonic route scheduling — auto place-and-route vs. programmer coordinates |
-| `modes` | `managed` / `manual` | raw-mode bracketing auto-emission (see C1) |
-| `effects` | `infer` / `declared` | whether `@photonic`/`@realtime` propagate automatically or must be declared |
-| `verify` | `on` / `off` | all V1 checks for the scope — the scoped escape hatch |
-| `layout` | `packed` / `natural` / `explicit` | t-word storage packing (trits packed vs. byte-per-trit) |
-| `opt` | `none` / `fast` / `max` | per-scope optimization hint to the daemon |
-
-- **Semantics.** File-level `control { ... }` at top sets module defaults;
-  nested scopes override additively. Conflicting knobs on the same scope
-  are a compile error with both sites named. Unknown knobs are a compile
-  error — the knob list is closed and enumerable.
-- **Enumeration.** `flashc controls --list` prints every knob, its values,
-  and its default — the machine-readable contract. This is the
-  "AI-agent ergonomics" surface: an agent can ask the compiler what it is
-  allowed to control.
-- **Composition.** `control { }` composes with `raw { }`: `control`
-  changes *what the compiler does*; `raw` changes *what the code does*.
-  Inside `raw`, `control` knobs are meaningless — `raw` is already manual.
+- File-level `control { }` sets module defaults; scopes override
+  additively; conflicts and unknown knobs are compile errors naming both
+  sites.
+- `flashc controls --list` prints every knob, values, defaults — the
+  enumerable contract agents consume.
+- Inside `raw { }`, knobs are meaningless — `raw` is already manual.
 
 **Files touched.**
-- `selfhost/fparse.flash` — `control` block + file-level form.
-- `selfhost/fsema.flash` — knob validation, scope propagation, conflict
-  errors.
-- `selfhost/femit.flash` — honor `bounds`, `routes`, `modes`, `layout`.
-- `selfhost/flashc1.flash` — `controls --list` CLI.
-- `docs/FLASH_2_0_GRAMMAR.md`, `docs/FLASH_2_0_SPEC.md` — grammar + spec.
+- `selfhost/fparse.flash`, `fsema.flash`, `femit.flash` — parse,
+  validate, honor.
+- `selfhost/flashc1.flash` — `controls --list`.
+- `docs/FLASH_2_0_GRAMMAR.md`, spec — syntax.
 
-**Tests gating C2.**
-- `tests/control/knobs.flash` — each knob exercised, behavior verified
-  (e.g., `bounds: manual` compiles the same OOB write that `managed`
-  rejects at compile time or traps at runtime).
-- `tests/control/conflict.flash` — same knob twice in one scope = error.
-- `tests/control/unknown_knob.flash` — typo'd knob name = error.
-- `tests/control/nested.flash` — outer managed, inner manual, innermost
-  managed — three-way scoping verified.
-- `tests/control/list.sh` — `controls --list` output is complete and
-  matches the spec table.
-
-**Risk.** A closed knob list ossifies. Mitigation: adding a knob is a
-spec-level change, deliberate — that is a feature, not a bug. The
-inventory is the contract.
+**Tests gating C2.** `control/knobs`, `conflict`, `unknown_knob`,
+`nested` (three-level scope override), `list` (`--list` == spec table),
+`checks_per_check` (waiving `bounds` leaves `ownership` on).
 
 ---
 
-### H-C3 — First-class memory: managed pools, manual everywhere  *(P2)*
+### H-C3 — First-class memory, honest arena semantics  *(P3)*
 
-**Problem.** `Allocator` is already a vtable (`alloc_fn`/`realloc_fn`/
-`free_fn`/`state`) with `default_allocator()` and `arena_allocator()`. But
-allocators can't be *named per scope*, and ownership tracking (A+ S8) is
-not tied to which allocator owns a value.
+**Problem.** `Allocator` vtable exists (`default_allocator`, `arena_allocator`);
+per-site allocator naming exists (`make_with`). Missing: scope binding,
+and honest accounting for arena `realloc` falling back to heap.
 
 **Goal.**
-- `control { alloc: arena } { ... }` scopes create and free an arena
-  implicitly — managed memory with manual performance characteristics,
-  no GC.
-- `control { alloc: manual }` makes every allocation site explicit;
-  affine ownership still tracks use-after-free/double-free.
-- Allocation sites may name their allocator explicitly regardless of
-  scope: `make_with[T](cap, &my_alloc)` (already exists — promote to the
-  documented pattern).
+- `control { alloc: arena }` scopes: implicit arena create + `defer
+  arena_free` — emitted as readable code, nothing hidden (still no GC).
+- `control { alloc: manual }`: every site explicit; ownership tracks
+  UAF/double-free *within the aliasing limits* (V2's honest bound).
+- Escape analysis on arena scopes (V2) — a pointer outliving its arena
+  is a named finding, not a silent hole.
+- Heap-fallback ownership (per AGENTS.md) tracked as a distinct path.
 
 **Files touched.**
-- `selfhost/std/mem.flash` (new) — `arena`, `pool`, `manual` allocator
-  descriptors bound to `control { alloc: ... }` names.
-- `selfhost/fsema.flash` — scope → allocator binding; ownership tracking
-  already landed (S8), extend to per-allocator domains.
-- `selfhost/femit.flash` — implicit arena create/free at scope edges
-  (emitted as the same `defer arena_free` a user would write — nothing
-  hidden).
+- `selfhost/std/mem.flash` (new) — `arena`/`pool`/`manual` descriptors
+  bound to `control { alloc: ... }` names.
+- `selfhost/fsema.flash`, `femit.flash` — binding + emitted `defer`.
 
-**Tests gating C3.**
-- `tests/control/arena_scope.flash` — arena scope frees everything at
-  exit; counter test (alloc bytes before/after == 0 net).
-- `tests/control/manual_alloc.flash` — manual scope: leak detected by V1,
-  correct free passes.
-- `tests/safety/cross_allocator_uaf.flash` — arena pointer used after
-  scope exit is caught (scope-exit free is visible to the ownership
-  checker).
-
-**Rule.** No garbage collector, no hidden reclamation, ever. `control
-{ alloc: arena }` emits the free as an explicit `defer` — readable in
-`--emit-zag` output. Managed means *the compiler writes what you would*,
-never *the compiler does what you can't see*.
+**Tests gating C3.** `control/arena_scope` (net-zero accounting),
+`control/manual_alloc` (leak caught), `safety/arena_escape`,
+`safety/arena_realloc_heap`.
 
 ---
 
-### H-C4 — `raw { }` as the floor  *(P2)*
+### H-C4 — `raw { }` as the floor  *(P3)*
 
-**Problem.** `raw { }` is already demoted to `@unsafe` escape hatch (W6),
-but its extern coverage is implicit — whatever happened to be wired. For
-total control, `raw` must guarantee reachability of *everything*.
+**Goal (unchanged in substance, audited per V2).**
+- `raw { }` reaches every `std.ppu32` binding and every `_flash_raw_*`
+  extern — complete register-poke surface, documented in
+  `docs/RAW_SURFACE.md`.
+- `raw` regions preserve type/effect info at boundaries: effects still
+  propagate to the enclosing fn; waived guarantee families are recorded
+  in the verification report.
 
-**Goal.**
-- `raw { }` may name every `_flash_raw_*` extern and every PPU32 class
-  binding — a documented, complete register-poke surface.
-- `raw` blocks are exempt from `control` knobs and V1 checks *except*
-  effects propagation (a `raw` block's effects still mark the enclosing
-  fn — you can drop to raw, you cannot hide that you did).
-- Documentation: `docs/RAW_SURFACE.md` — the complete `raw` API table,
-  the "C mode" contract.
-
-**Files touched.**
-- `selfhost/fsema.flash` — `raw`-block symbol scope: externs legal,
-  typed-API magic names illegal (they're managed-mode constructs).
-- `docs/RAW_SURFACE.md` (new).
-
-**Tests gating C4.**
-- `tests/raw/coverage.sh` — every `_flash_raw_*` extern callable inside
-  `raw { }`.
-- `tests/raw/effect_leak.flash` — `raw` photonic op still propagates
-  `@photonic` to the enclosing fn.
+**Tests gating C4.** `raw/coverage.sh` (every extern callable),
+`raw/effect_leak.flash` (effects still propagate).
 
 ---
 
-## 6. Pillar V — Verification is part of the language
+## 8. P4 — Proven optimization
 
-"Making sure broken code doesn't ship. Strong verifiers built into the
-language, strong catchers. Unlike C, you can actually see what's
-breaking — every little issue found."
+*The equivalence gate precedes optimization work, not follows it.*
 
-### H-V1 — Always-on checks: A+ becomes the default  *(P2)*
+### H-O0 — Typed optimization IR + validator  *(P4, prerequisite)*
 
-**Problem.** The A+ checks landed as tests, but promotion to always-on
-errors is incomplete: `--check`/`--strict` are opt-in, and normal
-compilation still lets through what strict mode rejects.
+**Problem.** Current FIR is a route/PCM representation — no def-use, no
+CFG, no effect ordering, no resource deps, ALU ops carried as name
+strings. You cannot safely optimize sequences that share op names.
 
-**Goal.** The zero-false-positive checks become compile errors in normal
-compilation:
+**Goal.** `selfhost/opt/oir.flash` (new) — a typed optimization IR over
+FIR with:
+- Explicit def-use edges and register dependencies.
+- Control-flow regions (straight-line blocks + the photonic pipeline).
+- Effect ordering constraints (chamber ops are stateful unless proven
+  pure; `Raw*` sequences preserve order).
+- Full operand information per node (no name-string dispatch).
+- Timing/scheduling constraints for photonic resources (PCM row/col
+  occupancy, route conflicts).
+- A **validator** (`oir_validate`) that checks IR well-formedness
+  independently of the producer — run before *and after* every
+  transform.
 
-| Check | Class | Source |
-|-------|-------|--------|
-| F0003 photonic effect violation | error | W8 landed |
-| F0006 non-exhaustive switch | error | S6 |
-| F0007 uninitialized use | error | S7 |
-| F0008 use of moved value | error | S8 |
-| Null outside `?T` | error | S4 |
-| `?T` deref without unwrap | error | S5 |
-| L0012 leak (owned value dropped) | error in `--check`, warning in build | S2 |
-| A0101 off-by-one, A0102 ignored return | error in `--check`, warning in build | S3 |
-
-- `--check` = "verify this program fully" — the shipping gate.
-- `control { verify: off }` is the only escape, scoped, visible in the
-  source. `--unsafe` file flag does **not** exist (per-file silence is
-  exactly the C failure mode).
-
-**Files touched.**
-- `selfhost/fsema.flash` — check promotion table.
-- `selfhost/flashc1.flash` — `--check` semantics (implies strict).
-- `tests/safety/*` — expect-reject cases become *default-mode* rejects.
-
-**Tests gating V1.**
-- `tests/verify/default_rejects.flash` — every error class above rejected
-  in normal compile.
-- `tests/verify/scoped_escape.flash` — `control { verify: off }` accepts
-  the same code, scoped.
-- Self-host gate: `flashc1 --check` passes on every `.flash` in
-  `selfhost/` (A+ S1/C1 — the compiler eats its own food).
-
-**Risk.** Promoting warnings to errors can break the self-host compile
-(96 known F0001s in `--check`). Ordering: fix self-host `--check` clean
-first (A+ S1 work, prerequisite task listed in C2's dependency edge).
+**Tests gating O0.** `tests/opt/oir_roundtrip.flash` (FIR → OIR → FIR
+lossless on the corpus), `tests/opt/oir_validate.flash` (validator
+rejects malformed dependency graphs).
 
 ---
 
-### H-V2 — `flash verify`: the one-command ship gate  *(P2)*
+### H-O1 — Proven rewrite rules on pure regions  *(P4)*
 
-**Problem.** A program that "compiles" hasn't been proven. Shipping needs
-one command that means *verified*.
+**Problem.** The draft's trit identities were wrong under the spec'd
+semantics — the exact class of bug an optimizer must never contain.
 
-**Goal.** `flash verify <prog>` runs, in order:
-1. `flashc1 --check` — all V1 checks.
-2. Compile to PPU32 and execute in the emulator (E1/E2) — end-state
-   assertions (`assert` calls become emulator-state checks).
-3. Manifest verification — declared outputs match produced chamber
-   state.
-4. Counter report (E3) — the photonic cost of the verified program.
+**Goal.** A rewrite engine over OIR, pure-expression regions first:
 
-Exit 0 means: checks clean, emulator ran to completion, declared state
-matches produced state. This is "broken code doesn't ship" as a tool.
+1. **Rule provenance.** Every rule is declared in
+   `selfhost/opt/rules_*.flash` with its **proof obligation** — for trit
+   ops: exhaustive verification against `TRIT_OPS_V1.md` (3² inputs
+   checked at build/test time; multi-trit identities checked
+   property-wise plus differential against `ref_interp`). A rule whose
+   obligation fails **cannot enter the rule set** — the check is part of
+   the build, not a review nicety.
+2. **Trit/interference algebra** (frozen semantics — examples under
+   consensus `@`: `a @ ~a → 0`, `a @ 0 → a`; under whichever semantics
+   TRIT_OPS_V1 freezes, only identities proven under it ship).
+   `trit_neg(trit_neg(x)) → x`, constant folding on the truth tables.
+3. **Phase algebra** — `shift(p)`/`shift(-p)` cancellation, µrad
+   normalization, same-row/col fusion — only where ordering + observable
+   state are preserved.
+4. **Route algebra** — zero-length/zero-power elimination, identical-
+   consecutive fusion, dead-voxel routes — only where chamber end-state
+   and ordering are preserved.
 
-**Files touched.**
-- `selfhost/flashc1.flash` — `verify` subcommand orchestrating the above.
-- `tests/run_all.sh` — `verify` becomes the gate for examples marked
-  `@verified`.
-
-**Tests gating V2.** `tests/verify/gate.flash` — a program that compiles
-but faults in the emulator is rejected by `verify`. `tests/verify/
-assert_end_state.flash` — assert-driven verification.
-
----
-
-### H-V3 — Structured diagnostics: agent-grade errors  *(P2)*
-
-**Problem.** Diagnostics are human strings. AI agents (the primary
-Flash-code authors going forward) need to parse errors mechanically:
-code, location, severity, and what to do.
-
-**Goal.**
-- Every diagnostic has a stable code (F0xxx compile, P0xxx photonic,
-  T0xxx trit, L0xxx leak, A0xxx agent-bug, V0xxx verify).
-- `flashc --json` emits `{code, file, line, col, severity, message,
-  suggestion}` per diagnostic. Stable schema, versioned.
-- Every error message names the fix or the relevant knob — e.g. a bounds
-  error says `control { bounds: manual }` disables this check, not just
-  "index out of bounds".
+**The equivalence harness runs here** (not at O4): every optimized
+artifact executes vs. its unoptimized form in the emulator — identical
+end-state (registers, chamber, side-effects; counters may differ).
 
 **Files touched.**
-- `selfhost/flashc1.flash`, `selfhost/fsema.flash` — diagnostic record
-  struct + JSON emitter (reusing the fmt/PrintBuf infrastructure).
-- `docs/DIAGNOSTICS.md` (new) — the code catalog.
-
-**Tests gating V3.**
-- `tests/verify/json_diag.sh` — `--json` output parses, every diagnostic
-  has code/file/line/severity; schema snapshot test.
-- `tests/verify/code_stable.sh` — the DIAGNOSTICS.md catalog and the
-  emitted codes stay in sync (a drift test).
-
----
-
-## 7. Pillar O — The super-optimizer ("daemon")
-
-"Not a GC — a daemon running in the background, constantly optimizing the
-code to make sure it's the most mathematically efficient as possible.
-Research how to do that properly."
-
-### H-O1 — FIR rewrite engine  *(P3)*
-
-**Problem.** FIR (`flash/ir/flash_ir.flash`) is the post-emit,
-pre-machine IR — the right altitude for optimization — but nothing
-rewrites it.
-
-**Goal.** A rewrite engine over FIR sequences with three rule families:
-
-1. **Trit/interference algebra** (on `TritAlu` chains and `@`):
-   `a @ ~a → 0`, `a @ 0 → a`, `~(a @ b) → ~a @ ~b` where the law holds,
-   `trit_neg(trit_neg(x)) → x`, constant folding over balanced-ternary
-   truth tables.
-2. **Phase algebra** (on `PcmShift` nodes): `shift(p)` then `shift(-p)`
-   cancels; µrad normalization; consecutive shifts on the same
-   row/col fuse.
-3. **Route algebra** (on `LatticeRoute` nodes): zero-length and
-   zero-power routes eliminated; identical consecutive routes fused;
-   routes feeding provably-dead voxels removed.
-
-**Design.** Rules are *local and confluent* in v1 — ordered rewrite
-passes over the FIR list, each preserving a declared invariant. This is
-the cheap 80%: it needs no search, runs in compile time, and its output
-is deterministic.
-
-**Files touched.**
-- `selfhost/opt/fir_opt.flash` (new) — the rewrite passes.
-- `selfhost/opt/rules_*.flash` — one file per rule family (keeps rules
-  reviewable; the rule list is the auditable surface).
-- `selfhost/flashc1.flash` — `-O` flag wiring.
+- `selfhost/opt/fir_opt.flash` + `rules_*.flash` (new).
+- `selfhost/opt/equiv.flash` (new) — the differential harness.
+- `selfhost/flashc1.flash` — `-O` wiring.
 
 **Tests gating O1.**
-- `tests/opt/identities.flash` — each rule fires on a golden case.
-- `tests/opt/no_fire.flash` — rules do *not* fire where the precondition
-  fails (the negative cases matter more).
-- `tests/opt/photonic_massive_opt.ppu32` — optimized manifest has fewer
-  insns than baseline, same emulator end-state.
+- `tests/opt/rule_proofs.sh` — every rule's obligation executes; a
+  deliberately-broken rule in the test fixture is refused.
+- `tests/opt/identities.flash`, `no_fire.flash`.
+- `tests/opt/equivalence.sh` — whole-corpus differential gate.
 
 ---
 
-### H-O2 — Photonic cost model  *(P3, depends on E3)*
+### H-O2 — Bounded search + measured regression comparison  *(P4)*
 
-**Problem.** A rewrite is only "better" against a cost function. The cost
-function must be photonic — energy and latency in the emulator's units,
-never host cycles.
+**Goal.** `-O{0,1,2}`: `-O0` none, `-O1` proven local rewrites, `-O2`
+bounded search (time-boxed iterative deepening, O3 cost model scoring).
+Determinism: same input + budget + cost-model version → byte-identical
+output. Benchmark suite (`tests/opt/bench/`) records per-example cost
+before/after — improvement is *demonstrated*, not asserted.
 
-**Goal.** `cost(fir_seq) -> PhotonCost` — a pure function over a FIR
-sequence using E3's counter model: `energy_uws` primary, `optical_latency`
-secondary, `pcm_ops`/`route_um`/`interfere_ops` as tiebreakers and as
-per-dimension reporting.
-
-- The same model drives: rewrite scoring, `flasht stat` reporting, and
-  `flashd` convergence — one source of truth.
-- The model is *declared*: a table mapping each `FirOpKind`/`Ppu32Class`
-  to its unit costs, in `selfhost/opt/cost_model.flash`. When real
-  hardware arrives, the table is updated from measurements — the
-  structure doesn't change.
-
-**Tests gating O2.**
-- `tests/opt/cost_known.flash` — a program with hand-computed photonic
-  cost; model output asserted exactly.
-- `tests/opt/cost_monotonic.flash` — applying a valid rewrite never
-  increases cost (the engine's correctness invariant).
+**Tests gating O2.** `tests/opt/deterministic.sh`,
+`tests/opt/bench_improves.sh` (≥1 benchmark strictly cheaper, none
+worse, all equivalence-green).
 
 ---
 
-### H-O3 — `flashd`: the background optimizer  *(P3, the daemon)*
+### H-O3 — Declared photonic cost model  *(P4)*
 
-**Problem.** Deep optimization is search, and search is slow. Putting it
-in the compile path makes compiles slow. The answer isn't to optimize
-less — it's to move the slow part out of the critical path.
+**Goal.** `cost(oir_seq) -> PhotonCost` built on E3's model —
+`energy_uws` primary, `optical_latency` secondary, counted fields as
+tiebreakers. The model is declared data with a version (`cost_model.flash`),
+shared by rewrite scoring, `flasht stat`, and `flashd`. Reports carry
+the provenance labels from E3 — modeled costs are never reported as
+measured.
 
-**Goal.** `flashd` — a daemon that optimizes *artifacts*, not compiles:
+**Tests gating O3.** `tests/opt/cost_known.flash` (hand-computed),
+`cost_monotonic.flash` (valid rewrite never raises cost),
+`cost_provenance.sh` (modeled label carried end-to-end).
 
-1. `flasht` emits `<prog>.fir` + `<prog>.ppu32` (plus a sidecar
-   `<prog>.opt.state` for daemon bookkeeping).
-2. `flashd watch <dir>` — a long-running process that watches for
-   `.fir` artifacts, applies rewrite passes + guided search in the
-   background, re-emits improved `.ppu32` when cost strictly decreases.
-3. Convergence ledger: the daemon records `(generation, cost, rules
-   applied)` per artifact; `flashd status` reports per-program cost
-   trajectories in photonic units.
-4. Determinism: given the same artifact + generation limit + cost model
-   version, the daemon produces byte-identical output. Optimization is
-   reproducible — non-negotiable for a systems language.
-5. `flasht -O{0,1,2,3}` — compile-time levels map to: `-O0` none, `-O1`
-   O1's local passes, `-O2` O1 + bounded search budget (time-boxed),
-   `-O3` "emit then hand to flashd" (compile stays fast; the daemon
-   finishes the job in the background). Default is `-O1`.
+---
 
-- Search strategy v1: iterative deepening over rule application with
-  cost-model scoring — deterministic, bounded, incrementally improvable.
-- The daemon runs as a hosted process on the dev machine (Linux today);
-  on ternary hardware it becomes a resident optimizer — same code.
+## 9. P5 — The daemon (conditional on P4 evidence)
+
+### H-D1 — `flashd`: exploration engine with explicit promotion  *(P5)*
+
+**Problem (review).** A background optimizer that *publishes* artifacts
+creates build-identity and reproducibility hazards: which artifact did
+the release pipeline verify?
+
+**Goal.** `flashd` explores; it does not publish.
+
+- `flasht` emits `<prog>.fir`/`.ppu32` + `<prog>.opt.state` sidecar.
+- `flashd watch <dir>` searches in the background, writing **candidates**
+  — each an immutable record: content hash, source hash, compiler
+  version, ISA version, cost-model version, equivalence result, cost
+  comparison vs. baseline.
+- **Promotion is explicit**: `flasht promote <candidate>` swaps the
+  candidate into the build only if (a) equivalence passed and (b) the
+  declared objective improved under the exact declared model version.
+  Release pipelines pin promoted hashes; a daemon discovery can't
+  silently change what a release verified.
+- Versioned ledger (`<prog>.opt.ledger`) records every candidate and
+  every promotion — auditable optimization history.
+- `-O3` semantics: "compile fast at -O1, hand the artifact to `flashd`
+  for background improvement, promote explicitly later."
 
 **Files touched.**
-- `selfhost/flashd.flash` (new) — daemon entry point: watcher loop,
-  artifact store, ledger.
-- `selfhost/opt/search.flash` (new) — bounded search over O1 rules +
-  O2 scoring.
-- `selfhost/std/process.flash`, `io.flash` — file watching via
-  existing runtime (poll-based is fine for v1).
+- `selfhost/flashd.flash` (new) — watcher + candidate store + ledger.
+- `selfhost/opt/search.flash` — bounded search over proven rules.
+- `flasht` CLI — `promote`.
 
-**Tests gating O3.**
-- `tests/opt/daemon_converges.sh` — drop a `.fir` in a watched dir; the
-  daemon emits a `.ppu32` with cost ≤ baseline within N seconds.
-- `tests/opt/daemon_deterministic.sh` — same input twice → byte-identical
-  output + identical ledger.
-- `tests/opt/no_regress.sh` — daemon never emits worse cost than the
-  input artifact (it only publishes strict improvements).
-
-**Risk.** A background daemon mutating build artifacts could surprise.
-Mitigation: `flashd` never rewrites in place — it writes
-`<prog>.opt.ppu32` alongside and only *publishes* (renames) on strict
-improvement, with the ledger recording every publish.
+**Tests gating D1.**
+- `tests/opt/daemon_candidates.sh` — candidates appear with full
+  metadata; nothing promoted without `promote`.
+- `tests/opt/promote_gate.sh` — a candidate failing equivalence or
+  model-version mismatch is refused.
+- `tests/opt/ledger.sh` — ledger records every candidate + promotion
+  deterministically.
 
 ---
 
-### H-O4 — Equivalence gate + the research track  *(P3)*
+### H-D2 — E-graph research track (separate, gated)  *(P5)*
 
-**Problem.** "Optimize" is meaningless if the optimized program computes
-something else. And "the most mathematically efficient" needs a technique
-stronger than local rewrites eventually.
+**Corrected claim (review):** equality saturation finds the lowest-cost
+**represented** expression under a declared model — not "the globally
+optimal hardware program." Route scheduling, contention, and latency are
+non-additive; the claim is bounded accordingly.
 
-**Two deliverables.**
+**Goal.** `docs/EQUALITY_SATURATION.md` — design for an OIR e-graph
+(e-classes over typed OIR nodes, proven rules from O1, O3 cost
+extraction). Prototype in `selfhost/opt/egraph.flash` only after O0's IR
+can express which transformations are legal.
 
-1. **The equivalence gate.** For every optimized artifact: run original
-   and optimized in the emulator; chamber end-state, trit registers, and
-   emitted side-effects must be identical (counters may differ — that's
-   the point). `tests/opt/equivalence.sh` runs this over the whole
-   examples corpus. A rule that breaks equivalence is pulled, not
-   patched quietly.
-
-2. **The research track: equality saturation.** The known-correct
-   technique for "most mathematically efficient" rewriting is
-   e-graphs/egg-style equality saturation: represent *all* equivalent
-   forms of the program simultaneously, saturate with rewrite rules,
-   then extract the minimum-cost form. It fits `flashd` perfectly:
-   saturation is incremental, backgroundable, and cost-exact once it
-   converges.
-   - Deliverable: `docs/EQUALITY_SATURATION.md` — design for a FIR
-     e-graph in Flash (e-classes over `FirNode`, rules from O1, O2 cost
-     extraction), plus a prototype in `selfhost/opt/egraph.flash`.
-   - Gate: on the O1 benchmark corpus, e-graph extraction finds cost ≤
-     O1 on every case, strictly better on at least one, with the
-     equivalence gate green.
-
-**Why this is "doing it properly":** local rewrites get stuck in local
-optima; equality saturation explores the equivalence space and extracts
-the global minimum under the cost model — that is what "most
-mathematically efficient" actually means, and the emulator gives it a
-cost model that is honest.
-
-**Tests gating O4.**
-- `tests/opt/equivalence.sh` — whole-corpus differential gate (per above).
-- `tests/opt/egraph_beats_local.sh` — the research gate above.
+**Gate.** On the O2 benchmark corpus: e-graph extraction achieves cost ≤
+`-O2` on every case, strictly better on ≥1, equivalence-green —
+otherwise the track stays experimental.
 
 ---
 
-## 8. Pillar L — Language completion and polish
+## 10. P6 — Polish and certify
 
-### H-L1 — `t<width>` is the trit-vector type  *(P4, decision made)*
+### H-L1 — Scalar-vs-vector: a design gate, not a decision  *(P6)*
 
-**Decision.** No separate `tritvec[N]` type. On balanced-ternary hardware
-a `t9` is physically a vector of 9 trits — the spec's `tritvec[N]` would
-be a second name for the same machine object. Two spellings for one
-thing is exactly the kind of choice that makes languages worse, not
-better.
+**Problem.** The draft removed `tritvec[N]`; the review is right that
+physical representation ≠ semantics. A `t9` is a scalar integer with
+carry arithmetic; a 9-trit vector is lane-wise ops. Same storage,
+different abstraction.
 
-**What ships instead.**
-- `@`, `~`, `&`, `|`, `^` operate digit-wise on `t<width>` (already true
-  for `@`; extend the set per W5's table).
-- Per-trit indexing: `a[i]` reads trit `i` of a `t<width>`; `a[i] = t`
-  writes it (bounds per `control { bounds: ... }`).
-- Fill sugar: `t9 of +1` → all-`+1` word (the `of` construct survives,
-  applied to the t-type).
-- `tritvec[N]` removed from the spec; W5's semantics map onto `t<width>`
-  with `N` = width. `vec3` is `t3` (or stays a struct if it needs named
-  accessors — resolve in spec update).
+**Goal.** Resolve with evidence, not preference:
+- **Default posture:** keep the semantic distinction — `t<width>` scalar
+  arithmetic *and* an explicit digit-vector view (`digits(t9)` →
+  lane-wise ops without a second storage representation). Zero-cost
+  view, not a second type.
+- Write the unified-model semantics (arithmetic, indexing, overflow,
+  operator meaning) for both options; prove the chosen model has
+  unambiguous semantics; only then remove `tritvec[N]` from spec or
+  confirm the two-abstraction design.
+- Extend remaining digit-wise ops (`~ & | ^`), per-trit indexing,
+  and `of` fill per the proven model.
 
-**Files touched.**
-- `docs/FLASH_2_0_SPEC.md`, `FLASH_2_0_GRAMMAR.md` — replace `tritvec[N]`
-  with the unified model.
-- `selfhost/fparse.flash`, `fsema.flash`, `femit.flash` — indexing +
-  `of` + remaining digit-wise ops.
-- `selfhost/std/fmt.flash` — `fmt("{t}", v)` prints digit strings.
-
-**Tests gating L1.**
-- `tests/trit/vector_ops.flash` — `@ ~ & | ^` + indexing + `of` on
-  `t9`/`t27`, golden outputs (interference test already covers `@`).
-- `tests/trit/index_oob.flash` — `a[i]` OOB behavior per bounds knob.
+**Tests gating L1.** `tests/trit/vector_ops.flash`, `index_oob.flash`,
+plus the semantics-proof appendix in `TRIT_OPS_V1.md`.
 
 ---
 
-### H-L2 — Managed-mode ergonomics + control-level docs  *(P4)*
+### H-L2 — Docs by control level + benchmarks  *(P6)*
 
-**Problem.** "Python-ish" default means the *docs and examples* must be
-organized by control level, or users will meet `raw { }` before
-`println`.
-
-**Goal.**
-- `docs/LEVELS.md` — the four-level tour: **L0 managed** (no knobs, no
-  effects declarations, everything inferred), **L1 assisted** (typed
-  photonic API, declared effects), **L2 manual** (`control { }` knobs),
-  **L3 raw** (`raw { }`, register pokes). Every feature lands in
-  exactly one level; the doc teaches them in order.
-- Rewrite `examples/` README-table grouping by level; `full_demo` becomes
-  the L0 showcase, `raw_chamber` the L3 showcase.
-- `flashc explain <code>` — prints the plain-language meaning of any
-  diagnostic code (agents and humans share this).
-
-**Tests gating L2.** Docs tests: every example compiles at its claimed
-level (a script asserts `full_demo` uses no `control`/`raw`, etc.).
+- `docs/LEVELS.md` — L0 managed → L1 assisted → L2 manual → L3 raw;
+  every feature lands in exactly one level, taught in order.
+- `examples/` grouped by level; `full_demo` the L0 showcase,
+  `raw_chamber` the L3.
+- `flashc explain <code>` — plain-language diagnostic-code lookup.
+- `tests/bench/` — representative benchmark suite with versioned cost
+  reports (E3 provenance) — the evidence base for "demonstrated, not
+  asserted."
 
 ---
 
-### H-L3 — Spec, grammar, conformance on the emulator  *(P4)*
+### H-L3 — Spec update + reproducible conformance  *(P6)*
 
-**Goal.**
-- `docs/FLASH_2_0_SPEC.md` → add `control { }`, the vector-type decision,
-  the verification rules (V1), the diagnostic catalog reference, and the
-  emulator as the *definition of execution*: where spec and emulator
-  disagree, the emulator is a bug, the spec is truth — and both get
-  fixed.
-- `docs/FLASH_2_0_GRAMMAR.md` — `control` block syntax, `of` fill,
-  indexing.
-- The conformance requirement list gains: "execute under the PPU32
-  emulator" and "pass `flash verify`".
+- Spec gains: `control { }`, the resolved vector model, V1/V2 rules,
+  diagnostic catalog, `std.ppu32` split, and the emulator as the
+  **definition of execution** (spec/emulator disagreement = a bug in
+  both, fixed together).
+- Conformance suite: static checks + host + PPU32 + photonic gates per
+  `flash verify`, with a documented procedure an external party can run
+  to reproduce every claim — the certification deliverable.
 
 ---
 
-## 9. Dependency graph
+## 11. Dependency graph
 
 ```
-E1 ──> E2 ──> E3 ──> O2 ──> O3 ──> O4
- │      │             ^
- │      └── (device model feeds emulator Raw* ops)
- │
-C1 ──> C2 ──> C3     (control model)
-C4 ──┘
-│
-V1 ──> V2 ──> V3     (verification)
- ▲
- └── prerequisite: selfhost --check clean (A+ S1 residue)
-
-O1 independent of E (rewrites need only FIR);
-O3 needs O1+O2; O4 needs everything.
-L1–L3 last (document the shipped reality).
+P0: F1 (normative specs + bootstrap gate) ──> F2 (baseline hardening)
+        │
+P1:     └──> S1 (vertical slice: encode + independent interpreter)
+        │
+P2:     ├──> E1 (full machine model) ──> E2 (chamber device) ──> E3 (counters + provenance)
+        │
+P3:     ├──> V1 (JSON diagnostics — FIRST in P3)
+        ├──> V2 (auditable boundaries) ──> V3 (layered verify)
+        ├──> C1 (std.ppu32 + descriptor) ──> C2 (control{}) ──> C3 (memory) , C4 (raw)
+        │         └── V2 gates C2's checks knob; C1 gates C2's modes knob
+P4:     ├──> O0 (typed IR + validator) ──> O1 (proven rules + equivalence
+        │         harness) ──> O2 (bounded search) , O3 (cost model ⟵ E3)
+P5:     └──> D1 (flashd: candidates + explicit promotion) , D2 (e-graph)
+P6:     └──> L1 (vector design gate) ──> L2 (docs/bench) ──> L3 (spec + conformance)
 ```
 
 ---
 
-## 10. Non-goals (explicit)
+## 12. Non-goals (explicit)
 
-- **No garbage collector.** Managed memory = compiler-visible arenas and
-  pools with explicit `defer` emission. Never hidden reclamation.
-- **No on-target JIT.** `flashd` is a compile-time daemon. If on-device
-  optimization becomes a goal, it is a separate design.
-- **No borrow checker.** Affine ownership (landed, S8) is the memory-
-  safety model; aliasing stays legal because hardware register access
-  needs it.
-- **No physics-accurate simulation in v1.** The emulator is
-  functional/ISA/unit accurate. Loss, crosstalk, thermal are a later
-  fidelity bump (and would land inside E2's device model, not a redesign).
-- **No native ternary backend yet.** Flash still lowers through Zag for
-  the binary host and emits PPU32 for the photonic target. A native
-  backend is a separate project; the emulator is the interim target of
-  truth.
-- **No new concurrency model.** Photonic parallelism lives in the
-  hardware (beams), matching the A+ posture.
+- **No garbage collector.** Managed memory = compiler-visible arenas,
+  emitted as readable `defer`. Never hidden reclamation.
+- **No on-target JIT.** `flashd` is a compile-time exploration engine.
+- **No borrow checker.** Affine ownership + named waivers is the model;
+  aliasing stays legal for hardware access.
+- **No physics-accurate simulation in v1.** Functional/ISA/unit/state
+  accuracy only; modeled numbers are labeled modeled.
+- **No performance superiority claims from the emulator.** Hardware
+  leadership is a demonstrated result on real devices, later.
+- **No global-optimality claims from the e-graph.** Lowest-cost
+  represented expression under a declared model — nothing more.
+- **No new concurrency model.** Photonic parallelism lives in beams.
 
 ---
 
-## 11. Risks
+## 13. Execution contract (operating rules for whoever implements)
+
+*From the review — these bind the plan's executor, human or agent.*
+
+1. **No silent specification changes.** A contradiction is recorded and
+   resolved in the normative doc first, then in compiler behavior.
+2. **No self-certified correctness.** Where compiler and emulator could
+   share a bug, the check is an independent reference (`ref_interp`,
+   `TRIT_OPS_V1` executable tables).
+3. **No feature accepted solely because a golden test passes.** Every
+   feature ships negative tests, boundary cases, property/exhaustive
+   checks where tractable, and regression entries.
+4. **No optimization without equivalence evidence.** Pure regions
+   first; externally observable effects always preserved; equivalence
+   gates every publish/promotion.
+5. **No claims without measurement provenance.** Every number states
+   inputs, versions, assumptions, and evaluation method
+   (counted/modeled/measured/host).
+6. **No large cross-pillar commits.** Reviewable per-workstream changes;
+   bootstrap + conformance gates green per commit.
+7. **No proceeding through failed foundational gates.** Fix the
+   assumption; don't build compatibility patches around it.
+8. **Repairs before waivers in diagnostics.** A suggestion names the fix
+   first; the exemption is the last, labeled alternative.
+
+---
+
+## 14. Risks (revised)
 
 | Risk | Mitigation |
-|------|-----------|
-| Emulator semantics drift from "real" hardware whenever it exists | The cost/semantic tables are *declared data* (`cost_model.flash`, `ppu32.flash`), swappable against hardware measurements |
-| `control` knob list ossifies | Closed list is intentional; additions are spec changes. `controls --list` keeps the contract honest |
-| Always-on checks break self-host compile | Order V1 behind the self-check cleanup (A+ S1); `--check` clean on `selfhost/` is V1's gate |
-| Daemon nondeterminism poisons builds | Deterministic search + byte-identical ledger + publish-only-on-improvement; equivalence gate on every publish |
-| E-graph work balloons | It's a research track with a fixed gate (O4); local rules (O1) ship regardless |
-| "Total control" vs. "simple default" collides in UX | `docs/LEVELS.md` orders the teaching; defaults stay managed; every managed default is named and overrideable |
+|------|------------|
+| Frozen semantics still diverge across docs later | `TRIT_OPS_V1` is executable data read by tests — the table *is* the spec; drift fails CI |
+| Emulator over-claims physics | Provenance labels (E3) + non-goals; modeled ≠ measured enforced in `stat` output lint |
+| `ref_interp` and encoder drift apart | Differential test between them is a P2 gate — drift *is* the signal it exists to catch |
+| Always-on checks break self-host | P0 bootstrap gate + V-phase ordering; self-host `--check` clean is a P3 gate |
+| Daemon mutates what a release verified | Immutable candidates, explicit promotion, hash pinning (D1) |
+| E-graph balloons | Separate track, fixed gate, O1/O2 ship regardless |
+| Alias-aware UAF claims overstate | Waiver-visible reporting (V2); escape analysis before arena guarantees |
 
 ---
 
-## 12. Workstream checklist
+## 15. Workstream checklist (19 items)
 
-- [ ] **H-E1** — Full PPU32 emulator (all 12 classes, trit regs, PCM grid,
-      mode contract). Tests: `emulator/all_classes`, `raw_mode_fault`,
-      existing `.ppu32` corpus end-state.
-- [ ] **H-E2** — Chamber device model (parametric lattice, all `Raw*`,
-      interference superposition, voxel readback). Tests:
-      `emulator/chamber_state`, `lattice_edge`, interference differential.
-- [ ] **H-E3** — Photonic counters + `flasht stat` (+ JSON). Tests:
-      `emulator/counters`, `no_host_metrics`, determinism.
-- [ ] **H-C1** — Typed surface for 100% of `Ppu32Class`. Test:
-      `photonic/coverage.sh`, `all_controls`, `mode_contract`.
-- [ ] **H-C2** — `control { }` directives + `controls --list`. Tests:
-      `control/knobs`, `conflict`, `unknown_knob`, `nested`, `list`.
-- [ ] **H-C3** — Scope-bound allocators; managed = visible `defer`.
-      Tests: `control/arena_scope`, `manual_alloc`,
-      `safety/cross_allocator_uaf`.
-- [ ] **H-C4** — `raw { }` complete coverage + `docs/RAW_SURFACE.md`.
-      Tests: `raw/coverage`, `raw/effect_leak`.
-- [ ] **H-V1** — Always-on error checks; `control { verify: off }` scoped
-      escape; self-host `--check` clean. Tests: `verify/default_rejects`,
-      `scoped_escape`, self-host gate.
-- [ ] **H-V2** — `flash verify` ship gate. Tests: `verify/gate`,
-      `assert_end_state`.
-- [ ] **H-V3** — Stable diagnostic codes + `--json` + `docs/DIAGNOSTICS.md`.
-      Tests: `verify/json_diag`, `code_stable`.
-- [ ] **H-O1** — FIR rewrite engine (trit/phase/route rule families).
-      Tests: `opt/identities`, `no_fire`, `photonic_massive_opt`.
-- [ ] **H-O2** — Declared photonic cost model. Tests: `opt/cost_known`,
-      `cost_monotonic`.
-- [ ] **H-O3** — `flashd` background daemon + `-O` levels + ledger.
-      Tests: `opt/daemon_converges`, `daemon_deterministic`,
-      `no_regress`.
-- [ ] **H-O4** — Equivalence gate + `docs/EQUALITY_SATURATION.md` +
-      e-graph prototype. Tests: `opt/equivalence`,
-      `egraph_beats_local`.
-- [ ] **H-L1** — `t<width>` as the vector type (indexing, `of`, full
-      digit-wise op set; `tritvec[N]` removed from spec). Tests:
-      `trit/vector_ops`, `index_oob`.
-- [ ] **H-L2** — `docs/LEVELS.md`, examples grouped by control level,
-      `flashc explain`. Tests: docs-level assertions.
-- [ ] **H-L3** — Spec/grammar update; conformance requires emulator
-      execution + `flash verify`.
+**P0 — Freeze**
+- [ ] **H-F1** — `PPU32_ISA_V1.md` (full encoding, carry, faults,
+      `RawReadVoxel`), `TRIT_OPS_V1.md` (executable truth tables; `@`
+      contradiction resolved to consensus, multiplication kept as
+      `trit_mul`), bootstrap reliability gate, target boundary frozen.
+- [ ] **H-F2** — Negative + boundary + property layers in
+      `tests/negative/`, `tests/property/`; PPU32 parser fuzz.
 
-When every box is ticked, Flash is the language where balanced ternary
-is measured, every control is shown, the broken never ships, and a
-daemon keeps making the code more mathematically perfect in the
-background.
+**P1 — Vertical slice**
+- [ ] **H-S1** — `ternary_logic` end-to-end: encode per ISA spec →
+      `ref_interp` → hand-computed end-state verified; fault cases.
+
+**P2 — Emulation + measurement**
+- [ ] **H-E1** — All 13 classes execute; fault tests; differential vs.
+      `ref_interp`.
+- [ ] **H-E2** — Parametric chamber device; interference differential;
+      voxel readback.
+- [ ] **H-E3** — Provenance-labeled counters + `flasht stat` + JSON +
+      `cost_model.flash` table.
+
+**P3 — Verification + agent interfaces**
+- [ ] **H-V1** — Diagnostic codes + `--json` + catalog + suggestion
+      ordering (repair before waiver).
+- [ ] **H-V2** — Per-check exemptions, waiver audit log, boundary
+      effect preservation, arena escape/realloc-heap analysis.
+- [ ] **H-V3** — `flash verify` layered gates with
+      passed/failed/unsupported statuses.
+- [ ] **H-C1** — `std.ppu32` + `std.target` descriptor; 100% ISA
+      coverage gate.
+- [ ] **H-C2** — `control { }` + `controls --list` + per-check `checks:`.
+- [ ] **H-C3** — Scope-bound allocators, visible `defer`, escape honesty.
+- [ ] **H-C4** — `raw` full coverage + `docs/RAW_SURFACE.md` + boundary
+      effects.
+
+**P4 — Proven optimization**
+- [ ] **H-O0** — Typed OIR (def-use, CFG, effects, resources, timing) +
+      independent validator.
+- [ ] **H-O1** — Proven rewrite rules (proof obligations in build) +
+      equivalence harness.
+- [ ] **H-O2** — `-O0/1/2` bounded deterministic search + benchmark
+      regression suite.
+- [ ] **H-O3** — Declared cost model, versioned, provenance-carried.
+
+**P5 — Daemon (conditional)**
+- [ ] **H-D1** — `flashd` candidates + ledger + explicit `promote` gate.
+- [ ] **H-D2** — `docs/EQUALITY_SATURATION.md` + gated prototype.
+
+**P6 — Polish + certify**
+- [ ] **H-L1** — Scalar/vector design gate resolved with proof.
+- [ ] **H-L2** — `docs/LEVELS.md`, level-grouped examples,
+      `flashc explain`, benchmark suite.
+- [ ] **H-L3** — Spec update; externally reproducible conformance suite.
+
+When every box is ticked, Flash is a verifiable, hardware-aware
+balanced-ternary systems language with explicit control, a reproducible
+compiler, and a validated path from program semantics to photonic
+execution — demonstrated, not asserted.
