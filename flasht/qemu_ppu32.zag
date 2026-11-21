@@ -708,6 +708,7 @@ fn main() i32 {
         let a: []u8 = _zag_arg(ai);
         if (_zag_strcmp(a, "--dump") == 1) { want_dump = 1; }
         if (_zag_strcmp(a, "--stat") == 1) { want_stat = 1; }
+        if (_zag_strcmp(a, "--json") == 1) { want_stat = 2; }
         ai = ai + 1;
     }
     let text: []u8 = _zag_read_file(path);
@@ -732,6 +733,19 @@ fn main() i32 {
     }
     _zag_println("qemu_ppu32: ok");
     if (want_stat == 1) { qstat(st); }
+    if (want_stat == 2) {
+        _zag_print("{\"steps\":"); _zag_print(_zag_i64_to_str(st.*.steps));
+        _zag_print(",\"energy_model_uw\":"); _zag_print(_zag_i64_to_str(st.*.energy));
+        _zag_print(",\"alu\":"); _zag_print(_zag_i64_to_str(st.*.alu_ops));
+        _zag_print(",\"pcm\":"); _zag_print(_zag_i64_to_str(st.*.pcm_ops));
+        _zag_print(",\"routes\":"); _zag_print(_zag_i64_to_str(st.*.routes));
+        _zag_print(",\"route_len\":"); _zag_print(_zag_i64_to_str(st.*.route_len));
+        _zag_print(",\"raw\":"); _zag_print(_zag_i64_to_str(st.*.raw_ops));
+        _zag_print(",\"executed\":"); _zag_print(_zag_i64_to_str(st.*.executed));
+        _zag_print(",\"fault\":"); _zag_print(_zag_i64_to_str(st.*.fault));
+        _zag_print(",\"fault_insn\":"); _zag_print(_zag_i64_to_str(st.*.fault_insn));
+        _zag_println(",\"provenance\":\"modeled\"}");
+    }
     if (want_dump == 1) { qdump(st); }
     return 0;
 }
