@@ -657,7 +657,7 @@ run_annot_emit_test() {
         return 1
     fi
 
-    local shim="$ROOT/examples/annot__shim.zag"
+    local shim="$ROOT/examples/annot_demo_shim.zag"
     if ! grep -qF "@realtime" "$shim"; then
         fail "$name (@realtime missing from shim)"
         head -20 "$shim"
