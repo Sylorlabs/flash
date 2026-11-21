@@ -1,0 +1,56 @@
+// flash/runtime/matrix_shim.zag — mat3 runtime rollup for emitted programs.
+//
+// Emitted programs already carry flash/stdlib/photon.zag's `Wave`, so this
+// shim must NOT import runtime/matrix_rt.zag (which pulls types/wave.zag and
+// collides). It re-implements mat3_apply_trit with the identical numeric
+// semantics as matrix_rt.zag — each matrix element scales a trit into a
+// signed-amplitude wave contribution (|c| clamped to 1, trit wire of c),
+// row intersections superpose contributions, and the result collapses to a
+// trit by the 0.15 amplitude threshold — over stdlib's Trit{i32} instead.
+@import("../types/mat3.zag")
+
+struct TritTriple {
+    x: Trit,
+    y: Trit,
+    z: Trit,
+}
+
+fn ms_clamp_amp(v: f32) f32 {
+    if (v > 1.0) { return 1.0; }
+    return v;
+}
+
+fn ms_abs(v: f32) f32 {
+    if (v < 0.0) { return 0.0 - v; }
+    return v;
+}
+
+fn ms_wire(v: f32) i32 {
+    if (v < 0.0 - 0.5) { return 0 - 1; }
+    if (v > 0.5) { return 1; }
+    return 0;
+}
+
+// signed amplitude of (trit value) * (matrix element), as a wave would carry
+fn ms_contrib(t: Trit, m: f32) f32 {
+    let c: f32 = (trit_val(t) as f32) * m;
+    let amp: f32 = ms_clamp_amp(ms_abs(c));
+    return amp * (ms_wire(c) as f32);
+}
+
+fn ms_collapse(sum: f32) Trit {
+    let amp: f32 = ms_clamp_amp(ms_abs(sum));
+    if (amp < 0.15) { return trit(0); }
+    return trit(ms_wire(sum));
+}
+
+fn mat3_apply_trit(m: Mat3, v: TritTriple) TritTriple {
+    let sx: f32 = ms_contrib(v.x, m.m00) + ms_contrib(v.y, m.m01) + ms_contrib(v.z, m.m02);
+    let sy: f32 = ms_contrib(v.x, m.m10) + ms_contrib(v.y, m.m11) + ms_contrib(v.z, m.m12);
+    let sz: f32 = ms_contrib(v.x, m.m20) + ms_contrib(v.y, m.m21) + ms_contrib(v.z, m.m22);
+    return TritTriple{
+        .x = ms_collapse(sx),
+        .y = ms_collapse(sy),
+        .z = ms_collapse(sz),
+    };
+}
