@@ -734,13 +734,13 @@ fn main() i32 {
     _zag_println("qemu_ppu32: ok");
     if (want_stat == 1) { qstat(st); }
     if (want_stat == 2) {
-        _zag_print("{\"steps\":"); _zag_print(_zag_i64_to_str(st.*.steps));
-        _zag_print(",\"energy_model_uw\":"); _zag_print(_zag_i64_to_str(st.*.energy));
-        _zag_print(",\"alu\":"); _zag_print(_zag_i64_to_str(st.*.alu_ops));
-        _zag_print(",\"pcm\":"); _zag_print(_zag_i64_to_str(st.*.pcm_ops));
-        _zag_print(",\"routes\":"); _zag_print(_zag_i64_to_str(st.*.routes));
-        _zag_print(",\"route_len\":"); _zag_print(_zag_i64_to_str(st.*.route_len));
-        _zag_print(",\"raw\":"); _zag_print(_zag_i64_to_str(st.*.raw_ops));
+        _zag_print("{\"steps\":"); _zag_print(_zag_i64_to_str(st.*.c_steps));
+        _zag_print(",\"energy_model_uw\":"); _zag_print(_zag_i64_to_str(st.*.c_energy));
+        _zag_print(",\"alu\":"); _zag_print(_zag_i64_to_str(st.*.c_alu));
+        _zag_print(",\"pcm\":"); _zag_print(_zag_i64_to_str(st.*.c_pcm));
+        _zag_print(",\"routes\":"); _zag_print(_zag_i64_to_str(st.*.c_routes));
+        _zag_print(",\"route_len\":"); _zag_print(_zag_i64_to_str(st.*.c_route_len));
+        _zag_print(",\"raw\":"); _zag_print(_zag_i64_to_str(st.*.c_raw));
         _zag_print(",\"executed\":"); _zag_print(_zag_i64_to_str(st.*.executed));
         _zag_print(",\"fault\":"); _zag_print(_zag_i64_to_str(st.*.fault));
         _zag_print(",\"fault_insn\":"); _zag_print(_zag_i64_to_str(st.*.fault_insn));
