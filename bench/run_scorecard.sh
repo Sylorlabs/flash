@@ -33,7 +33,7 @@ for f in "$ROOT"/bench/flash/*.ppu32; do
 
     csteps=""; rsteps=""; psteps=""
     if [ -f "$ROOT/bench/c/$n.c" ]; then
-        "$CC" -O2 -o "$BIN/c_$n" "$ROOT/bench/c/$n.c"
+        "$CC" -O2 -o "$BIN/c_$n" "$ROOT/bench/c/$n.c" -lm
         csteps="$("$BIN/c_$n" | grep -o 'steps=[0-9]*' | cut -d= -f2)"
     fi
     if [ -f "$ROOT/bench/rust/$n.rs" ] && command -v rustc >/dev/null; then

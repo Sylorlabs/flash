@@ -29,6 +29,7 @@ we do not claim energy equivalence.
 | `matvec` | dense 64×64 × 64 vecs | Mesh physics: matrix loads once into PCM cells (N² ops), each vector then costs O(N) lane ops. C pays N² per vector forever. |
 | `tritlogic` | 1M digit-parallel ops | A PPU32 trit-word ALU op covers a 9-trit word per step; C emulates each trit serially. |
 | `routes` | 64 sweeps × 4K cells | Route marking is per-cell-parallel on the fabric: modeled 1 step/cell vs C's serial writes — same count here is the honest framing; the win is the per-hop path cost is 1 modeled step per voxel traversed while C still walks memory serially. |
+| `fft` | DFT N=1024 ×64 | A lens computes the Fourier transform during propagation: N input routes + N focal-plane readouts per run = O(N). The binary baselines run the honest direct DFT O(N²) (an FFT is O(N log N); the gap is declared, not hidden). |
 | `chase` | 1M dependent hops | No parallelism exists in physics. PARITY is the honest ceiling — claimed as such. |
 | `jsonsum` | 512K serial accumulate | Same — serial is serial. PARITY by design. |
 

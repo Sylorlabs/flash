@@ -3,6 +3,7 @@
 | kernel | Flash steps | vs C | vs Rust | vs Python | verdict |
 |--------|------------|------|---------|-----------|---------|
 | chase | 1000000 | 1.00x PARITY | 1.00x PARITY | 1.00x PARITY | PARITY |
+| fft | 4259840 | 31.51x WIN | 31.51x WIN | 31.51x WIN | WIN |
 | jsonsum | 524288 | 1.00x PARITY | 1.00x PARITY | 1.00x PARITY | PARITY |
 | matvec | 31616 | 8.29x WIN | 8.29x WIN | 8.29x WIN | WIN |
 | routes | 4096 | 4096.00x WIN | 4096.00x WIN | 4096.00x WIN | WIN |
