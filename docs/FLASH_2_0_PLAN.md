@@ -401,7 +401,7 @@ tritvec[27] b = ...;
 
 | Op | Name | Semantics | Photonic mapping |
 |----|------|-----------|------------------|
-| `@` | interference | digit-wise balanced-ternary convolution: `c[i] = a[i] ⊗ b[i]` where `⊗` is the trit multiplication table (the same one `trit_mul` implements today) | one optical interference op on the vector |
+| `@` | interference | digit-wise balanced-ternary **consensus**: `c[i] = cons(a[i], b[i])` — `+@+=+`, `-@-=-`, `+@-=0`, `0@x=x`, `x@0=x` (see `TRIT_OPS_V1.md` §2.2; frozen semantics — this is the shipped/tested behavior, corrected from an earlier draft that spec'd trit multiplication; numeric multiply stays on `*` / `trit_mul`) | one optical interference op on the vector |
 | `~` | negate | digit-wise negation (`+`↔`-`, `0`→`0`) | phase flip, free on hardware |
 | `&` | and | digit-wise trit AND (Kleene/min) | polarization merge |
 | `\|` | or | digit-wise trit OR (Kleene/max) | polarization merge |

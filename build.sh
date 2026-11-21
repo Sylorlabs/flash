@@ -28,7 +28,10 @@ if [[ ! -x "$FLASHZ" ]]; then
     fi
 fi
 
-cp -f "$FLASHC1_SHIM" "$BIN_DIR/flashc1_shim.good"
+# The shim seed is optional (gitignored, local-only): guard every use.
+if [[ -f "$FLASHC1_SHIM" ]]; then
+    cp -f "$FLASHC1_SHIM" "$BIN_DIR/flashc1_shim.good"
+fi
 
 echo "step 1: building flashc1 (self-hosted compiler)"
 BUILT=0
@@ -41,6 +44,10 @@ elif [[ -x "$BIN_DIR/flashc1_old" ]] && "$BIN_DIR/flashc1_old" "$ROOT/selfhost/f
 fi
 if [[ "$BUILT" -eq 0 ]]; then
     echo "step 1 (fallback): flashz → flashc1 from cached shim"
+    if [[ ! -f "$BIN_DIR/flashc1_shim.good" ]]; then
+        echo "::error::no bootstrap path: flashc missing and flashc1_shim.zag absent"
+        exit 1
+    fi
     cp -f "$BIN_DIR/flashc1_shim.good" "$FLASHC1_SHIM"
     "$FLASHZ" "$FLASHC1_SHIM" -o "$BIN_DIR/flashc1"
 fi

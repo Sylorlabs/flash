@@ -17,6 +17,7 @@ enum Ppu32Class {
     RawSetPolarity,
     RawModeEnter,
     RawModeExit,
+    RawReadVoxel,
 }
 
 enum Ppu32TritAluOp {
@@ -46,9 +47,18 @@ struct Ppu32Insn {
 }
 
 fn ppu32_class_pcm_phase_shift() i32 { return 1; }
+fn ppu32_class_pcm_couple() i32 { return 2; }
 fn ppu32_class_lattice_route() i32 { return 3; }
+fn ppu32_class_trit_reg_load() i32 { return 4; }
 fn ppu32_class_trit_alu() i32 { return 5; }
 fn ppu32_class_raw_fire_shield() i32 { return 6; }
+fn ppu32_class_raw_inject_phase() i32 { return 7; }
+fn ppu32_class_raw_set_laser_mw() i32 { return 8; }
+fn ppu32_class_raw_target_voxel() i32 { return 9; }
+fn ppu32_class_raw_set_polarity() i32 { return 10; }
+fn ppu32_class_raw_mode_enter() i32 { return 11; }
+fn ppu32_class_raw_mode_exit() i32 { return 12; }
+fn ppu32_class_raw_read_voxel() i32 { return 13; }
 
 fn ppu32_lattice_op_to_class(lattice_op: i32) i32 {
     if (lattice_op == 3) { return ppu32_class_pcm_phase_shift(); }

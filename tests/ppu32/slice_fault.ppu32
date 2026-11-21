@@ -1,0 +1,7 @@
+# fault path: Raw op without mode → F_MODE (3) at insn 0
+target = "ppu32"
+name = "slice_fault"
+format = "ppu32-v1"
+[insns]
+insn 0 RawFireShield x=0 y=0 z=0 power=100
+insn 1 TritRegLoad dst=0 imm=0t+

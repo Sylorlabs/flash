@@ -657,7 +657,7 @@ run_annot_emit_test() {
         return 1
     fi
 
-    local shim="$ROOT/examples/annot__shim.zag"
+    local shim="$ROOT/examples/annot_demo_shim.zag"
     if ! grep -qF "@realtime" "$shim"; then
         fail "$name (@realtime missing from shim)"
         head -20 "$shim"
@@ -983,6 +983,20 @@ run_flasht_ppu32_gate() {
     echo
 }
 run_flasht_ppu32_gate
+
+# ── PPU32 vertical slice: qemu ≡ independent ref_interp + hand-verified state ──
+run_ppu32_slice_gate() {
+    local name="ppu32 slice gate (qemu ≡ ref_interp, all classes, fault paths)"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+    if ! "$ROOT/tests/ppu32_slice_gate.sh"; then
+        fail "$name"
+        return 1
+    fi
+    pass
+    echo
+}
+run_ppu32_slice_gate
 
 # ── Phase 1: Flash IR lowering gate (.fir emission) ────────────────────────────
 run_flasht_ir_gate() {

@@ -45,7 +45,9 @@ code by the Zag compiler (`znc`). The self-hosted Flash compiler
 | `tritvec[N]` | Vector of N trits (W5) |
 
 Ternary literals: `0t+++0--+0+` (balanced-ternary digit string, W4).
-The `@` operator computes trit-wise interference (W5).
+The `@` operator computes digit-wise trit **consensus** interference (W5;
+frozen truth table in `TRIT_OPS_V1.md` §2.2 — `+@+=+`, `-@-=-`, `+@-=0`,
+`0@x=x`). Numeric trit multiply is a separate op (`*` / `trit_mul`).
 
 ### 2.3 Photonic types (W6, W7)
 
