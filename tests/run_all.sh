@@ -984,6 +984,20 @@ run_flasht_ppu32_gate() {
 }
 run_flasht_ppu32_gate
 
+# ── PPU32 vertical slice: qemu ≡ independent ref_interp + hand-verified state ──
+run_ppu32_slice_gate() {
+    local name="ppu32 slice gate (qemu ≡ ref_interp, all classes, fault paths)"
+    echo "== test [$((TESTS_RUN + 1))]: $name =="
+    TESTS_RUN=$((TESTS_RUN + 1))
+    if ! "$ROOT/tests/ppu32_slice_gate.sh"; then
+        fail "$name"
+        return 1
+    fi
+    pass
+    echo
+}
+run_ppu32_slice_gate
+
 # ── Phase 1: Flash IR lowering gate (.fir emission) ────────────────────────────
 run_flasht_ir_gate() {
     local name="flasht IR gate (ppu32 emits .fir with [ir] section)"

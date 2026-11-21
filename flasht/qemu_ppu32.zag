@@ -366,7 +366,7 @@ fn qp_parse_line(line: []u8) QInsn {
     ins.valid = 1;
     ins.row = qp_get(line, "row", 0) as i32;
     ins.col = qp_get(line, "col", 0) as i32;
-    ins.a = qp_get(line, "phase_a", qp_get(line, "a", qp_get(line, "from_x", qp_get(line, "x", 0))));
+    ins.a = qp_get(line, "phase_a", qp_get(line, "phase_micro_rad", qp_get(line, "a", qp_get(line, "from_x", qp_get(line, "x", 0)))));
     ins.b = qp_get(line, "phase_b", qp_get(line, "b", qp_get(line, "from_y", qp_get(line, "y", 0))));
     ins.c = qp_get(line, "result", qp_get(line, "dst", qp_get(line, "from_z", qp_get(line, "z", 0))));
     ins.x = qp_get(line, "x", 0) as i32;
@@ -437,24 +437,30 @@ fn qe_route_voxels(st: *QState, ins: QInsn) void {
     if (dz > n) { n = dz; }
     if (n == 0) { n = 1; }
     let i: i32 = 0;
+    let last: i32 = -1;
     while (i <= n) {
         let vx: i32 = x0 + (x1 - x0) * i / n;
         let vy: i32 = y0 + (y1 - y0) * i / n;
         let vz: i32 = z0 + (z1 - z0) * i / n;
-        st.*.lat_occ[lat_idx(vx, vy, vz)] = 1;
+        let li: i32 = lat_idx(vx, vy, vz);
+        if (li != last) { st.*.lat_occ[li] = 1; last = li; }
         i = i + 1;
     }
     st.*.tgt_x = x1; st.*.tgt_y = y1; st.*.tgt_z = z1;
     // crossing the chamber volume also marks chamber voxels
     let j: i32 = 0;
+    let lastv: i32 = -1;
     while (j <= n) {
         let cx: i32 = x0 + (x1 - x0) * j / n;
         let cy: i32 = y0 + (y1 - y0) * j / n;
         let cz: i32 = z0 + (z1 - z0) * j / n;
         if (vox_ok(cx, cy, cz) == 1) {
             let ci2: i32 = vox_idx(cx, cy, cz);
-            st.*.v_occ[ci2] = 1;
-            st.*.v_amp[ci2] = st.*.v_amp[ci2] + ins.power;
+            if (ci2 != lastv) {
+                st.*.v_occ[ci2] = 1;
+                st.*.v_amp[ci2] = st.*.v_amp[ci2] + ins.power;
+                lastv = ci2;
+            }
         }
         j = j + 1;
     }
@@ -712,10 +718,6 @@ fn main() i32 {
     }
     let st: *QState = qs_new();
     qrun(text, st);
-    if (st.*.executed < 1) {
-        _zag_println("qemu_ppu32: no executable insns");
-        return 1;
-    }
     if (st.*.fault != 0) {
         _zag_print("qemu_ppu32: fault ");
         _zag_print(_zag_i64_to_str(st.*.fault as i64));
@@ -723,6 +725,10 @@ fn main() i32 {
         _zag_println(_zag_i64_to_str(st.*.fault_insn as i64));
         if (want_dump == 1) { qdump(st); }
         return 2;
+    }
+    if (st.*.executed < 1) {
+        _zag_println("qemu_ppu32: no executable insns");
+        return 1;
     }
     _zag_println("qemu_ppu32: ok");
     if (want_stat == 1) { qstat(st); }

@@ -1,0 +1,7 @@
+# fault path: voxel out of chamber → F_BOUNDS (2) at insn 1
+target = "ppu32"
+name = "slice_bounds"
+format = "ppu32-v1"
+[insns]
+insn 0 RawModeEnter
+insn 1 RawTargetVoxel x=99 y=0 z=0

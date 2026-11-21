@@ -1,0 +1,27 @@
+# ppu32 assembly v1 — vertical slice: all 14 classes, hand-verified state
+target = "ppu32"
+name = "slice"
+format = "ppu32-v1"
+[insns]
+insn 0 Nop
+insn 1 RawModeEnter
+insn 2 RawSetLaserMw wall=1 slot=0 power=750
+insn 3 RawTargetVoxel x=2 y=3 z=1
+insn 4 RawFireShield x=2 y=3 z=1 power=400
+insn 5 RawInjectPhase x=2 y=3 z=1 phase_micro_rad=1500
+insn 6 RawSetPolarity x=2 y=3 z=1 pol=1
+insn 7 TritRegLoad dst=0 imm=0t++
+insn 8 TritRegLoad dst=1 imm=0t+-
+insn 9 TritAlu op=add a=0 b=1 dst=2
+insn 10 TritAlu op=mul a=0 b=1 dst=3
+insn 11 TritAlu op=nand a=0 b=1 dst=4
+insn 12 TritAlu op=neg a=0 b=0 dst=5
+insn 13 TritAlu op=cons a=0 b=1 dst=6
+insn 14 PcmPhaseShift row=5 col=2 phase_a=100 phase_b=50
+insn 15 PcmCouple row=5 col=2 dst=7
+insn 16 TritRegLoad dst=8 imm=0t+0
+insn 17 PcmCouple row=5 col=2 dst=9
+insn 18 TritAlu op=add a=8 b=0 dst=9
+insn 19 LatticeRoute from_x=0 from_y=0 from_z=0 to_x=3000 to_y=0 to_z=0 power=250 pol=1
+insn 20 RawReadVoxel x=2 y=3 z=1 dst=10
+insn 21 RawModeExit
