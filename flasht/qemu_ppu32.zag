@@ -1,25 +1,391 @@
-// flasht/qemu_ppu32.zag — minimal PPU32 bring-up interpreter (qemu runtime).
+// flasht/qemu_ppu32.zag — PPU32 emulator, ISA v1 (docs/PPU32_ISA_V1.md).
 //
-// Executes LatticeRoute + PcmPhaseShift ops from a .ppu32 text assembly file.
-// Usage: qemu_ppu32 <file.ppu32>
+// Executes ALL classes of the PPU32 schedule format against a software
+// model of the machine: 64× t9 register file, 64×64 PCM grid, N³ Active
+// Lattice chamber (default edge 8), 4 laser walls, mode flag, fault model.
+//
+// Usage:
+//   qemu_ppu32 <file.ppu32>            run, print "qemu_ppu32: ok"
+//   qemu_ppu32 <file.ppu32> --dump     also dump final machine state
+//   qemu_ppu32 <file.ppu32> --stat     also print photonic counters
+//
+// Counters are MODELED photonic units (lattice-steps, unit-energy) —
+// never host cycles/ns (docs/PPU32_ISA_V1.md §6).
 
 @import("../flash/toolchain/zag-poc/std/rt.zag")
 
-struct QIns {
-    kind: i32,   // 1 = PcmPhaseShift, 3 = LatticeRoute
+// ── machine state ────────────────────────────────────────────────────────────
+
+fn QE_TREG() i32 { return 64; }       // trit regs
+fn QE_PCM() i32 { return 262144; }    // sparse phase table 4096×64
+fn QE_EDGE() i32 { return 8; }        // chamber edge (voxels)
+fn QE_VOX() i32 { return 512; }       // edge³
+fn QE_LAT() i32 { return 128; }       // lattice edge (voxels, 1mm pitch → 128mm)
+fn QE_LATV() i32 { return 2097152; }  // 128³
+
+struct QState {
+    treg: *i64,        // 64 — t9 value or packed voxel word
+    pcm: *i64,         // 4096 — µrad
+    v_pol: *i64,       // 512 — voxel polarity −1/0/+1
+    v_phase: *i64,     // 512 — µrad
+    v_amp: *i64,       // 512 — µmW
+    v_occ: *i64,       // 512 — occupied flag
+    laser: *i64,       // 4 walls
+    couple: *i64,      // 64 — pending coupled phase µrad
+    lat_occ: *i64,     // 128³ — lattice occupancy (route fabric, ≠ chamber)
+    raw_active: i32,
+    tgt_x: i32,
+    tgt_y: i32,
+    tgt_z: i32,
+    fault: i32,
+    fault_insn: i32,
+    // counters (modeled, PPU32_ISA_V1 §6)
+    c_steps: i64,
+    c_energy: i64,
+    c_alu: i64,
+    c_pcm: i64,
+    c_routes: i64,
+    c_raw: i64,
+    c_route_len: i64,
+    executed: i32,
+}
+
+fn qs_new() *QState {
+    let st: *QState = _zag_malloc(@sizeOf[QState]()) as *QState;
+    st.*.treg = _zag_malloc(QE_TREG() * 8) as *i64;
+    st.*.pcm = _zag_malloc(QE_PCM() * 8) as *i64;
+    st.*.v_pol = _zag_malloc(QE_VOX() * 8) as *i64;
+    st.*.v_phase = _zag_malloc(QE_VOX() * 8) as *i64;
+    st.*.v_amp = _zag_malloc(QE_VOX() * 8) as *i64;
+    st.*.v_occ = _zag_malloc(QE_VOX() * 8) as *i64;
+    st.*.laser = _zag_malloc(32) as *i64;
+    st.*.couple = _zag_malloc(QE_TREG() * 8) as *i64;
+    st.*.lat_occ = _zag_malloc(QE_LATV() * 8) as *i64;
+    st.*.raw_active = 0;
+    st.*.tgt_x = 0; st.*.tgt_y = 0; st.*.tgt_z = 0;
+    st.*.fault = 0; st.*.fault_insn = -1;
+    st.*.c_steps = 0; st.*.c_energy = 0; st.*.c_alu = 0;
+    st.*.c_pcm = 0; st.*.c_routes = 0; st.*.c_raw = 0;
+    st.*.c_route_len = 0; st.*.executed = 0;
+    let i: i32 = 0;
+    while (i < QE_TREG()) { st.*.treg[i] = 0; st.*.couple[i] = 0; i = i + 1; }
+    i = 0;
+    while (i < QE_PCM()) { st.*.pcm[i] = 0; i = i + 1; }
+    i = 0;
+    while (i < QE_VOX()) {
+        st.*.v_pol[i] = 0; st.*.v_phase[i] = 0;
+        st.*.v_amp[i] = 0; st.*.v_occ[i] = 0;
+        i = i + 1;
+    }
+    i = 0;
+    while (i < 4) { st.*.laser[i] = 0; i = i + 1; }
+    i = 0;
+    while (i < QE_LATV()) { st.*.lat_occ[i] = 0; i = i + 1; }
+    return st;
+}
+
+fn lat_idx(x: i32, y: i32, z: i32) i32 {
+    return (z * QE_LAT() + y) * QE_LAT() + x;
+}
+
+fn lat_ok(x: i32, y: i32, z: i32) i32 {
+    if (x < 0 || y < 0 || z < 0) { return 0; }
+    if (x >= QE_LAT() || y >= QE_LAT() || z >= QE_LAT()) { return 0; }
+    return 1;
+}
+
+fn vox_idx(x: i32, y: i32, z: i32) i32 {
+    return (z * QE_EDGE() + y) * QE_EDGE() + x;
+}
+
+fn vox_ok(x: i32, y: i32, z: i32) i32 {
+    if (x < 0 || y < 0 || z < 0) { return 0; }
+    if (x >= QE_EDGE() || y >= QE_EDGE() || z >= QE_EDGE()) { return 0; }
+    return 1;
+}
+
+// ── t9 helpers (balanced ternary, TRIT_OPS_V1) ───────────────────────────────
+
+fn T9_MOD() i64 { return 19683; }     // 3^9
+fn T9_MAX() i64 { return 9841; }      // (3^9-1)/2
+
+fn t9_wrap(v: i64) i64 {
+    let r: i64 = v;
+    while (r > T9_MAX()) { r = r - T9_MOD(); }
+    while (r < 0 - T9_MAX()) { r = r + T9_MOD(); }
+    return r;
+}
+
+// extract digit i (0 = least significant) as −1/0/+1
+fn t9_digit(v: i64, i: i32) i32 {
+    let r: i64 = t9_wrap(v);
+    let d: i64 = 0;
+    let k: i32 = 0;
+    while (k <= i) {
+        let rem: i64 = r % 3;
+        if (rem > 1) { rem = rem - 3; }
+        if (rem < 0 - 1) { rem = rem + 3; }
+        d = rem;
+        r = (r - d) / 3;
+        k = k + 1;
+    }
+    return d as i32;
+}
+
+// build t9 word from digit function results passed via arr (9 i32s)
+fn t9_pack(d: *i64) i64 {
+    let v: i64 = 0;
+    let p: i64 = 1;
+    let i: i32 = 0;
+    while (i < 9) {
+        v = v + d[i] * p;
+        p = p * 3;
+        i = i + 1;
+    }
+    return v;
+}
+
+fn cons(a: i32, b: i32) i32 {
+    if (a == b) { return a; }
+    if (a == 0) { return b; }
+    if (b == 0) { return a; }
+    return 0;
+}
+
+fn t9_cons(a: i64, b: i64) i64 {
+    let d: *i64 = _zag_malloc(72) as *i64;
+    let i: i32 = 0;
+    while (i < 9) {
+        d[i] = cons(t9_digit(a, i), t9_digit(b, i)) as i64;
+        i = i + 1;
+    }
+    let v: i64 = t9_pack(d);
+    _zag_free(d as *i8);
+    return v;
+}
+
+fn t9_nand(a: i64, b: i64) i64 {
+    let d: *i64 = _zag_malloc(72) as *i64;
+    let i: i32 = 0;
+    while (i < 9) {
+        let m: i32 = t9_digit(a, i);
+        let e: i32 = t9_digit(b, i);
+        if (e < m) { m = e; }          // min
+        d[i] = (0 - m) as i64;          // neg(min) = NAND
+        i = i + 1;
+    }
+    let v: i64 = t9_pack(d);
+    _zag_free(d as *i8);
+    return v;
+}
+
+fn t9_sign_of_phase(urad: i64) i32 {
+    if (urad > 0) { return 1; }
+    if (urad < 0) { return 0 - 1; }
+    return 0;
+}
+
+// ── text asm parsing ─────────────────────────────────────────────────────────
+
+struct QInsn {
+    valid: i32,
+    cls: i32,          // −1 unknown
+    idx: i32,
     row: i32,
     col: i32,
-    phase_a: i32,
-    phase_b: i32,
-    result: i32,
-    from_x: i32,
-    from_y: i32,
-    from_z: i32,
-    to_x: i32,
-    to_y: i32,
-    to_z: i32,
-    power: i32,
+    a: i64,            // phase_a / trit_a / x / from_x / generic
+    b: i64,            // phase_b / trit_b / y / from_y
+    c: i64,            // result / trit_dst / z / from_z
+    x: i32, y: i32, z: i32,
+    tx: i32, ty: i32, tz: i32,
+    power: i64,
     pol: i32,
+    op: i32,           // alu op id 0..3
+    wall: i32,
+    slot: i32,
+    imm: i64,          // TritRegLoad literal (parsed 0t / decimal)
+}
+
+fn qclass_of(cls: i32) i32 { return cls; }
+
+fn qp_starts_with_at(s: []u8, pos: i32, lit: []u8) i32 {
+    if (pos + lit.len > s.len) { return 0; }
+    let i: i32 = 0;
+    while (i < lit.len) {
+        if (s[pos + i] != lit[i]) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+// find "key=" then parse signed decimal, or 0t trit literal
+fn qp_key_val(line: []u8, key: []u8, out: *i64, is_trit: *i32) i32 {
+    let at: i32 = 0;
+    while (at <= line.len - key.len - 1) {
+        if (qp_starts_with_at(line, at, key) == 1 && line[at + key.len] == '=') {
+            let cur: i32 = at + key.len + 1;
+            let neg: i32 = 0;
+            if (cur < line.len && line[cur] == '-') { neg = 1; cur = cur + 1; }
+            // trit literal 0t+0-
+            if (cur + 1 < line.len && line[cur] == '0' && line[cur + 1] == 't') {
+                cur = cur + 2;
+                let v: i64 = 0;
+                let nd: i32 = 0;
+                let buf: *i64 = _zag_malloc(512) as *i64;
+                let nb: i32 = 0;
+                while (cur < line.len) {
+                    let ch: u8 = line[cur];
+                    if (ch != '+' && ch != '-' && ch != '0') { cur = line.len; }
+                    if (cur < line.len && (ch == '+' || ch == '-' || ch == '0')) {
+                        if (ch == '+') { buf[nb] = 1; }
+                        if (ch == '0') { buf[nb] = 0; }
+                        if (ch == '-') { buf[nb] = 0 - 1; }
+                        nb = nb + 1;
+                        cur = cur + 1;
+                    }
+                }
+                let p: i64 = 1;
+                let i: i32 = nb - 1;
+                while (i >= 0) {
+                    v = v + buf[i] * p;
+                    p = p * 3;
+                    i = i - 1;
+                }
+                _zag_free(buf as *i8);
+                out.* = v;
+                is_trit.* = 1;
+                return 1;
+            }
+            let val: i64 = 0;
+            let any: i32 = 0;
+            while (cur < line.len) {
+                let d: i32 = line[cur] as i32;
+                if (d < '0' || d > '9') { cur = line.len; }
+                if (cur < line.len && d >= '0' && d <= '9') {
+                    val = val * 10 + (d - '0') as i64;
+                    any = 1;
+                    cur = cur + 1;
+                }
+            }
+            if (any == 0) { return 0; }
+            if (neg == 1) { val = 0 - val; }
+            out.* = val;
+            return 1;
+        }
+        at = at + 1;
+    }
+    return 0;
+}
+
+fn qp_get(line: []u8, key: []u8, dflt: i64) i64 {
+    let v: i64 = 0;
+    let t: i32 = 0;
+    if (qp_key_val(line, key, &v, &t) == 1) { return v; }
+    return dflt;
+}
+
+fn qp_get_str(line: []u8, key: []u8, out: []u8, maxlen: i32) i32 {
+    // key=word (no quotes)
+    let at: i32 = 0;
+    while (at <= line.len - key.len - 1) {
+        if (qp_starts_with_at(line, at, key) == 1 && line[at + key.len] == '=') {
+            let cur: i32 = at + key.len + 1;
+            let n: i32 = 0;
+            while (cur < line.len && n < maxlen - 1) {
+                let ch: u8 = line[cur];
+                if (ch == ' ' || ch == '\t' || ch == '"') { cur = line.len; }
+                if (cur < line.len && ch != ' ' && ch != '\t' && ch != '"') {
+                    out[n] = ch;
+                    n = n + 1;
+                    cur = cur + 1;
+                }
+            }
+            out[n] = 0;
+            return n;
+        }
+        at = at + 1;
+    }
+    return 0;
+}
+
+fn qp_class_of(name: []u8) i32 {
+    if (_zag_strcmp(name, "Nop") == 1) { return 0; }
+    if (_zag_strcmp(name, "PcmPhaseShift") == 1) { return 1; }
+    if (_zag_strcmp(name, "PcmCouple") == 1) { return 2; }
+    if (_zag_strcmp(name, "LatticeRoute") == 1) { return 3; }
+    if (_zag_strcmp(name, "TritRegLoad") == 1) { return 4; }
+    if (_zag_strcmp(name, "TritAlu") == 1) { return 5; }
+    if (_zag_strcmp(name, "RawFireShield") == 1) { return 6; }
+    if (_zag_strcmp(name, "RawInjectPhase") == 1) { return 7; }
+    if (_zag_strcmp(name, "RawSetLaserMw") == 1) { return 8; }
+    if (_zag_strcmp(name, "RawTargetVoxel") == 1) { return 9; }
+    if (_zag_strcmp(name, "RawSetPolarity") == 1) { return 10; }
+    if (_zag_strcmp(name, "RawModeEnter") == 1) { return 11; }
+    if (_zag_strcmp(name, "RawModeExit") == 1) { return 12; }
+    if (_zag_strcmp(name, "RawReadVoxel") == 1) { return 13; }
+    return 0 - 1;
+}
+
+fn qp_op_of(name: []u8) i32 {
+    if (_zag_strcmp(name, "add") == 1) { return 0; }
+    if (_zag_strcmp(name, "mul") == 1) { return 1; }
+    if (_zag_strcmp(name, "nand") == 1) { return 2; }
+    if (_zag_strcmp(name, "neg") == 1) { return 3; }
+    if (_zag_strcmp(name, "cons") == 1) { return 4; }   // interference
+    return 0 - 1;
+}
+
+fn qp_parse_line(line: []u8) QInsn {
+    let ins: QInsn = QInsn{
+        .valid = 0, .cls = 0 - 1, .idx = 0,
+        .row = 0, .col = 0, .a = 0, .b = 0, .c = 0,
+        .x = 0, .y = 0, .z = 0, .tx = 0, .ty = 0, .tz = 0,
+        .power = 0, .pol = 0, .op = 0 - 1, .wall = 0, .slot = 0, .imm = 0,
+    };
+    // parse "insn <idx> <Class>": idx is the decimal right after "insn ".
+    let sp: i32 = _zag_str_index_of_byte(line, ' ');
+    if (sp >= 0 && sp + 1 < line.len) {
+        let ci: i32 = sp + 1;
+        let sv: i64 = _zag_str_to_i64(line[ci..line.len]);
+        ins.idx = sv as i32;
+    }
+    let names: *[]u8 = _zag_malloc(14 * 16) as *[]u8;
+    names[0] = "Nop"; names[1] = "PcmPhaseShift"; names[2] = "PcmCouple";
+    names[3] = "LatticeRoute"; names[4] = "TritRegLoad"; names[5] = "TritAlu";
+    names[6] = "RawFireShield"; names[7] = "RawInjectPhase";
+    names[8] = "RawSetLaserMw"; names[9] = "RawTargetVoxel";
+    names[10] = "RawSetPolarity"; names[11] = "RawModeEnter";
+    names[12] = "RawModeExit"; names[13] = "RawReadVoxel";
+    let i: i32 = 0;
+    while (i < 14) {
+        if (qp_contains(line, names[i]) == 1) { ins.cls = i; i = 14; }
+        i = i + 1;
+    }
+    _zag_free(names as *i8);
+    if (ins.cls < 0) { return ins; }
+    ins.valid = 1;
+    ins.row = qp_get(line, "row", 0) as i32;
+    ins.col = qp_get(line, "col", 0) as i32;
+    ins.a = qp_get(line, "phase_a", qp_get(line, "a", qp_get(line, "from_x", qp_get(line, "x", 0))));
+    ins.b = qp_get(line, "phase_b", qp_get(line, "b", qp_get(line, "from_y", qp_get(line, "y", 0))));
+    ins.c = qp_get(line, "result", qp_get(line, "dst", qp_get(line, "from_z", qp_get(line, "z", 0))));
+    ins.x = qp_get(line, "x", 0) as i32;
+    ins.y = qp_get(line, "y", 0) as i32;
+    ins.z = qp_get(line, "z", 0) as i32;
+    ins.tx = qp_get(line, "to_x", 0) as i32;
+    ins.ty = qp_get(line, "to_y", 0) as i32;
+    ins.tz = qp_get(line, "to_z", 0) as i32;
+    ins.power = qp_get(line, "power", 0);
+    ins.pol = qp_get(line, "pol", 0) as i32;
+    ins.wall = qp_get(line, "wall", 0) as i32;
+    ins.slot = qp_get(line, "slot", 0) as i32;
+    ins.imm = qp_get(line, "imm", 0);
+    if (qp_contains(line, "op=add") == 1) { ins.op = 0; }
+    if (qp_contains(line, "op=mul") == 1) { ins.op = 1; }
+    if (qp_contains(line, "op=nand") == 1) { ins.op = 2; }
+    if (qp_contains(line, "op=neg") == 1) { ins.op = 3; }
+    if (qp_contains(line, "op=cons") == 1) { ins.op = 4; }
+    return ins;
 }
 
 fn qp_contains(hay: []u8, needle: []u8) i32 {
@@ -38,105 +404,271 @@ fn qp_contains(hay: []u8, needle: []u8) i32 {
     return 0;
 }
 
-fn qp_parse_i32(line: []u8, key: []u8) i32 {
-    let pat: []u8 = _zag_str_concat(key, "=");
-    let at: i32 = 0;
-    while (at <= line.len - pat.len) {
-        let j: i32 = 0;
-        let ok: i32 = 1;
-        while (j < pat.len) {
-            if (line[at + j] != pat[j]) { ok = 0; }
-            j = j + 1;
-        }
-        if (ok == 1) {
-            let start: i32 = at + pat.len;
-            let neg: i32 = 0;
-            let cur: i32 = start;
-            if (cur < line.len && line[cur] == '-') {
-                neg = 1;
-                cur = cur + 1;
-            }
-            let val: i32 = 0;
-            while (cur < line.len) {
-                let c: i32 = line[cur] as i32;
-                if (c < '0' || c > '9') {
-                    cur = line.len;
-                } else {
-                    val = val * 10 + (c - '0');
-                    cur = cur + 1;
-                }
-            }
-            if (neg == 1) { return 0 - val; }
-            return val;
-        }
-        at = at + 1;
+// ── execution (ISA v1 §5) ────────────────────────────────────────────────────
+
+fn qe_fault(st: *QState, code: i32, insn: i32) void {
+    st.*.fault = code;
+    st.*.fault_insn = insn;
+}
+
+fn qe_need_raw(st: *QState, insn: i32) i32 {
+    if (st.*.raw_active == 0) { qe_fault(st, 3, insn); return 0; }
+    return 1;
+}
+
+fn qe_route_voxels(st: *QState, ins: QInsn) void {
+    // mm·1000 (µm) → voxel coords at 1000 µm pitch.
+    let x0: i32 = ((ins.a) / 1000) as i32;
+    let y0: i32 = ((ins.b) / 1000) as i32;
+    let z0: i32 = ((ins.c) / 1000) as i32;
+    let x1: i32 = (ins.tx / 1000) as i32;
+    let y1: i32 = (ins.ty / 1000) as i32;
+    let z1: i32 = (ins.tz / 1000) as i32;
+    if (lat_ok(x0, y0, z0) == 0 || lat_ok(x1, y1, z1) == 0) {
+        qe_fault(st, 2, ins.idx);
+        return;
     }
-    return 0;
-}
-
-fn qp_exec_pcm(ins: QIns) void {
-    // Bring-up model: record PCM cell phase state (no hardware).
-    let _phase: i32 = ins.phase_a + ins.phase_b;
-    let _cell: i32 = ins.row * 64 + ins.col;
-    if (_cell < 0) { return; }
-}
-
-fn qp_exec_route(ins: QIns) void {
-    // Bring-up model: accept coordinate route without collision checks.
-    let _dx: i32 = ins.to_x - ins.from_x;
-    let _dy: i32 = ins.to_y - ins.from_y;
-    let _dz: i32 = ins.to_z - ins.from_z;
-    let _mw: i32 = ins.power;
-    if (_mw < 0) { return; }
-    if (ins.pol < -1 || ins.pol > 1) { return; }
-}
-
-fn qp_parse_line(line: []u8) QIns {
-    let ins: QIns = QIns{
-        .kind = 0,
-        .row = 0,
-        .col = 0,
-        .phase_a = 0,
-        .phase_b = 0,
-        .result = 0,
-        .from_x = 0,
-        .from_y = 0,
-        .from_z = 0,
-        .to_x = 0,
-        .to_y = 0,
-        .to_z = 0,
-        .power = 0,
-        .pol = 0,
-    };
-    if (qp_contains(line, "PcmPhaseShift") == 1) {
-        ins.kind = 1;
-        ins.row = qp_parse_i32(line, "row");
-        ins.col = qp_parse_i32(line, "col");
-        ins.phase_a = qp_parse_i32(line, "phase_a");
-        ins.phase_b = qp_parse_i32(line, "phase_b");
-        ins.result = qp_parse_i32(line, "result");
-        return ins;
-    }
-    if (qp_contains(line, "LatticeRoute") == 1) {
-        ins.kind = 3;
-        ins.from_x = qp_parse_i32(line, "from_x");
-        ins.from_y = qp_parse_i32(line, "from_y");
-        ins.from_z = qp_parse_i32(line, "from_z");
-        ins.to_x = qp_parse_i32(line, "to_x");
-        ins.to_y = qp_parse_i32(line, "to_y");
-        ins.to_z = qp_parse_i32(line, "to_z");
-        ins.power = qp_parse_i32(line, "power");
-        ins.pol = qp_parse_i32(line, "pol");
-        return ins;
-    }
-    return ins;
-}
-
-fn qp_run_text(text: []u8) i32 {
-    let pcm_count: i32 = 0;
-    let route_count: i32 = 0;
+    // Bresenham-ish DDA on the longest axis.
+    let dx: i32 = x1 - x0; if (dx < 0) { dx = 0 - dx; }
+    let dy: i32 = y1 - y0; if (dy < 0) { dy = 0 - dy; }
+    let dz: i32 = z1 - z0; if (dz < 0) { dz = 0 - dz; }
+    let n: i32 = dx;
+    if (dy > n) { n = dy; }
+    if (dz > n) { n = dz; }
+    if (n == 0) { n = 1; }
     let i: i32 = 0;
-    while (i < text.len) {
+    while (i <= n) {
+        let vx: i32 = x0 + (x1 - x0) * i / n;
+        let vy: i32 = y0 + (y1 - y0) * i / n;
+        let vz: i32 = z0 + (z1 - z0) * i / n;
+        st.*.lat_occ[lat_idx(vx, vy, vz)] = 1;
+        i = i + 1;
+    }
+    st.*.tgt_x = x1; st.*.tgt_y = y1; st.*.tgt_z = z1;
+    // crossing the chamber volume also marks chamber voxels
+    let j: i32 = 0;
+    while (j <= n) {
+        let cx: i32 = x0 + (x1 - x0) * j / n;
+        let cy: i32 = y0 + (y1 - y0) * j / n;
+        let cz: i32 = z0 + (z1 - z0) * j / n;
+        if (vox_ok(cx, cy, cz) == 1) {
+            let ci2: i32 = vox_idx(cx, cy, cz);
+            st.*.v_occ[ci2] = 1;
+            st.*.v_amp[ci2] = st.*.v_amp[ci2] + ins.power;
+        }
+        j = j + 1;
+    }
+    st.*.c_route_len = st.*.c_route_len + (n as i64);
+    st.*.c_steps = st.*.c_steps + (n as i64);
+    st.*.c_energy = st.*.c_energy + (ins.power * (n as i64));
+}
+
+fn qe_exec(st: *QState, ins: QInsn) void {
+    if (st.*.fault != 0) { return; }
+    let cls: i32 = ins.cls;
+    if (cls == 0) { st.*.executed = st.*.executed + 1; return; }
+    if (cls == 1) {                                     // PcmPhaseShift
+        if (ins.row < 0 || ins.row > 4095 || ins.col < 0 || ins.col > 63) {
+            qe_fault(st, 2, ins.idx); return;
+        }
+        let want: i64 = ins.a + ins.b;
+        let cell: i32 = ins.row * 64 + ins.col;
+        st.*.pcm[cell] = st.*.pcm[cell] + want;
+        st.*.c_pcm = st.*.c_pcm + 1;
+        st.*.c_steps = st.*.c_steps + 2;
+        st.*.c_energy = st.*.c_energy + 3;
+    } else if (cls == 2) {                              // PcmCouple
+        if (ins.row < 0 || ins.row > 4095 || ins.col < 0 || ins.col > 63) {
+            qe_fault(st, 2, ins.idx); return;
+        }
+        if (ins.c < 0 || ins.c > 63) { qe_fault(st, 2, ins.idx); return; }
+        let cell: i32 = ins.row * 64 + ins.col;
+        st.*.couple[ins.c as i32] = st.*.couple[ins.c as i32] + st.*.pcm[cell];
+        st.*.c_pcm = st.*.c_pcm + 1;
+        st.*.c_steps = st.*.c_steps + 2;
+        st.*.c_energy = st.*.c_energy + 3;
+    } else if (cls == 3) {                              // LatticeRoute
+        if (ins.power < 0 || ins.pol < -1 || ins.pol > 1) {
+            qe_fault(st, 1, ins.idx); return;
+        }
+        qe_route_voxels(st, ins);
+        st.*.c_routes = st.*.c_routes + 1;
+    } else if (cls == 4) {                              // TritRegLoad
+        if (ins.c < 0 || ins.c > 63) { qe_fault(st, 2, ins.idx); return; }
+        st.*.treg[ins.c as i32] = t9_wrap(ins.imm);
+        st.*.c_alu = st.*.c_alu + 1;
+        st.*.c_steps = st.*.c_steps + 1;
+        st.*.c_energy = st.*.c_energy + 1;
+    } else if (cls == 5) {                              // TritAlu
+        if (ins.a < 0 || ins.a > 63 || ins.b < 0 || ins.b > 63 ||
+            ins.c < 0 || ins.c > 63) {
+            qe_fault(st, 2, ins.idx); return;
+        }
+        if (ins.op < 0 || ins.op > 4) { qe_fault(st, 1, ins.idx); return; }
+        let ra: i64 = st.*.treg[ins.a as i32];
+        let rb: i64 = st.*.treg[ins.b as i32];
+        let res: i64 = 0;
+        if (ins.op == 0) { res = t9_wrap(ra + rb); }
+        if (ins.op == 1) { res = t9_wrap(ra * rb); }
+        if (ins.op == 2) { res = t9_nand(ra, rb); }
+        if (ins.op == 3) { res = t9_wrap(0 - ra); }
+        if (ins.op == 4) { res = t9_cons(ra, rb); }
+        // pending coupled phase steers trit 0 (TRIT_OPS_V1 §6)
+        let cp: i64 = st.*.couple[ins.c as i32];
+        if (cp != 0) {
+            let d: *i64 = _zag_malloc(72) as *i64;
+            let i: i32 = 0;
+            while (i < 9) { d[i] = t9_digit(res, i) as i64; i = i + 1; }
+            d[0] = cons(d[0] as i32, t9_sign_of_phase(cp)) as i64;
+            res = t9_pack(d);
+            _zag_free(d as *i8);
+            st.*.couple[ins.c as i32] = 0;
+        }
+        st.*.treg[ins.c as i32] = res;
+        st.*.c_alu = st.*.c_alu + 1;
+        st.*.c_steps = st.*.c_steps + 1;
+        st.*.c_energy = st.*.c_energy + 1;
+    } else if (cls >= 6 && cls <= 10) {                 // Raw* chamber ops
+        if (qe_need_raw(st, ins.idx) == 0) { return; }
+        let x: i32 = ins.x; let y: i32 = ins.y; let z: i32 = ins.z;
+        if (cls == 6) {                                 // RawFireShield
+            if (vox_ok(x, y, z) == 0) {
+                x = st.*.tgt_x; y = st.*.tgt_y; z = st.*.tgt_z;
+            }
+            if (vox_ok(x, y, z) == 0) { qe_fault(st, 2, ins.idx); return; }
+            if (ins.power < 0) { qe_fault(st, 1, ins.idx); return; }
+            let idx: i32 = vox_idx(x, y, z);
+            st.*.v_occ[idx] = 1;
+            st.*.v_amp[idx] = st.*.v_amp[idx] + ins.power;
+        } else if (cls == 7) {                          // RawInjectPhase
+            if (vox_ok(x, y, z) == 0) { qe_fault(st, 2, ins.idx); return; }
+            st.*.v_phase[vox_idx(x, y, z)] = ins.a;
+        } else if (cls == 8) {                          // RawSetLaserMw
+            if (ins.wall < 0 || ins.wall > 3 || ins.slot != 0) {
+                qe_fault(st, 2, ins.idx); return;
+            }
+            if (ins.power < 0) { qe_fault(st, 1, ins.idx); return; }
+            st.*.laser[ins.wall] = ins.power;
+        } else if (cls == 9) {                          // RawTargetVoxel
+            if (vox_ok(x, y, z) == 0) { qe_fault(st, 2, ins.idx); return; }
+            st.*.tgt_x = x; st.*.tgt_y = y; st.*.tgt_z = z;
+        } else if (cls == 10) {                         // RawSetPolarity
+            if (ins.pol < -1 || ins.pol > 1) { qe_fault(st, 1, ins.idx); return; }
+            if (vox_ok(x, y, z) == 0) { qe_fault(st, 2, ins.idx); return; }
+            st.*.v_pol[vox_idx(x, y, z)] = ins.pol as i64;
+        }
+        st.*.c_raw = st.*.c_raw + 1;
+        st.*.c_steps = st.*.c_steps + 1;
+        st.*.c_energy = st.*.c_energy + 1;
+    } else if (cls == 11) {                             // RawModeEnter
+        if (st.*.raw_active == 1) { qe_fault(st, 3, ins.idx); return; }
+        st.*.raw_active = 1;
+    } else if (cls == 12) {                             // RawModeExit
+        st.*.raw_active = 0;
+    } else if (cls == 13) {                             // RawReadVoxel
+        if (qe_need_raw(st, ins.idx) == 0) { return; }
+        if (ins.c < 0 || ins.c > 63) { qe_fault(st, 2, ins.idx); return; }
+        if (vox_ok(ins.x, ins.y, ins.z) == 0) { qe_fault(st, 2, ins.idx); return; }
+        let idx: i32 = vox_idx(ins.x, ins.y, ins.z);
+        // pack voxel word (ISA §4): pol | phase<<2 | amp<<26 | occ<<50
+        let w: i64 = 0;
+        let pol: i64 = st.*.v_pol[idx];
+        if (pol < 0) { pol = 2; }
+        w = w + pol;
+        w = w + (st.*.v_phase[idx] * 4);
+        w = w + (st.*.v_amp[idx] * 16777216);   // <<24ish scaled
+        w = w + (st.*.v_occ[idx] * 1125899906842624);
+        st.*.treg[ins.c as i32] = w;
+        st.*.c_raw = st.*.c_raw + 1;
+        st.*.c_steps = st.*.c_steps + 1;
+        st.*.c_energy = st.*.c_energy + 1;
+    }
+    st.*.executed = st.*.executed + 1;
+}
+
+// ── driver ───────────────────────────────────────────────────────────────────
+
+fn qd_u(out: []u8, v: i64) void {
+    _zag_print(_zag_i64_to_str(v));
+}
+
+fn qdump(st: *QState) void {
+    let i: i32 = 0;
+    while (i < QE_TREG()) {
+        if (st.*.treg[i] != 0) {
+            _zag_print("treg["); _zag_print(_zag_i64_to_str(i as i64));
+            _zag_print("]="); _zag_print(_zag_i64_to_str(st.*.treg[i]));
+            _zag_println("");
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < QE_PCM()) {
+        if (st.*.pcm[i] != 0) {
+            _zag_print("pcm["); _zag_print(_zag_i64_to_str((i / 64) as i64));
+            _zag_print(","); _zag_print(_zag_i64_to_str((i % 64) as i64));
+            _zag_print("]="); _zag_print(_zag_i64_to_str(st.*.pcm[i]));
+            _zag_println("");
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < QE_VOX()) {
+        if (st.*.v_occ[i] != 0 || st.*.v_phase[i] != 0 || st.*.v_pol[i] != 0 || st.*.v_amp[i] != 0) {
+            let x: i32 = i % QE_EDGE();
+            let y: i32 = (i / QE_EDGE()) % QE_EDGE();
+            let z: i32 = i / (QE_EDGE() * QE_EDGE());
+            _zag_print("voxel["); _zag_print(_zag_i64_to_str(x as i64));
+            _zag_print(","); _zag_print(_zag_i64_to_str(y as i64));
+            _zag_print(","); _zag_print(_zag_i64_to_str(z as i64));
+            _zag_print("] pol="); _zag_print(_zag_i64_to_str(st.*.v_pol[i] as i64));
+            _zag_print(" phase="); _zag_print(_zag_i64_to_str(st.*.v_phase[i]));
+            _zag_print(" amp="); _zag_print(_zag_i64_to_str(st.*.v_amp[i]));
+            _zag_print(" occ="); _zag_print(_zag_i64_to_str(st.*.v_occ[i]));
+            _zag_println("");
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < QE_LATV()) {
+        if (st.*.lat_occ[i] != 0) {
+            let x: i32 = i % QE_LAT();
+            let y: i32 = (i / QE_LAT()) % QE_LAT();
+            let z: i32 = i / (QE_LAT() * QE_LAT());
+            _zag_print("lattice["); _zag_print(_zag_i64_to_str(x as i64));
+            _zag_print(","); _zag_print(_zag_i64_to_str(y as i64));
+            _zag_print(","); _zag_print(_zag_i64_to_str(z as i64));
+            _zag_println("] occ=1");
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < 4) {
+        if (st.*.laser[i] != 0) {
+            _zag_print("laser["); _zag_print(_zag_i64_to_str(i as i64));
+            _zag_print("]="); _zag_print(_zag_i64_to_str(st.*.laser[i]));
+            _zag_println("");
+        }
+        i = i + 1;
+    }
+    _zag_print("fault="); _zag_print(_zag_i64_to_str(st.*.fault as i64));
+    _zag_print(" at="); _zag_println(_zag_i64_to_str(st.*.fault_insn as i64));
+}
+
+fn qstat(st: *QState) void {
+    _zag_print("stat steps="); _zag_print(_zag_i64_to_str(st.*.c_steps));
+    _zag_print(" energy="); _zag_print(_zag_i64_to_str(st.*.c_energy));
+    _zag_print(" alu="); _zag_print(_zag_i64_to_str(st.*.c_alu));
+    _zag_print(" pcm="); _zag_print(_zag_i64_to_str(st.*.c_pcm));
+    _zag_print(" routes="); _zag_print(_zag_i64_to_str(st.*.c_routes));
+    _zag_print(" route_len="); _zag_print(_zag_i64_to_str(st.*.c_route_len));
+    _zag_print(" raw="); _zag_print(_zag_i64_to_str(st.*.c_raw));
+    _zag_print(" executed="); _zag_println(_zag_i64_to_str(st.*.executed as i64));
+}
+
+fn qrun(text: []u8, st: *QState) void {
+    let i: i32 = 0;
+    while (i < text.len && st.*.fault == 0) {
         while (i < text.len && (text[i] == ' ' || text[i] == '\t' || text[i] == '\r')) {
             i = i + 1;
         }
@@ -144,39 +676,56 @@ fn qp_run_text(text: []u8) i32 {
         while (i < text.len && text[i] != '\n') { i = i + 1; }
         if (i > start) {
             let line: []u8 = text[start..i];
-            if (qp_contains(line, "insn ") == 1) {
-                let ins: QIns = qp_parse_line(line);
-                if (ins.kind == 1) {
-                    qp_exec_pcm(ins);
-                    pcm_count = pcm_count + 1;
-                } else if (ins.kind == 3) {
-                    qp_exec_route(ins);
-                    route_count = route_count + 1;
+            if (line.len > 0 && line[0] != '#' && qp_contains(line, "insn ") == 1) {
+                let ins: QInsn = qp_parse_line(line);
+                if (ins.valid == 0) {
+                    qe_fault(st, 1, ins.idx);
+                } else {
+                    qe_exec(st, ins);
                 }
             }
         }
         if (i < text.len) { i = i + 1; }
     }
-    if (pcm_count < 1 && route_count < 1) { return 1; }
-    return 0;
 }
 
 fn main() i32 {
     if (_zag_argc() < 2) {
-        _zag_println("usage: qemu_ppu32 <file.ppu32>");
+        _zag_println("usage: qemu_ppu32 <file.ppu32> [--dump] [--stat]");
         return 1;
     }
     let path: []u8 = _zag_arg(1);
+    let want_dump: i32 = 0;
+    let want_stat: i32 = 0;
+    let ai: i32 = 2;
+    while (ai < _zag_argc()) {
+        let a: []u8 = _zag_arg(ai);
+        if (_zag_strcmp(a, "--dump") == 1) { want_dump = 1; }
+        if (_zag_strcmp(a, "--stat") == 1) { want_stat = 1; }
+        ai = ai + 1;
+    }
     let text: []u8 = _zag_read_file(path);
     if (text.len < 0) {
         _zag_print("qemu_ppu32: cannot read ");
         _zag_println(path);
         return 1;
     }
-    if (qp_run_text(text) != 0) {
+    let st: *QState = qs_new();
+    qrun(text, st);
+    if (st.*.executed < 1) {
         _zag_println("qemu_ppu32: no executable insns");
         return 1;
     }
+    if (st.*.fault != 0) {
+        _zag_print("qemu_ppu32: fault ");
+        _zag_print(_zag_i64_to_str(st.*.fault as i64));
+        _zag_print(" at insn ");
+        _zag_println(_zag_i64_to_str(st.*.fault_insn as i64));
+        if (want_dump == 1) { qdump(st); }
+        return 2;
+    }
     _zag_println("qemu_ppu32: ok");
+    if (want_stat == 1) { qstat(st); }
+    if (want_dump == 1) { qdump(st); }
     return 0;
 }

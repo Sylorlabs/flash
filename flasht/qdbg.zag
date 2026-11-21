@@ -1,0 +1,13 @@
+@import("../flash/toolchain/zag-poc/std/rt.zag")
+fn main() i32 {
+    let p: *i64 = _zag_malloc(32768) as *i64;
+    let i: i32 = 0;
+    while (i < 4096) { p[i] = 0; i = i + 1; }
+    _zag_println("i64-4096 ok");
+    let q: *i32 = _zag_malloc(32768) as *i32;
+    let j: i32 = 0;
+    while (j < 4096) { q[j] = j; j = j + 1; }
+    _zag_print("q[5]="); _zag_println(_zag_i64_to_str(q[5] as i64));
+    _zag_print("q[100]="); _zag_println(_zag_i64_to_str(q[100] as i64));
+    return 0;
+}
